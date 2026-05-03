@@ -153,3 +153,232 @@ select * from service_prices;
 select * from business_days;
 select * from shifts;
 ```
+
+Phase 2 ticket MVP
+
+Tickets are the first operational workflow. A ticket belongs to one business day and one shift, references a service type and vehicle size, snapshots the backend-calculated price, and can be assigned to one or more lavadores.
+
+Schema summary
+
+- `tickets`
+  - `business_day_id`, `shift_id`
+  - `service_type_id`, `vehicle_size_id`
+  - `daily_seq`: server-assigned sequence unique per business day
+  - `nota_number`: server-assigned v1 receipt number, e.g. `20260701-0001`
+  - `price_amount`, `currency`: price snapshot; voided tickets stay stored but should not count as revenue
+  - `courtesy`, `courtesy_reason`
+  - `status`: `ACTIVE` or `VOIDED`
+  - `void_reason`, `voided_at`
+- `ticket_assignments`
+  - `ticket_id`
+  - `employee_id`
+  - `share_pct`
+
+Validation and business rules
+
+- Ticket creation requires `businessDayId`, `shiftId`, `serviceTypeId`, `vehicleSizeId`, `currency`, and at least one `employeeId`.
+- `currency` must be `MXN` or `USD`.
+- `businessDayId` must be `OPEN`.
+- `shiftId` must belong to the same business day and must be `OPEN`.
+- Non-courtesy ticket price is calculated by the backend from `service_prices` using service type, vehicle size, currency, and business date.
+- Ticket stores snapshot `priceAmount` and `currency`.
+- Courtesy tickets get `priceAmount=0.00` and require `courtesyReason`.
+- Multiple lavadores are supported through `ticket_assignments`.
+- When multiple employees are selected, `sharePct` defaults to an equal split. Remainder cents go to the last assignment, e.g. `33.33`, `33.33`, `33.34`.
+- Duplicate employee IDs are rejected.
+- Inactive employees are rejected.
+- `PATCH /api/v1/tickets/{id}` is allowed only while the ticket’s shift is `OPEN`.
+- `POST /api/v1/tickets/{id}/void` keeps the ticket row and requires a reason.
+- Default ticket list returns only `ACTIVE` tickets. Use `status=VOIDED` to inspect voided tickets.
+
+Ticket endpoint examples
+
+```bash
+# Create a normal ticket. Backend calculates price.
+curl -X POST localhost:8080/api/v1/tickets \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "businessDayId": 1,
+    "shiftId": 1,
+    "serviceTypeId": 1,
+    "vehicleSizeId": 1,
+    "currency": "MXN",
+    "vehicleDescription": "Tsuru rojo",
+    "courtesy": false,
+    "employeeIds": [1, 2]
+  }'
+
+# Example response
+{
+  "id": 1,
+  "businessDayId": 1,
+  "shiftId": 1,
+  "serviceTypeId": 1,
+  "serviceTypeName": "Lavado basico",
+  "vehicleSizeId": 1,
+  "vehicleSizeName": "Mediano",
+  "dailySeq": 1,
+  "notaNumber": "20260701-0001",
+  "vehicleDescription": "Tsuru rojo",
+  "priceAmount": 120.00,
+  "currency": "MXN",
+  "courtesy": false,
+  "courtesyReason": null,
+  "status": "ACTIVE",
+  "voidReason": null,
+  "voidedAt": null,
+  "assignments": [
+    {"employeeId": 1, "employeeName": "Juan Perez", "sharePct": 50.00},
+    {"employeeId": 2, "employeeName": "Luis Lopez", "sharePct": 50.00}
+  ]
+}
+
+# Create a courtesy ticket
+curl -X POST localhost:8080/api/v1/tickets \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "businessDayId": 1,
+    "shiftId": 1,
+    "serviceTypeId": 1,
+    "vehicleSizeId": 1,
+    "currency": "MXN",
+    "vehicleDescription": "Camioneta blanca",
+    "courtesy": true,
+    "courtesyReason": "Cliente dueno",
+    "employeeIds": [1]
+  }'
+
+# List active tickets by business day / shift
+curl 'localhost:8080/api/v1/tickets?business_day_id=1&shift_id=1'
+
+# Filter by employee
+curl 'localhost:8080/api/v1/tickets?employee_id=1'
+
+# Inspect voided tickets
+curl 'localhost:8080/api/v1/tickets?business_day_id=1&status=VOIDED'
+
+# Get one ticket
+curl localhost:8080/api/v1/tickets/1
+
+# Patch an active ticket while shift is open
+curl -X PATCH localhost:8080/api/v1/tickets/1 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "vehicleDescription": "Sentra blanco",
+    "employeeIds": [1, 2, 3]
+  }'
+
+# Void a ticket
+curl -X POST localhost:8080/api/v1/tickets/1/void \
+  -H 'Content-Type: application/json' \
+  -d '{"reason":"Capturado por error"}'
+```
+
+Ticket tests
+
+```bash
+cd api
+../mvnw test
+```
+
+The Phase 2 integration tests cover:
+
+- normal ticket creation
+- courtesy ticket reason requirement
+- backend price calculation from `service_prices`
+- multiple lavadores and default shares
+- voided tickets excluded from default ticket lists
+- edit rejection after shift close
+
+Phase 3 ticket MVP frontend
+
+The frontend now includes a PC-first operations shell with:
+
+- Dashboard placeholder
+- Nuevo ticket / POS screen
+- Tickets browser
+- Ticket detail/edit modal
+- Void ticket confirmation dialog
+
+Frontend stack:
+
+- React + TypeScript + Vite
+- React Router
+- TanStack Query
+- React Hook Form
+- Zod
+- Tailwind
+
+Run the full app locally:
+
+```bash
+# Terminal 1 - backend dependencies
+cd /Users/brandonrubio/Desktop/Lavado\ AI\ Script/lavadero-api
+docker compose up -d
+
+# Terminal 2 - backend
+cd /Users/brandonrubio/Desktop/Lavado\ AI\ Script/lavadero-api/api
+SPRING_PROFILES_ACTIVE=local ../mvnw spring-boot:run
+
+# Terminal 3 - frontend
+cd /Users/brandonrubio/Desktop/Lavado\ AI\ Script/lavadero-api/web
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+Before testing tickets from the UI, create the minimum backend setup data:
+
+```bash
+curl -X POST localhost:8080/api/v1/employees \
+  -H 'Content-Type: application/json' \
+  -d '{"fullName":"Juan Perez","phone":"899-555-0100"}'
+
+curl -X POST localhost:8080/api/v1/employees \
+  -H 'Content-Type: application/json' \
+  -d '{"fullName":"Luis Lopez","phone":"899-555-0101"}'
+
+curl -X POST localhost:8080/api/v1/service-types \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"LAVADO_BASICO","name":"Lavado basico","description":"Lavado exterior"}'
+
+curl -X POST localhost:8080/api/v1/vehicle-sizes \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"MEDIANO","name":"Mediano","sortOrder":1}'
+
+curl -X POST localhost:8080/api/v1/service-prices \
+  -H 'Content-Type: application/json' \
+  -d '{"serviceTypeId":1,"vehicleSizeId":1,"amount":120.00,"currency":"MXN","effectiveFrom":"2026-05-01"}'
+
+curl -X POST localhost:8080/api/v1/business-days/open \
+  -H 'Content-Type: application/json' \
+  -d '{"businessDate":"2026-05-03"}'
+
+curl -X POST localhost:8080/api/v1/shifts/open \
+  -H 'Content-Type: application/json' \
+  -d '{"businessDayId":1,"shiftType":"MATUTINO"}'
+```
+
+Manual UI test checklist:
+
+1. Open `http://localhost:5173`.
+2. Go to `Nuevo ticket`.
+3. Create a normal ticket with one lavador.
+4. Create another ticket with multiple lavadores.
+5. Create a courtesy ticket and confirm the form requires a reason.
+6. Go to `Tickets` and verify the ticket appears in the browser.
+7. Open the ticket detail modal and edit the vehicle description.
+8. Void a ticket and confirm it moves from `Activos` to `Cancelados`.
+9. Ask cousin to review layout.
+
+Frontend build:
+
+```bash
+cd web
+npm run build
+```

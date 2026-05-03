@@ -70,4 +70,9 @@ public class Shift extends AuditedEntity {
     public Instant getClosedAt() {
         return closedAt;
     }
+
+    public void close() {
+        status = ShiftStatus.CLOSED;
+        closedAt = Instant.now();
+    }
 }

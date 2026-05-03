@@ -39,15 +39,16 @@ public class ServicePriceService {
             throw new IllegalArgumentException("effectiveTo must be on or after effectiveFrom");
         }
 
+        String currency = request.currency() == null ? "MXN" : request.currency();
         LocalDate effectiveTo = request.effectiveTo() == null ? OPEN_ENDED : request.effectiveTo();
-        if (servicePrices.existsOverlapping(request.serviceTypeId(), request.vehicleSizeId(), request.effectiveFrom(),
-                effectiveTo)) {
+        if (servicePrices.existsOverlapping(request.serviceTypeId(), request.vehicleSizeId(), currency,
+                request.effectiveFrom(), effectiveTo)) {
             throw new IllegalArgumentException("Service price overlaps an existing effective date range");
         }
 
         ServiceType serviceType = serviceTypes.get(request.serviceTypeId());
         VehicleSize vehicleSize = vehicleSizes.get(request.vehicleSizeId());
-        return servicePrices.save(new ServicePrice(serviceType, vehicleSize, request.amount(), request.currency(),
+        return servicePrices.save(new ServicePrice(serviceType, vehicleSize, request.amount(), currency,
                 request.effectiveFrom(), request.effectiveTo()));
     }
 }

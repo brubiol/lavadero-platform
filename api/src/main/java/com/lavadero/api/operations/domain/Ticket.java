@@ -1,0 +1,189 @@
+package com.lavadero.api.operations.domain;
+
+import com.lavadero.api.catalog.domain.ServiceType;
+import com.lavadero.api.catalog.domain.VehicleSize;
+import com.lavadero.api.common.domain.AuditedEntity;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "tickets")
+public class Ticket extends AuditedEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "business_day_id", nullable = false)
+    private BusinessDay businessDay;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "shift_id", nullable = false)
+    private Shift shift;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "service_type_id", nullable = false)
+    private ServiceType serviceType;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "vehicle_size_id", nullable = false)
+    private VehicleSize vehicleSize;
+
+    @Column(name = "daily_seq", nullable = false)
+    private Integer dailySeq;
+
+    @Column(name = "nota_number", nullable = false, length = 40)
+    private String notaNumber;
+
+    @Column(name = "vehicle_description", length = 160)
+    private String vehicleDescription;
+
+    @Column(name = "price_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal priceAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 3)
+    private TicketCurrency currency;
+
+    @Column(nullable = false)
+    private boolean courtesy;
+
+    @Column(name = "courtesy_reason", length = 500)
+    private String courtesyReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TicketStatus status = TicketStatus.ACTIVE;
+
+    @Column(name = "void_reason", length = 500)
+    private String voidReason;
+
+    @Column(name = "voided_at")
+    private Instant voidedAt;
+
+    @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TicketAssignment> assignments = new ArrayList<>();
+
+    protected Ticket() {
+    }
+
+    public Ticket(BusinessDay businessDay, Shift shift, ServiceType serviceType, VehicleSize vehicleSize,
+            Integer dailySeq, String notaNumber, String vehicleDescription, BigDecimal priceAmount,
+            TicketCurrency currency, boolean courtesy, String courtesyReason) {
+        this.businessDay = businessDay;
+        this.shift = shift;
+        this.serviceType = serviceType;
+        this.vehicleSize = vehicleSize;
+        this.dailySeq = dailySeq;
+        this.notaNumber = notaNumber;
+        this.vehicleDescription = vehicleDescription;
+        this.priceAmount = priceAmount;
+        this.currency = currency;
+        this.courtesy = courtesy;
+        this.courtesyReason = courtesyReason;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public BusinessDay getBusinessDay() {
+        return businessDay;
+    }
+
+    public Shift getShift() {
+        return shift;
+    }
+
+    public ServiceType getServiceType() {
+        return serviceType;
+    }
+
+    public VehicleSize getVehicleSize() {
+        return vehicleSize;
+    }
+
+    public Integer getDailySeq() {
+        return dailySeq;
+    }
+
+    public String getNotaNumber() {
+        return notaNumber;
+    }
+
+    public String getVehicleDescription() {
+        return vehicleDescription;
+    }
+
+    public BigDecimal getPriceAmount() {
+        return priceAmount;
+    }
+
+    public TicketCurrency getCurrency() {
+        return currency;
+    }
+
+    public boolean isCourtesy() {
+        return courtesy;
+    }
+
+    public String getCourtesyReason() {
+        return courtesyReason;
+    }
+
+    public TicketStatus getStatus() {
+        return status;
+    }
+
+    public String getVoidReason() {
+        return voidReason;
+    }
+
+    public Instant getVoidedAt() {
+        return voidedAt;
+    }
+
+    public List<TicketAssignment> getAssignments() {
+        return assignments;
+    }
+
+    public void update(ServiceType serviceType, VehicleSize vehicleSize, String vehicleDescription,
+            BigDecimal priceAmount, TicketCurrency currency, boolean courtesy, String courtesyReason) {
+        this.serviceType = serviceType;
+        this.vehicleSize = vehicleSize;
+        this.vehicleDescription = vehicleDescription;
+        this.priceAmount = priceAmount;
+        this.currency = currency;
+        this.courtesy = courtesy;
+        this.courtesyReason = courtesyReason;
+    }
+
+    public void replaceAssignments(List<TicketAssignment> nextAssignments) {
+        assignments.clear();
+        nextAssignments.forEach(assignment -> {
+            assignment.attachTo(this);
+            assignments.add(assignment);
+        });
+    }
+
+    public void voidTicket(String reason) {
+        status = TicketStatus.VOIDED;
+        voidReason = reason;
+        voidedAt = Instant.now();
+    }
+}
