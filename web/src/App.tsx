@@ -85,6 +85,18 @@ type Ticket = {
   updatedAt: string
 }
 
+type DailySummary = {
+  date: string
+  carsWashed: number
+  ticketRevenue: number
+  expensesTotal: number
+  result: number
+  courtesyCount: number
+  voidedCount: number
+  recentTickets: Ticket[]
+  cashVariance?: number | null
+}
+
 const ticketSchema = z.object({
   businessDayId: z.coerce.number().positive('Abre un dia de trabajo primero'),
   shiftId: z.coerce.number().positive('Selecciona un turno abierto'),
@@ -113,6 +125,51 @@ const voidSchema = z.object({
 })
 
 type VoidFormValues = z.infer<typeof voidSchema>
+
+const codeSchema = z.string()
+  .min(1, 'Escribe un codigo')
+  .max(40, 'Maximo 40 caracteres')
+  .regex(/^[A-Z0-9_]+$/, 'Usa mayusculas, numeros o guion bajo')
+
+const employeeSchema = z.object({
+  fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
+  phone: z.string().max(40, 'Maximo 40 caracteres').optional(),
+})
+
+type EmployeeFormValues = z.infer<typeof employeeSchema>
+
+const serviceTypeSchema = z.object({
+  code: codeSchema,
+  name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
+  description: z.string().max(500, 'Maximo 500 caracteres').optional(),
+})
+
+type ServiceTypeFormValues = z.infer<typeof serviceTypeSchema>
+
+const vehicleSizeSchema = z.object({
+  code: codeSchema,
+  name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
+  sortOrder: z.coerce.number().int('Debe ser numero entero').min(0, 'Minimo 0'),
+})
+
+type VehicleSizeFormValues = z.infer<typeof vehicleSizeSchema>
+
+const servicePriceSchema = z.object({
+  serviceTypeId: z.coerce.number().positive('Selecciona servicio'),
+  vehicleSizeId: z.coerce.number().positive('Selecciona tamano'),
+  amount: z.coerce.number().positive('El precio debe ser mayor que 0'),
+  currency: z.enum(['MXN', 'USD']),
+  effectiveFrom: z.string().min(1, 'Selecciona fecha'),
+})
+
+type ServicePriceFormValues = z.infer<typeof servicePriceSchema>
+
+const operationsSchema = z.object({
+  businessDate: z.string().min(1, 'Selecciona fecha'),
+  shiftType: z.enum(['MATUTINO', 'VESPERTINO']),
+})
+
+type OperationsFormValues = z.infer<typeof operationsSchema>
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -150,19 +207,21 @@ function AppShell() {
           <SideLink to="/" label="Dashboard" />
           <SideLink to="/tickets/nuevo" label="Nuevo ticket" />
           <SideLink to="/tickets" label="Tickets" />
+          <SideLink to="/catalogos" label="Catalogos" />
         </nav>
       </aside>
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phase 3 MVP</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phase 4 MVP</p>
               <p className="text-lg font-semibold">Tickets y lavadores</p>
             </div>
             <nav className="flex gap-2 lg:hidden">
               <MobileLink to="/" label="Inicio" />
               <MobileLink to="/tickets/nuevo" label="Nuevo" />
               <MobileLink to="/tickets" label="Tickets" />
+              <MobileLink to="/catalogos" label="Datos" />
             </nav>
           </div>
         </header>
@@ -171,6 +230,7 @@ function AppShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
             <Route path="/tickets" element={<TicketsBrowser />} />
+            <Route path="/catalogos" element={<CatalogsScreen />} />
           </Routes>
         </main>
       </div>
@@ -209,24 +269,75 @@ function MobileLink({ to, label }: { to: string; label: string }) {
 }
 
 function Dashboard() {
-  const health = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api<{ status: string }>('/api/v1/health'),
+  const [date, setDate] = useState(today)
+  const summary = useQuery({
+    queryKey: ['daily-summary', date],
+    queryFn: () => api<DailySummary>(`/api/v1/reports/daily-summary?date=${date}`),
   })
+
+  const data = summary.data
 
   return (
     <section className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Dashboard</h2>
-          <p className="text-sm text-slate-600">Resumen operativo pendiente para la siguiente fase.</p>
+          <p className="text-sm text-slate-600">Resumen diario de ventas, carros y tickets recientes.</p>
         </div>
+        <label className="w-full max-w-48">
+          <span className="mb-1 block text-sm font-medium text-slate-700">Fecha</span>
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </label>
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric label="Backend" value={health.data?.status ?? '...' } />
-        <Metric label="Modulo activo" value="Tickets" />
-        <Metric label="Reportes" value="Pendiente" />
+
+      {summary.error && <ErrorMessage message={summary.error.message} />}
+
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} />
+        <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} />
+        <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} />
+        <Metric label="Carros lavados" value={String(data?.carsWashed ?? '...')} />
+        <Metric label="Cortesias" value={String(data?.courtesyCount ?? '...')} />
+        <Metric label="Tickets anulados" value={String(data?.voidedCount ?? '...')} />
       </div>
+
+      <Panel title="Tickets recientes">
+        <div className="overflow-hidden rounded-md border border-slate-200">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Nota</th>
+                <th className="px-4 py-3">Vehiculo</th>
+                <th className="px-4 py-3">Servicio</th>
+                <th className="px-4 py-3">Lavadores</th>
+                <th className="px-4 py-3 text-right">Importe</th>
+                <th className="px-4 py-3">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(data?.recentTickets ?? []).map((ticket) => (
+                <tr key={ticket.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-semibold">{ticket.notaNumber}</td>
+                  <td className="px-4 py-3">{ticket.vehicleDescription || '-'}</td>
+                  <td className="px-4 py-3">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
+                  <td className="px-4 py-3">{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
+                  <td className="px-4 py-3 text-right">{money(ticket.priceAmount, ticket.currency)}</td>
+                  <td className="px-4 py-3">
+                    <TicketStatusPill ticket={ticket} />
+                  </td>
+                </tr>
+              ))}
+              {!summary.isLoading && (data?.recentTickets.length ?? 0) === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                    No hay tickets para esta fecha. Crea tickets desde Nuevo ticket para ver el resumen.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
     </section>
   )
 }
@@ -385,7 +496,7 @@ function TicketWorkspace({
 
       {disabledReason && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          {disabledReason} Abre un business day y un turno desde Swagger o API antes de capturar tickets.
+          {disabledReason} Abre el dia y el turno desde Catalogos antes de capturar tickets.
         </div>
       )}
 
@@ -484,6 +595,337 @@ function TicketWorkspace({
   )
 }
 
+function CatalogsScreen() {
+  const queryClient = useQueryClient()
+  const [toast, setToast] = useState<string | null>(null)
+  const data = usePhaseData()
+  const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
+
+  const showToast = (message: string) => {
+    setToast(message)
+    window.setTimeout(() => setToast(null), 1800)
+  }
+
+  const employeeForm = useForm<EmployeeFormValues>({
+    resolver: zodResolver(employeeSchema),
+    defaultValues: { fullName: '', phone: '' },
+  })
+  const serviceForm = useForm<ServiceTypeFormValues>({
+    resolver: zodResolver(serviceTypeSchema),
+    defaultValues: { code: '', name: '', description: '' },
+  })
+  const sizeForm = useForm<VehicleSizeFormValues>({
+    resolver: zodResolver(vehicleSizeSchema),
+    defaultValues: { code: '', name: '', sortOrder: 0 },
+  })
+  const priceForm = useForm<ServicePriceFormValues>({
+    resolver: zodResolver(servicePriceSchema),
+    defaultValues: { serviceTypeId: 0, vehicleSizeId: 0, amount: 0, currency: 'MXN', effectiveFrom: today },
+  })
+  const operationsForm = useForm<OperationsFormValues>({
+    resolver: zodResolver(operationsSchema),
+    defaultValues: { businessDate: today, shiftType: 'MATUTINO' },
+  })
+
+  const employees = data.employees.data ?? []
+  const services = data.services.data ?? []
+  const sizes = data.sizes.data ?? []
+  const prices = data.prices.data ?? []
+
+  const createEmployee = useMutation({
+    mutationFn: (values: EmployeeFormValues) => api<Employee>('/api/v1/employees', {
+      method: 'POST',
+      body: JSON.stringify({
+        fullName: values.fullName.trim(),
+        phone: values.phone?.trim() || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      employeeForm.reset({ fullName: '', phone: '' })
+      await queryClient.invalidateQueries({ queryKey: ['employees'] })
+      showToast('Lavador guardado')
+    },
+  })
+
+  const createService = useMutation({
+    mutationFn: (values: ServiceTypeFormValues) => api<ServiceType>('/api/v1/service-types', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: values.code.trim().toUpperCase(),
+        name: values.name.trim(),
+        description: values.description?.trim() || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      serviceForm.reset({ code: '', name: '', description: '' })
+      await queryClient.invalidateQueries({ queryKey: ['service-types'] })
+      showToast('Servicio guardado')
+    },
+  })
+
+  const createSize = useMutation({
+    mutationFn: (values: VehicleSizeFormValues) => api<VehicleSize>('/api/v1/vehicle-sizes', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: values.code.trim().toUpperCase(),
+        name: values.name.trim(),
+        sortOrder: Number(values.sortOrder),
+      }),
+    }),
+    onSuccess: async () => {
+      sizeForm.reset({ code: '', name: '', sortOrder: 0 })
+      await queryClient.invalidateQueries({ queryKey: ['vehicle-sizes'] })
+      showToast('Tamano guardado')
+    },
+  })
+
+  const createPrice = useMutation({
+    mutationFn: (values: ServicePriceFormValues) => api<ServicePrice>('/api/v1/service-prices', {
+      method: 'POST',
+      body: JSON.stringify({
+        serviceTypeId: Number(values.serviceTypeId),
+        vehicleSizeId: Number(values.vehicleSizeId),
+        amount: Number(values.amount),
+        currency: values.currency,
+        effectiveFrom: values.effectiveFrom,
+      }),
+    }),
+    onSuccess: async () => {
+      priceForm.reset({ serviceTypeId: 0, vehicleSizeId: 0, amount: 0, currency: 'MXN', effectiveFrom: today })
+      await queryClient.invalidateQueries({ queryKey: ['service-prices'] })
+      showToast('Precio guardado')
+    },
+  })
+
+  const openBusinessDay = useMutation({
+    mutationFn: (values: OperationsFormValues) => api<BusinessDay>('/api/v1/business-days/open', {
+      method: 'POST',
+      body: JSON.stringify({ businessDate: values.businessDate }),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['business-days'] })
+      showToast('Dia abierto')
+    },
+  })
+
+  const openShift = useMutation({
+    mutationFn: (values: OperationsFormValues) => api<Shift>('/api/v1/shifts/open', {
+      method: 'POST',
+      body: JSON.stringify({
+        businessDayId: data.currentBusinessDay?.id,
+        shiftType: values.shiftType,
+      }),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['shifts'] })
+      showToast('Turno abierto')
+    },
+  })
+
+  return (
+    <section className="space-y-5">
+      {toast && <Toast message={toast} />}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">Catalogos</h2>
+          <p className="text-sm text-slate-600">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
+        </div>
+        <NavLink to="/tickets/nuevo" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          Ir a nuevo ticket
+        </NavLink>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-5">
+          <Panel title="Lavadores">
+            <form className="grid gap-3 md:grid-cols-[1fr_180px_auto]" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
+              <TextField label="Nombre" error={employeeForm.formState.errors.fullName?.message}>
+                <input placeholder="Ej. Juan Perez" {...employeeForm.register('fullName')} />
+              </TextField>
+              <TextField label="Telefono" error={employeeForm.formState.errors.phone?.message}>
+                <input placeholder="Opcional" {...employeeForm.register('phone')} />
+              </TextField>
+              <FormButton label="Agregar" loading={createEmployee.isPending} />
+            </form>
+            {createEmployee.error && <ErrorMessage message={createEmployee.error.message} />}
+            <SimpleList
+              empty="No hay lavadores activos."
+              rows={employees.map((employee) => ({
+                id: employee.id,
+                title: employee.fullName,
+                detail: employee.phone || 'Sin telefono',
+              }))}
+            />
+          </Panel>
+
+          <Panel title="Servicios">
+            <form className="grid gap-3 md:grid-cols-[140px_1fr_auto]" onSubmit={serviceForm.handleSubmit((values) => createService.mutate(values))}>
+              <TextField label="Codigo" error={serviceForm.formState.errors.code?.message}>
+                <input placeholder="LAVADO" {...serviceForm.register('code')} />
+              </TextField>
+              <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
+                <input placeholder="Lavado exterior" {...serviceForm.register('name')} />
+              </TextField>
+              <FormButton label="Agregar" loading={createService.isPending} />
+              <div className="md:col-span-3">
+                <TextField label="Descripcion" error={serviceForm.formState.errors.description?.message}>
+                  <textarea rows={2} placeholder="Opcional" {...serviceForm.register('description')} />
+                </TextField>
+              </div>
+            </form>
+            {createService.error && <ErrorMessage message={createService.error.message} />}
+            <SimpleList
+              empty="No hay servicios."
+              rows={services.map((service) => ({
+                id: service.id,
+                title: service.name,
+                detail: service.code,
+              }))}
+            />
+          </Panel>
+
+          <Panel title="Tamanos de vehiculo">
+            <form className="grid gap-3 md:grid-cols-[140px_1fr_120px_auto]" onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}>
+              <TextField label="Codigo" error={sizeForm.formState.errors.code?.message}>
+                <input placeholder="CHICO" {...sizeForm.register('code')} />
+              </TextField>
+              <TextField label="Nombre" error={sizeForm.formState.errors.name?.message}>
+                <input placeholder="Chico" {...sizeForm.register('name')} />
+              </TextField>
+              <TextField label="Orden" error={sizeForm.formState.errors.sortOrder?.message}>
+                <input type="number" min={0} {...sizeForm.register('sortOrder')} />
+              </TextField>
+              <FormButton label="Agregar" loading={createSize.isPending} />
+            </form>
+            {createSize.error && <ErrorMessage message={createSize.error.message} />}
+            <SimpleList
+              empty="No hay tamanos."
+              rows={sizes.map((size) => ({
+                id: size.id,
+                title: size.name,
+                detail: `${size.code} / orden ${size.sortOrder}`,
+              }))}
+            />
+          </Panel>
+
+          <Panel title="Precios">
+            <form className="grid gap-3 md:grid-cols-5" onSubmit={priceForm.handleSubmit((values) => createPrice.mutate(values))}>
+              <SelectField label="Servicio" error={priceForm.formState.errors.serviceTypeId?.message}>
+                <select {...priceForm.register('serviceTypeId')}>
+                  <option value={0}>Servicio</option>
+                  {services.map((service) => (
+                    <option key={service.id} value={service.id}>{service.name}</option>
+                  ))}
+                </select>
+              </SelectField>
+              <SelectField label="Tamano" error={priceForm.formState.errors.vehicleSizeId?.message}>
+                <select {...priceForm.register('vehicleSizeId')}>
+                  <option value={0}>Tamano</option>
+                  {sizes.map((size) => (
+                    <option key={size.id} value={size.id}>{size.name}</option>
+                  ))}
+                </select>
+              </SelectField>
+              <TextField label="Precio" error={priceForm.formState.errors.amount?.message}>
+                <input type="number" min={0} step="0.01" {...priceForm.register('amount')} />
+              </TextField>
+              <SelectField label="Moneda" error={priceForm.formState.errors.currency?.message}>
+                <select {...priceForm.register('currency')}>
+                  <option value="MXN">MXN</option>
+                  <option value="USD">USD</option>
+                </select>
+              </SelectField>
+              <TextField label="Desde" error={priceForm.formState.errors.effectiveFrom?.message}>
+                <input type="date" {...priceForm.register('effectiveFrom')} />
+              </TextField>
+              <div className="md:col-span-5">
+                <FormButton label="Guardar precio" loading={createPrice.isPending} />
+              </div>
+            </form>
+            {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
+            <div className="overflow-hidden rounded-md border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Servicio</th>
+                    <th className="px-4 py-3">Tamano</th>
+                    <th className="px-4 py-3 text-right">Precio</th>
+                    <th className="px-4 py-3">Desde</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {prices.map((price) => (
+                    <tr key={price.id}>
+                      <td className="px-4 py-3">{price.serviceTypeName}</td>
+                      <td className="px-4 py-3">{price.vehicleSizeName}</td>
+                      <td className="px-4 py-3 text-right">{money(price.amount, price.currency)}</td>
+                      <td className="px-4 py-3">{price.effectiveFrom}</td>
+                    </tr>
+                  ))}
+                  {prices.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">No hay precios vigentes para hoy.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+
+        <aside className="space-y-5">
+          <Panel title="Operacion de hoy">
+            <form className="space-y-4" onSubmit={operationsForm.handleSubmit((values) => openBusinessDay.mutate(values))}>
+              <TextField label="Fecha" error={operationsForm.formState.errors.businessDate?.message}>
+                <input type="date" {...operationsForm.register('businessDate')} />
+              </TextField>
+              <button
+                type="submit"
+                disabled={openBusinessDay.isPending}
+                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+              >
+                {openBusinessDay.isPending ? 'Abriendo...' : 'Abrir dia'}
+              </button>
+            </form>
+            {openBusinessDay.error && <ErrorMessage message={openBusinessDay.error.message} />}
+            <div className="rounded-md bg-slate-50 p-3 text-sm">
+              <p className="text-slate-500">Dia abierto</p>
+              <p className="font-semibold">{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</p>
+            </div>
+          </Panel>
+
+          <Panel title="Turnos">
+            <form className="space-y-4" onSubmit={operationsForm.handleSubmit((values) => openShift.mutate(values))}>
+              <SelectField label="Tipo de turno" error={operationsForm.formState.errors.shiftType?.message}>
+                <select {...operationsForm.register('shiftType')}>
+                  <option value="MATUTINO">MATUTINO</option>
+                  <option value="VESPERTINO">VESPERTINO</option>
+                </select>
+              </SelectField>
+              <button
+                type="submit"
+                disabled={openShift.isPending || !data.currentBusinessDay}
+                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+              >
+                {openShift.isPending ? 'Abriendo...' : 'Abrir turno'}
+              </button>
+            </form>
+            {openShift.error && <ErrorMessage message={openShift.error.message} />}
+            <SimpleList
+              empty="No hay turno abierto."
+              rows={openShifts.map((shift) => ({
+                id: shift.id,
+                title: shift.shiftType,
+                detail: shift.status,
+              }))}
+            />
+          </Panel>
+        </aside>
+      </div>
+    </section>
+  )
+}
+
 function TicketsBrowser() {
   const queryClient = useQueryClient()
   const data = usePhaseData()
@@ -553,9 +995,7 @@ function TicketsBrowser() {
                 <td className="px-4 py-3">{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
                 <td className="px-4 py-3 text-right">{money(ticket.priceAmount, ticket.currency)}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${ticket.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                    {ticket.status === 'ACTIVE' ? 'Activo' : 'Cancelado'}
-                  </span>
+                  <TicketStatusPill ticket={ticket} />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button className="text-sm font-semibold text-blue-700 hover:text-blue-900" onClick={() => setSelected(ticket)}>Ver</button>
@@ -622,6 +1062,41 @@ function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: ()
   )
 }
 
+function FormButton({ label, loading }: { label: string; loading: boolean }) {
+  return (
+    <div className="flex items-end">
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+      >
+        {loading ? 'Guardando...' : label}
+      </button>
+    </div>
+  )
+}
+
+function ErrorMessage({ message }: { message: string }) {
+  return <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{message}</p>
+}
+
+function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail: string }[]; empty: string }) {
+  if (rows.length === 0) {
+    return <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">{empty}</p>
+  }
+
+  return (
+    <div className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+      {rows.map((row) => (
+        <div key={row.id} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+          <span className="font-medium">{row.title}</span>
+          <span className="text-right text-slate-500">{row.detail}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5">
@@ -658,6 +1133,16 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+function TicketStatusPill({ ticket }: { ticket: Ticket }) {
+  if (ticket.status === 'VOIDED') {
+    return <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">Cancelado</span>
+  }
+  if (ticket.courtesy) {
+    return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Cortesia</span>
+  }
+  return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Activo</span>
 }
 
 function Modal({ title, children, onClose, narrow = false }: { title: string; children: React.ReactNode; onClose: () => void; narrow?: boolean }) {

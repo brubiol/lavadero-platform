@@ -294,11 +294,12 @@ Phase 3 ticket MVP frontend
 
 The frontend now includes a PC-first operations shell with:
 
-- Dashboard placeholder
+- Dashboard
 - Nuevo ticket / POS screen
 - Tickets browser
 - Ticket detail/edit modal
 - Void ticket confirmation dialog
+- Catalogos setup screen for owners to create lavadores, services, sizes, prices, business days, and shifts
 
 Frontend stack:
 
@@ -332,37 +333,7 @@ Open:
 http://localhost:5173
 ```
 
-Before testing tickets from the UI, create the minimum backend setup data:
-
-```bash
-curl -X POST localhost:8080/api/v1/employees \
-  -H 'Content-Type: application/json' \
-  -d '{"fullName":"Juan Perez","phone":"899-555-0100"}'
-
-curl -X POST localhost:8080/api/v1/employees \
-  -H 'Content-Type: application/json' \
-  -d '{"fullName":"Luis Lopez","phone":"899-555-0101"}'
-
-curl -X POST localhost:8080/api/v1/service-types \
-  -H 'Content-Type: application/json' \
-  -d '{"code":"LAVADO_BASICO","name":"Lavado basico","description":"Lavado exterior"}'
-
-curl -X POST localhost:8080/api/v1/vehicle-sizes \
-  -H 'Content-Type: application/json' \
-  -d '{"code":"MEDIANO","name":"Mediano","sortOrder":1}'
-
-curl -X POST localhost:8080/api/v1/service-prices \
-  -H 'Content-Type: application/json' \
-  -d '{"serviceTypeId":1,"vehicleSizeId":1,"amount":120.00,"currency":"MXN","effectiveFrom":"2026-05-01"}'
-
-curl -X POST localhost:8080/api/v1/business-days/open \
-  -H 'Content-Type: application/json' \
-  -d '{"businessDate":"2026-05-03"}'
-
-curl -X POST localhost:8080/api/v1/shifts/open \
-  -H 'Content-Type: application/json' \
-  -d '{"businessDayId":1,"shiftType":"MATUTINO"}'
-```
+Before testing tickets from the UI, open `Catalogos` and create the minimum setup data: lavadores, services, sizes, prices, today’s business day, and a shift.
 
 Manual UI test checklist:
 
@@ -382,3 +353,51 @@ Frontend build:
 cd web
 npm run build
 ```
+
+Phase 4 daily dashboard v1
+
+The backend exposes a daily summary endpoint for the dashboard:
+
+```bash
+curl 'localhost:8080/api/v1/reports/daily-summary?date=2026-03-01'
+```
+
+Response fields:
+
+- `date`
+- `carsWashed`
+- `ticketRevenue`
+- `expensesTotal`
+- `result`
+- `courtesyCount`
+- `voidedCount`
+- `recentTickets`
+- `cashVariance`
+
+Rules:
+
+- Voided tickets do not count toward `carsWashed` or `ticketRevenue`.
+- Courtesy tickets count in `courtesyCount` but contribute `0` revenue.
+- `expensesTotal` is `0.00` until the expenses module exists.
+- `cashVariance` is `null` until shift close/cash count exists.
+- `recentTickets` returns the latest tickets for the selected date.
+
+Dashboard UI:
+
+- Shows `Ingresos autos`, `Gastos`, `Resultado`, `Carros lavados`, `Cortesias`, and `Tickets anulados`.
+- Shows a recent tickets table.
+- Shows a clean empty state when a date has no tickets.
+
+Load MARZO.xlsx sample data locally
+
+Use this only for local testing. It imports rows through the API, not through Flyway, so it will not ship sample business data to production.
+
+```bash
+# Backend must be running on localhost:8080 first.
+python3 scripts/load_marzo_sample.py --limit 25
+
+# Load all parsed March rows instead of the first 25.
+python3 scripts/load_marzo_sample.py --limit 0
+```
+
+After loading the sample, open the Dashboard and select `2026-03-01`.
