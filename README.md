@@ -559,3 +559,81 @@ Manual checklist:
 - Faltante requires reason.
 - Closed shift prevents normal ticket edits.
 - Dashboard shows `Sobrante/Faltante` after a shift is closed.
+
+Phase 8 payroll MVP
+
+Phase 8 adds weekly payroll. Periods are Sunday to Saturday. The backend computes payroll from ticket assignments, employee advances, employee base weekly salary, and a simple car bonus rate.
+
+Payroll v1 rules:
+
+- Payroll period must start on Sunday; end date is calculated as Saturday.
+- Cars washed are computed from `ticket_assignments.share_pct`.
+- Example: two lavadores on one ticket each get `0.50` cars.
+- Voided tickets do not count.
+- Courtesy tickets count as cars washed but not ticket revenue reference.
+- `baseWeeklySalary` lives on employees and defaults to `0`.
+- `carsBonusRate` defaults to `10.00` MXN per car credit.
+- `commissions` and `tipsPoolShare` are stored but default to `0` in v1.
+- `netPay = baseSalary + carsBonus + commissions + tipsPoolShare - advancesDeducted`.
+- Employee advances create debt ledger `ADVANCE` rows.
+- Payroll compute creates `PAYROLL_DEDUCTION` debt ledger rows.
+- Locking payroll prevents recompute.
+
+Endpoint examples:
+
+```bash
+# Create a weekly payroll period. startDate must be Sunday.
+curl -X POST localhost:8080/api/v1/payroll/periods \
+  -H 'Content-Type: application/json' \
+  -d '{"startDate": "2026-11-01"}'
+
+# List periods
+curl localhost:8080/api/v1/payroll/periods
+curl 'localhost:8080/api/v1/payroll/periods?status=COMPUTED'
+
+# Get a period with entries and day rows
+curl localhost:8080/api/v1/payroll/periods/1
+
+# Compute payroll
+curl -X POST localhost:8080/api/v1/payroll/periods/1/compute
+
+# Lock payroll
+curl -X POST localhost:8080/api/v1/payroll/periods/1/lock
+
+# Employee debt balance
+curl localhost:8080/api/v1/payroll/employees/1/debt-balance
+
+# Optional: set employee base salary from API
+curl -X PATCH localhost:8080/api/v1/employees/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"baseWeeklySalary": 1200.00}'
+```
+
+Frontend:
+
+- Open `Nomina` from the sidebar.
+- Create a Sunday-start period.
+- Click `Recalcular`.
+- Review the weekly grid.
+- Click a lavador row to see detail and debt balance.
+- Click `Bloquear` when the payroll is final.
+
+Open questions before production payroll:
+
+- Exact car bonus rate: fixed per car, tiered, or different by service type?
+- Do courtesy cars pay the same car bonus?
+- Should ticket revenue affect commission, or is payroll only salary plus car bonus?
+- How should tips be captured and split?
+- Should employee advances deduct full available gross pay or a fixed weekly amount?
+- Should debt ever create negative net pay, or should net pay stop at zero as v1 does?
+- Who can unlock a locked payroll period later?
+- Should payroll include inactive employees who worked during the period?
+- Should USD tickets be converted to MXN for payroll reference?
+
+Manual checklist:
+
+- Create payroll period.
+- Compute payroll from ticket assignments.
+- Employee advances deduct correctly.
+- Debt balance appears.
+- Lock payroll.

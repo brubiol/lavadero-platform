@@ -13,6 +13,7 @@ type Employee = {
   fullName: string
   phone?: string
   active: boolean
+  baseWeeklySalary: number
 }
 
 type ServiceType = {
@@ -165,6 +166,47 @@ type EmployeeAdvance = {
   reason?: string | null
 }
 
+type PayrollPeriodStatus = 'OPEN' | 'COMPUTED' | 'LOCKED'
+
+type PayrollEntry = {
+  id: number
+  employeeId: number
+  employeeName: string
+  carsWashed: number
+  baseSalary: number
+  carsBonusRate: number
+  carsBonus: number
+  commissions: number
+  tipsPoolShare: number
+  advancesDeducted: number
+  netPay: number
+}
+
+type PayrollDay = {
+  id: number
+  employeeId: number
+  employeeName: string
+  workDate: string
+  carsWashed: number
+  ticketRevenue: number
+}
+
+type PayrollPeriod = {
+  id: number
+  startDate: string
+  endDate: string
+  status: PayrollPeriodStatus
+  computedAt?: string | null
+  lockedAt?: string | null
+  entries: PayrollEntry[]
+  days: PayrollDay[]
+}
+
+type DebtBalance = {
+  employeeId: number
+  balance: number
+}
+
 const expenseCategories: ExpenseCategory[] = [
   'CFE',
   'TELMEX',
@@ -214,6 +256,7 @@ const codeSchema = z.string()
 const employeeSchema = z.object({
   fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
   phone: z.string().max(40, 'Maximo 40 caracteres').optional(),
+  baseWeeklySalary: z.coerce.number().min(0, 'Minimo 0'),
 })
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>
@@ -308,6 +351,12 @@ const closeShiftSchema = z.object({
 
 type CloseShiftFormValues = z.infer<typeof closeShiftSchema>
 
+const payrollPeriodSchema = z.object({
+  startDate: z.string().min(1, 'Selecciona domingo'),
+})
+
+type PayrollPeriodFormValues = z.infer<typeof payrollPeriodSchema>
+
 const today = new Date().toISOString().slice(0, 10)
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -346,6 +395,7 @@ function AppShell() {
           <SideLink to="/tickets" label="Tickets" />
           <SideLink to="/gastos" label="Gastos" />
           <SideLink to="/corte" label="Corte" />
+          <SideLink to="/nomina" label="Nomina" />
           <SideLink to="/catalogos" label="Catalogos" />
         </nav>
       </aside>
@@ -362,6 +412,7 @@ function AppShell() {
               <MobileLink to="/tickets" label="Tickets" />
               <MobileLink to="/gastos" label="Gastos" />
               <MobileLink to="/corte" label="Corte" />
+              <MobileLink to="/nomina" label="Nomina" />
               <MobileLink to="/catalogos" label="Datos" />
             </nav>
           </div>
@@ -373,6 +424,7 @@ function AppShell() {
             <Route path="/tickets" element={<TicketsBrowser />} />
             <Route path="/gastos" element={<ExpenseLedgerScreen />} />
             <Route path="/corte" element={<ShiftCloseScreen />} />
+            <Route path="/nomina" element={<PayrollScreen />} />
             <Route path="/catalogos" element={<CatalogsScreen />} />
           </Routes>
         </main>
@@ -752,7 +804,7 @@ function CatalogsScreen() {
 
   const employeeForm = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
-    defaultValues: { fullName: '', phone: '' },
+    defaultValues: { fullName: '', phone: '', baseWeeklySalary: 0 },
   })
   const serviceForm = useForm<ServiceTypeFormValues>({
     resolver: zodResolver(serviceTypeSchema),
@@ -782,10 +834,11 @@ function CatalogsScreen() {
       body: JSON.stringify({
         fullName: values.fullName.trim(),
         phone: values.phone?.trim() || undefined,
+        baseWeeklySalary: Number(values.baseWeeklySalary),
       }),
     }),
     onSuccess: async () => {
-      employeeForm.reset({ fullName: '', phone: '' })
+      employeeForm.reset({ fullName: '', phone: '', baseWeeklySalary: 0 })
       await queryClient.invalidateQueries({ queryKey: ['employees'] })
       showToast('Lavador guardado')
     },
@@ -882,12 +935,15 @@ function CatalogsScreen() {
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           <Panel title="Lavadores">
-            <form className="grid gap-3 md:grid-cols-[1fr_180px_auto]" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
+            <form className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
               <TextField label="Nombre" error={employeeForm.formState.errors.fullName?.message}>
                 <input placeholder="Ej. Juan Perez" {...employeeForm.register('fullName')} />
               </TextField>
               <TextField label="Telefono" error={employeeForm.formState.errors.phone?.message}>
                 <input placeholder="Opcional" {...employeeForm.register('phone')} />
+              </TextField>
+              <TextField label="Sueldo base" error={employeeForm.formState.errors.baseWeeklySalary?.message}>
+                <input type="number" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
               </TextField>
               <FormButton label="Agregar" loading={createEmployee.isPending} />
             </form>
@@ -897,7 +953,7 @@ function CatalogsScreen() {
               rows={employees.map((employee) => ({
                 id: employee.id,
                 title: employee.fullName,
-                detail: employee.phone || 'Sin telefono',
+                detail: `${employee.phone || 'Sin telefono'} / ${money(employee.baseWeeklySalary, 'MXN')}`,
               }))}
             />
           </Panel>
@@ -1383,6 +1439,270 @@ function ShiftCloseScreen() {
       </div>
     </section>
   )
+}
+
+function PayrollScreen() {
+  const queryClient = useQueryClient()
+  const [status, setStatus] = useState<PayrollPeriodStatus | ''>('')
+  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const form = useForm<PayrollPeriodFormValues>({
+    resolver: zodResolver(payrollPeriodSchema),
+    defaultValues: { startDate: previousSunday(today) },
+  })
+
+  const periods = useQuery({
+    queryKey: ['payroll-periods', status],
+    queryFn: () => api<PayrollPeriod[]>(`/api/v1/payroll/periods${status ? `?status=${status}` : ''}`),
+  })
+  const selectedId = selectedPeriodId ?? periods.data?.[0]?.id ?? null
+  const period = useQuery({
+    queryKey: ['payroll-period', selectedId],
+    enabled: Boolean(selectedId),
+    queryFn: () => api<PayrollPeriod>(`/api/v1/payroll/periods/${selectedId}`),
+  })
+  const selectedPeriod = period.data
+  const selectedEntry = selectedEmployeeId
+    ? selectedPeriod?.entries.find((entry) => entry.employeeId === selectedEmployeeId)
+    : selectedPeriod?.entries[0]
+  const debt = useQuery({
+    queryKey: ['debt-balance', selectedEntry?.employeeId],
+    enabled: Boolean(selectedEntry?.employeeId),
+    queryFn: () => api<DebtBalance>(`/api/v1/payroll/employees/${selectedEntry!.employeeId}/debt-balance`),
+  })
+
+  const createPeriod = useMutation({
+    mutationFn: (values: PayrollPeriodFormValues) => api<PayrollPeriod>('/api/v1/payroll/periods', {
+      method: 'POST',
+      body: JSON.stringify(values),
+    }),
+    onSuccess: async (created) => {
+      setSelectedPeriodId(created.id)
+      await queryClient.invalidateQueries({ queryKey: ['payroll-periods'] })
+      setToast('Periodo creado')
+    },
+  })
+  const compute = useMutation({
+    mutationFn: () => api<PayrollPeriod>(`/api/v1/payroll/periods/${selectedId}/compute`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidatePayroll(queryClient)
+      setToast('Nomina calculada')
+    },
+  })
+  const lock = useMutation({
+    mutationFn: () => api<PayrollPeriod>(`/api/v1/payroll/periods/${selectedId}/lock`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidatePayroll(queryClient)
+      setToast('Nomina bloqueada')
+    },
+  })
+
+  const totals = {
+    cars: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.carsWashed, 0),
+    net: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.netPay, 0),
+    advances: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.advancesDeducted, 0),
+  }
+
+  return (
+    <section className="space-y-5">
+      {toast && <Toast message={toast} />}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">Nomina</h2>
+          <p className="text-sm text-slate-600">Calculo semanal de lavadores, bonos por carros y prestamos.</p>
+        </div>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))}>
+          <TextField label="Domingo" error={form.formState.errors.startDate?.message}>
+            <input type="date" {...form.register('startDate')} />
+          </TextField>
+          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            Crear periodo
+          </button>
+        </form>
+      </div>
+      {createPeriod.error && <ErrorMessage message={createPeriod.error.message} />}
+
+      <div className="grid gap-5 xl:grid-cols-[300px_1fr]">
+        <Panel title="Periodos">
+          <SelectField label="Estado">
+            <select value={status} onChange={(event) => setStatus(event.target.value as PayrollPeriodStatus | '')}>
+              <option value="">Todos</option>
+              <option value="OPEN">Abiertos</option>
+              <option value="COMPUTED">Calculados</option>
+              <option value="LOCKED">Bloqueados</option>
+            </select>
+          </SelectField>
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+            {(periods.data ?? []).map((item) => (
+              <button
+                key={item.id}
+                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm hover:bg-slate-50 ${
+                  selectedId === item.id ? 'bg-blue-50 text-blue-800' : ''
+                }`}
+                onClick={() => {
+                  setSelectedPeriodId(item.id)
+                  setSelectedEmployeeId(null)
+                }}
+              >
+                <span>
+                  <strong className="block">{item.startDate}</strong>
+                  <span className="text-slate-500">al {item.endDate}</span>
+                </span>
+                <PayrollStatusPill status={item.status} />
+              </button>
+            ))}
+            {!periods.isLoading && (periods.data ?? []).length === 0 && (
+              <p className="p-4 text-sm text-slate-500">No hay periodos de nomina.</p>
+            )}
+          </div>
+        </Panel>
+
+        <div className="space-y-5">
+          <Panel title="Resumen semanal">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-500">Periodo</p>
+                <p className="font-semibold">{selectedPeriod ? `${selectedPeriod.startDate} al ${selectedPeriod.endDate}` : 'Sin seleccionar'}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={!selectedId || selectedPeriod?.status === 'LOCKED' || compute.isPending}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                  onClick={() => compute.mutate()}
+                >
+                  Recalcular
+                </button>
+                <button
+                  disabled={!selectedId || selectedPeriod?.status !== 'COMPUTED' || lock.isPending}
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:text-slate-400"
+                  onClick={() => {
+                    if (window.confirm('Bloquear nomina? Ya no se podra recalcular en v1.')) {
+                      lock.mutate()
+                    }
+                  }}
+                >
+                  Bloquear
+                </button>
+              </div>
+            </div>
+            {(compute.error || lock.error) && <ErrorMessage message={(compute.error || lock.error)!.message} />}
+            <div className="grid gap-4 md:grid-cols-4">
+              <Metric label="Lavadores" value={String(selectedPeriod?.entries.length ?? 0)} />
+              <Metric label="Carros" value={totals.cars.toFixed(2)} />
+              <Metric label="Prestamos descontados" value={money(totals.advances, 'MXN')} />
+              <Metric label="Neto a pagar" value={money(totals.net, 'MXN')} />
+            </div>
+          </Panel>
+
+          <Panel title="Grid semanal">
+            <div className="overflow-hidden rounded-md border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Lavador</th>
+                    <th className="px-4 py-3 text-right">Carros</th>
+                    <th className="px-4 py-3 text-right">Base</th>
+                    <th className="px-4 py-3 text-right">Bono carros</th>
+                    <th className="px-4 py-3 text-right">Prestamos</th>
+                    <th className="px-4 py-3 text-right">Neto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(selectedPeriod?.entries ?? []).map((entry) => (
+                    <tr
+                      key={entry.id}
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => setSelectedEmployeeId(entry.employeeId)}
+                    >
+                      <td className="px-4 py-3 font-semibold">{entry.employeeName}</td>
+                      <td className="px-4 py-3 text-right">{entry.carsWashed.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{money(entry.baseSalary, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(entry.carsBonus, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(entry.advancesDeducted, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right font-semibold">{money(entry.netPay, 'MXN')}</td>
+                    </tr>
+                  ))}
+                  {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                        Crea o selecciona un periodo y presiona Recalcular.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          <Panel title="Detalle de lavador">
+            {selectedEntry ? (
+              <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+                <div className="space-y-3 text-sm">
+                  <SummaryRow label="Lavador" value={selectedEntry.employeeName} />
+                  <SummaryRow label="Carros" value={selectedEntry.carsWashed.toFixed(2)} />
+                  <SummaryRow label="Bono por carro" value={money(selectedEntry.carsBonusRate, 'MXN')} />
+                  <SummaryRow label="Neto" value={money(selectedEntry.netPay, 'MXN')} />
+                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
+                </div>
+                <div className="overflow-hidden rounded-md border border-slate-200">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Dia</th>
+                        <th className="px-4 py-3 text-right">Carros</th>
+                        <th className="px-4 py-3 text-right">Revenue ref.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(selectedPeriod?.days ?? []).filter((day) => day.employeeId === selectedEntry.employeeId).map((day) => (
+                        <tr key={day.id}>
+                          <td className="px-4 py-3">{day.workDate}</td>
+                          <td className="px-4 py-3 text-right">{day.carsWashed.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">{money(day.ticketRevenue, 'MXN')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Selecciona una fila para ver detalle y saldo de deuda.</p>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PayrollStatusPill({ status }: { status: PayrollPeriodStatus }) {
+  const styles: Record<PayrollPeriodStatus, string> = {
+    OPEN: 'bg-slate-100 text-slate-700',
+    COMPUTED: 'bg-blue-50 text-blue-700',
+    LOCKED: 'bg-emerald-50 text-emerald-700',
+  }
+  const labels: Record<PayrollPeriodStatus, string> = {
+    OPEN: 'Abierto',
+    COMPUTED: 'Calculado',
+    LOCKED: 'Bloqueado',
+  }
+  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${styles[status]}`}>{labels[status]}</span>
+}
+
+function previousSunday(dateString: string) {
+  const date = new Date(`${dateString}T00:00:00`)
+  const day = date.getDay()
+  date.setDate(date.getDate() - day)
+  return date.toISOString().slice(0, 10)
+}
+
+async function invalidatePayroll(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['payroll-periods'] }),
+    queryClient.invalidateQueries({ queryKey: ['payroll-period'] }),
+    queryClient.invalidateQueries({ queryKey: ['debt-balance'] }),
+  ])
 }
 
 function CashInput({

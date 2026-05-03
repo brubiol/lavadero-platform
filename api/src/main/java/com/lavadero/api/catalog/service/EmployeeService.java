@@ -27,7 +27,7 @@ public class EmployeeService {
 
     @Transactional
     public Employee create(CreateEmployeeRequest request) {
-        return employees.save(new Employee(request.fullName(), request.phone()));
+        return employees.save(new Employee(request.fullName(), request.phone(), request.baseWeeklySalary()));
     }
 
     @Transactional(readOnly = true)
@@ -38,7 +38,7 @@ public class EmployeeService {
     @Transactional
     public Employee update(Long id, UpdateEmployeeRequest request) {
         Employee employee = get(id);
-        employee.update(request.fullName(), request.phone(), request.active());
+        employee.update(request.fullName(), request.phone(), request.active(), request.baseWeeklySalary());
         return employee;
     }
 

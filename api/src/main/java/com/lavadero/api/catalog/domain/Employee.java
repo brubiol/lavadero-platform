@@ -7,6 +7,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "employees")
@@ -24,12 +25,21 @@ public class Employee extends AuditedEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "base_weekly_salary", nullable = false, precision = 10, scale = 2)
+    private BigDecimal baseWeeklySalary = BigDecimal.ZERO;
+
     protected Employee() {
     }
 
     public Employee(String fullName, String phone) {
         this.fullName = fullName;
         this.phone = phone;
+    }
+
+    public Employee(String fullName, String phone, BigDecimal baseWeeklySalary) {
+        this.fullName = fullName;
+        this.phone = phone;
+        this.baseWeeklySalary = baseWeeklySalary == null ? BigDecimal.ZERO : baseWeeklySalary;
     }
 
     public Long getId() {
@@ -48,7 +58,11 @@ public class Employee extends AuditedEntity {
         return active;
     }
 
-    public void update(String fullName, String phone, Boolean active) {
+    public BigDecimal getBaseWeeklySalary() {
+        return baseWeeklySalary;
+    }
+
+    public void update(String fullName, String phone, Boolean active, BigDecimal baseWeeklySalary) {
         if (fullName != null) {
             this.fullName = fullName;
         }
@@ -57,6 +71,9 @@ public class Employee extends AuditedEntity {
         }
         if (active != null) {
             this.active = active;
+        }
+        if (baseWeeklySalary != null) {
+            this.baseWeeklySalary = baseWeeklySalary;
         }
     }
 

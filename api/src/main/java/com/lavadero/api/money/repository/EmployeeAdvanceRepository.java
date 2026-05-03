@@ -14,6 +14,8 @@ public interface EmployeeAdvanceRepository extends JpaRepository<EmployeeAdvance
     List<EmployeeAdvance> findByEmployeeIdAndAdvanceDateBetweenOrderByAdvanceDateDescCreatedAtDesc(
             Long employeeId, LocalDate from, LocalDate to);
 
+    List<EmployeeAdvance> findByAdvanceDateBetween(LocalDate from, LocalDate to);
+
     @Query("select coalesce(sum(a.amount), 0) from EmployeeAdvance a where a.advanceDate = :date")
     BigDecimal sumForDate(@Param("date") LocalDate date);
 }

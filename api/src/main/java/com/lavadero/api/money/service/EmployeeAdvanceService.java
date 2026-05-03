@@ -6,6 +6,7 @@ import com.lavadero.api.money.domain.EmployeeAdvance;
 import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
 import com.lavadero.api.money.service.BusinessContextResolver.Context;
 import com.lavadero.api.money.web.EmployeeAdvanceDtos.CreateEmployeeAdvanceRequest;
+import com.lavadero.api.payroll.service.DebtLedgerService;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.LocalDate;
 import java.util.List;
@@ -17,12 +18,14 @@ public class EmployeeAdvanceService {
     private final EmployeeAdvanceRepository advances;
     private final EmployeeRepository employees;
     private final BusinessContextResolver contextResolver;
+    private final DebtLedgerService debtLedger;
 
     public EmployeeAdvanceService(EmployeeAdvanceRepository advances, EmployeeRepository employees,
-            BusinessContextResolver contextResolver) {
+            BusinessContextResolver contextResolver, DebtLedgerService debtLedger) {
         this.advances = advances;
         this.employees = employees;
         this.contextResolver = contextResolver;
+        this.debtLedger = debtLedger;
     }
 
     @Transactional
@@ -35,7 +38,9 @@ public class EmployeeAdvanceService {
         Context context = contextResolver.resolve(request.businessDayId(), request.shiftId(), request.advanceDate());
         EmployeeAdvance advance = new EmployeeAdvance(context.businessDay(), context.shift(), employee,
                 context.recordDate(), request.amount(), request.reason());
-        return advances.save(advance);
+        EmployeeAdvance saved = advances.save(advance);
+        debtLedger.recordAdvance(saved);
+        return saved;
     }
 
     @Transactional(readOnly = true)
