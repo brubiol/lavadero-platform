@@ -17,4 +17,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
     @Query("select coalesce(sum(e.amount), 0) from Expense e where e.expenseDate = :date")
     BigDecimal sumForDate(@Param("date") LocalDate date);
+
+    @Query("select coalesce(sum(e.amount), 0) from Expense e where e.shift.id = :shiftId")
+    BigDecimal sumForShift(@Param("shiftId") Long shiftId);
 }

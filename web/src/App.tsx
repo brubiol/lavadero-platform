@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useForm, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
@@ -54,6 +54,42 @@ type Shift = {
   businessDayId: number
   shiftType: 'MATUTINO' | 'VESPERTINO'
   status: 'OPEN' | 'CLOSED'
+}
+
+type CashCount = {
+  id: number
+  shiftId: number
+  currency: Currency
+  bills1000: number
+  bills500: number
+  bills200: number
+  bills100: number
+  bills50: number
+  bills20: number
+  coins10: number
+  coins5: number
+  coins2: number
+  coins1: number
+  coins05: number
+  morrallaTotal: number
+  totalCounted: number
+}
+
+type ShiftCloseSummary = {
+  id?: number | null
+  shiftId: number
+  businessDayId: number
+  shiftStatus: Shift['status']
+  ticketRevenue: number
+  expensesTotal: number
+  withdrawalsTotal: number
+  expectedCash: number
+  totalCounted?: number | null
+  variance?: number | null
+  closingReason?: string | null
+  closedAt?: string | null
+  cashCount?: CashCount | null
+  closed: boolean
 }
 
 type TicketAssignment = {
@@ -247,6 +283,31 @@ const advanceSchema = z.object({
 
 type AdvanceFormValues = z.infer<typeof advanceSchema>
 
+const cashCountSchema = z.object({
+  shiftId: z.coerce.number().positive('Selecciona turno'),
+  currency: z.enum(['MXN', 'USD']),
+  bills1000: z.coerce.number().int().min(0),
+  bills500: z.coerce.number().int().min(0),
+  bills200: z.coerce.number().int().min(0),
+  bills100: z.coerce.number().int().min(0),
+  bills50: z.coerce.number().int().min(0),
+  bills20: z.coerce.number().int().min(0),
+  coins10: z.coerce.number().int().min(0),
+  coins5: z.coerce.number().int().min(0),
+  coins2: z.coerce.number().int().min(0),
+  coins1: z.coerce.number().int().min(0),
+  coins05: z.coerce.number().int().min(0),
+  morrallaTotal: z.coerce.number().min(0),
+})
+
+type CashCountFormValues = z.infer<typeof cashCountSchema>
+
+const closeShiftSchema = z.object({
+  closingReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+})
+
+type CloseShiftFormValues = z.infer<typeof closeShiftSchema>
+
 const today = new Date().toISOString().slice(0, 10)
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -284,6 +345,7 @@ function AppShell() {
           <SideLink to="/tickets/nuevo" label="Nuevo ticket" />
           <SideLink to="/tickets" label="Tickets" />
           <SideLink to="/gastos" label="Gastos" />
+          <SideLink to="/corte" label="Corte" />
           <SideLink to="/catalogos" label="Catalogos" />
         </nav>
       </aside>
@@ -299,6 +361,7 @@ function AppShell() {
               <MobileLink to="/tickets/nuevo" label="Nuevo" />
               <MobileLink to="/tickets" label="Tickets" />
               <MobileLink to="/gastos" label="Gastos" />
+              <MobileLink to="/corte" label="Corte" />
               <MobileLink to="/catalogos" label="Datos" />
             </nav>
           </div>
@@ -309,6 +372,7 @@ function AppShell() {
             <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
             <Route path="/tickets" element={<TicketsBrowser />} />
             <Route path="/gastos" element={<ExpenseLedgerScreen />} />
+            <Route path="/corte" element={<ShiftCloseScreen />} />
             <Route path="/catalogos" element={<CatalogsScreen />} />
           </Routes>
         </main>
@@ -371,13 +435,14 @@ function Dashboard() {
 
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} />
         <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} />
         <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} />
         <Metric label="Carros lavados" value={String(data?.carsWashed ?? '...')} />
         <Metric label="Cortesias" value={String(data?.courtesyCount ?? '...')} />
         <Metric label="Tickets anulados" value={String(data?.voidedCount ?? '...')} />
+        <Metric label="Sobrante/Faltante" value={data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN')} />
       </div>
 
       <Panel title="Tickets recientes">
@@ -1110,6 +1175,246 @@ function ExpenseLedgerScreen() {
       {modal === 'withdrawal' && <WithdrawalModal data={data} onClose={() => setModal(null)} />}
       {modal === 'advance' && <AdvanceModal data={data} onClose={() => setModal(null)} />}
     </section>
+  )
+}
+
+function ShiftCloseScreen() {
+  const queryClient = useQueryClient()
+  const data = usePhaseData()
+  const shifts = data.shifts.data ?? []
+  const defaultShiftId = shifts.find((shift) => shift.status === 'OPEN')?.id ?? shifts[0]?.id ?? 0
+  const [selectedShiftId, setSelectedShiftId] = useState(defaultShiftId)
+  const [cashCount, setCashCount] = useState<CashCount | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const effectiveShiftId = selectedShiftId || defaultShiftId
+  const closeSummary = useQuery({
+    queryKey: ['close-summary', effectiveShiftId],
+    enabled: Boolean(effectiveShiftId),
+    queryFn: () => api<ShiftCloseSummary>(`/api/v1/shifts/${effectiveShiftId}/close-summary`),
+  })
+  const summary = closeSummary.data
+  const counted = cashCount?.totalCounted ?? summary?.totalCounted ?? null
+  const variance = counted == null || !summary ? null : counted - summary.expectedCash
+  const isShort = variance != null && variance < 0
+
+  const cashForm = useForm<CashCountFormValues>({
+    resolver: zodResolver(cashCountSchema),
+    values: {
+      shiftId: effectiveShiftId,
+      currency: 'MXN',
+      bills1000: 0,
+      bills500: 0,
+      bills200: 0,
+      bills100: 0,
+      bills50: 0,
+      bills20: 0,
+      coins10: 0,
+      coins5: 0,
+      coins2: 0,
+      coins1: 0,
+      coins05: 0,
+      morrallaTotal: 0,
+    },
+  })
+  const closeForm = useForm<CloseShiftFormValues>({
+    resolver: zodResolver(closeShiftSchema),
+    defaultValues: { closingReason: '' },
+  })
+
+  const countMutation = useMutation({
+    mutationFn: (values: CashCountFormValues) => api<CashCount>('/api/v1/cash-counts', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...values,
+        shiftId: Number(effectiveShiftId),
+        morrallaTotal: Number(values.morrallaTotal),
+      }),
+    }),
+    onSuccess: async (created) => {
+      setCashCount(created)
+      await queryClient.invalidateQueries({ queryKey: ['close-summary', effectiveShiftId] })
+    },
+  })
+
+  const closeMutation = useMutation({
+    mutationFn: (values: CloseShiftFormValues) => api<ShiftCloseSummary>(`/api/v1/shifts/${effectiveShiftId}/close`, {
+      method: 'POST',
+      body: JSON.stringify({
+        cashCountId: cashCount?.id ?? summary?.cashCount?.id,
+        closingReason: values.closingReason || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      setToast('Turno cerrado')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['close-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['shifts'] }),
+        queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily-summary'] }),
+      ])
+    },
+  })
+
+  const watchedCount = cashForm.watch()
+  const localCountPreview = calculateCashCount(watchedCount)
+
+  return (
+    <section className="space-y-5">
+      {toast && <Toast message={toast} />}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">Corte de turno</h2>
+          <p className="text-sm text-slate-600">Conteo de efectivo, revision de salidas y cierre del turno.</p>
+        </div>
+        <SelectField label="Turno">
+          <select value={effectiveShiftId} onChange={(event) => {
+            setSelectedShiftId(Number(event.target.value))
+            setCashCount(null)
+          }}>
+            <option value={0}>Selecciona turno</option>
+            {shifts.map((shift) => (
+              <option key={shift.id} value={shift.id}>{shift.shiftType} / {shift.status}</option>
+            ))}
+          </select>
+        </SelectField>
+      </div>
+
+      {!data.currentBusinessDay && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No hay dia abierto para hoy. Abre el dia desde Catalogos antes de hacer corte.
+        </div>
+      )}
+      {closeSummary.error && <ErrorMessage message={closeSummary.error.message} />}
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+        <div className="space-y-5">
+          <Panel title="1. Conteo de efectivo">
+            <form className="space-y-4" onSubmit={cashForm.handleSubmit((values) => countMutation.mutate(values))}>
+              <div className="grid gap-3 md:grid-cols-4">
+                <SelectField label="Moneda" error={cashForm.formState.errors.currency?.message}>
+                  <select {...cashForm.register('currency')}>
+                    <option value="MXN">MXN</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </SelectField>
+                <CashInput label="$1000" name="bills1000" form={cashForm} />
+                <CashInput label="$500" name="bills500" form={cashForm} />
+                <CashInput label="$200" name="bills200" form={cashForm} />
+                <CashInput label="$100" name="bills100" form={cashForm} />
+                <CashInput label="$50" name="bills50" form={cashForm} />
+                <CashInput label="$20" name="bills20" form={cashForm} />
+                <CashInput label="$10" name="coins10" form={cashForm} />
+                <CashInput label="$5" name="coins5" form={cashForm} />
+                <CashInput label="$2" name="coins2" form={cashForm} />
+                <CashInput label="$1" name="coins1" form={cashForm} />
+                <CashInput label="$0.50" name="coins05" form={cashForm} />
+              </div>
+              <TextField label="Morralla total">
+                <input type="number" min={0} step="0.01" {...cashForm.register('morrallaTotal')} />
+              </TextField>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3 text-sm">
+                <span className="text-slate-600">Total contado preview</span>
+                <strong className="text-lg">{money(localCountPreview, watchedCount.currency)}</strong>
+              </div>
+              {countMutation.error && <ErrorMessage message={countMutation.error.message} />}
+              <button
+                type="submit"
+                disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+              >
+                {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
+              </button>
+            </form>
+          </Panel>
+
+          <Panel title="2. Gastos y retiros del turno">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Metric label="Ingresos tickets" value={summary ? money(summary.ticketRevenue, 'MXN') : '...'} />
+              <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
+              <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
+            </div>
+            <p className="text-sm text-slate-600">
+              Formula v1: efectivo esperado = ingresos de tickets activos - gastos - retiros.
+            </p>
+          </Panel>
+
+          <Panel title="3. Revision del corte">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Metric label="Esperado" value={summary ? money(summary.expectedCash, 'MXN') : '...'} />
+              <Metric label="Contado" value={counted == null ? 'Sin conteo' : money(counted, 'MXN')} />
+              <Metric label="Diferencia" value={variance == null ? 'Pendiente' : money(variance, 'MXN')} />
+            </div>
+            {isShort && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                Hay faltante. El sistema exige motivo antes de cerrar el turno.
+              </div>
+            )}
+            {variance != null && variance > 0 && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                Hay sobrante. Puedes cerrar sin motivo obligatorio.
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <aside>
+          <Panel title="4. Cerrar turno">
+            <form className="space-y-4" onSubmit={closeForm.handleSubmit((values) => closeMutation.mutate(values))}>
+              <SummaryRow label="Estado" value={summary?.closed ? 'Cerrado' : summary?.shiftStatus ?? 'Pendiente'} />
+              <SummaryRow label="Conteo guardado" value={cashCount || summary?.cashCount ? 'Si' : 'No'} />
+              <SummaryRow label="Diferencia" value={variance == null ? 'Pendiente' : money(variance, 'MXN')} />
+              {isShort && (
+                <TextField label="Motivo de faltante" error={closeForm.formState.errors.closingReason?.message}>
+                  <textarea rows={4} placeholder="Ej. Falto cambio en caja" {...closeForm.register('closingReason')} />
+                </TextField>
+              )}
+              {closeMutation.error && <ErrorMessage message={closeMutation.error.message} />}
+              <button
+                type="submit"
+                disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
+                className="w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+              >
+                {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? 'Turno cerrado' : 'Cerrar turno'}
+              </button>
+            </form>
+          </Panel>
+        </aside>
+      </div>
+    </section>
+  )
+}
+
+function CashInput({
+  label,
+  name,
+  form,
+}: {
+  label: string
+  name: keyof CashCountFormValues
+  form: UseFormReturn<CashCountFormValues>
+}) {
+  return (
+    <TextField label={label}>
+      <input type="number" min={0} step={1} {...form.register(name)} />
+    </TextField>
+  )
+}
+
+function calculateCashCount(values: CashCountFormValues) {
+  return (
+    Number(values.bills1000 || 0) * 1000 +
+    Number(values.bills500 || 0) * 500 +
+    Number(values.bills200 || 0) * 200 +
+    Number(values.bills100 || 0) * 100 +
+    Number(values.bills50 || 0) * 50 +
+    Number(values.bills20 || 0) * 20 +
+    Number(values.coins10 || 0) * 10 +
+    Number(values.coins5 || 0) * 5 +
+    Number(values.coins2 || 0) * 2 +
+    Number(values.coins1 || 0) +
+    Number(values.coins05 || 0) * 0.5 +
+    Number(values.morrallaTotal || 0)
   )
 }
 

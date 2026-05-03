@@ -1,5 +1,7 @@
 package com.lavadero.api.reports.service;
 
+import com.lavadero.api.cash.domain.ShiftCloseSummary;
+import com.lavadero.api.cash.repository.ShiftCloseSummaryRepository;
 import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
 import com.lavadero.api.money.repository.ExpenseRepository;
 import com.lavadero.api.money.repository.WithdrawalRepository;
@@ -23,13 +25,15 @@ public class DailySummaryService {
     private final ExpenseRepository expenses;
     private final WithdrawalRepository withdrawals;
     private final EmployeeAdvanceRepository advances;
+    private final ShiftCloseSummaryRepository closeSummaries;
 
     public DailySummaryService(TicketRepository tickets, ExpenseRepository expenses, WithdrawalRepository withdrawals,
-            EmployeeAdvanceRepository advances) {
+            EmployeeAdvanceRepository advances, ShiftCloseSummaryRepository closeSummaries) {
         this.tickets = tickets;
         this.expenses = expenses;
         this.withdrawals = withdrawals;
         this.advances = advances;
+        this.closeSummaries = closeSummaries;
     }
 
     @Transactional(readOnly = true)
@@ -57,9 +61,13 @@ public class DailySummaryService {
                 .add(advances.sumForDate(date));
         BigDecimal result = ticketRevenue.subtract(expensesTotal);
         List<Ticket> recentTickets = dailyTickets.stream().limit(10).toList();
+        List<ShiftCloseSummary> closes = closeSummaries.findByShiftBusinessDayBusinessDate(date);
+        BigDecimal cashVariance = closes.isEmpty()
+                ? null
+                : closes.stream().map(ShiftCloseSummary::getVariance).reduce(ZERO, BigDecimal::add);
 
         return DailySummaryResponse.from(date, carsWashed, ticketRevenue, expensesTotal, result,
-                courtesyCount, voidedCount, recentTickets, null);
+                courtesyCount, voidedCount, recentTickets, cashVariance);
     }
 
     private Specification<Ticket> forDate(LocalDate date) {

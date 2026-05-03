@@ -1,5 +1,8 @@
 package com.lavadero.api.operations.web;
 
+import com.lavadero.api.cash.service.ShiftCloseService;
+import com.lavadero.api.cash.web.ShiftCloseDtos.CloseShiftRequest;
+import com.lavadero.api.cash.web.ShiftCloseDtos.ShiftCloseSummaryResponse;
 import com.lavadero.api.operations.service.ShiftService;
 import com.lavadero.api.operations.web.ShiftDtos.OpenShiftRequest;
 import com.lavadero.api.operations.web.ShiftDtos.ShiftResponse;
@@ -7,6 +10,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/shifts")
 public class ShiftController {
     private final ShiftService shifts;
+    private final ShiftCloseService shiftClose;
 
-    public ShiftController(ShiftService shifts) {
+    public ShiftController(ShiftService shifts, ShiftCloseService shiftClose) {
         this.shifts = shifts;
+        this.shiftClose = shiftClose;
     }
 
     @PostMapping("/open")
@@ -32,5 +38,15 @@ public class ShiftController {
     @GetMapping
     public List<ShiftResponse> list(@RequestParam(name = "business_day_id") Long businessDayId) {
         return shifts.list(businessDayId).stream().map(ShiftResponse::from).toList();
+    }
+
+    @GetMapping("/{id}/close-summary")
+    public ShiftCloseSummaryResponse closeSummary(@PathVariable Long id) {
+        return shiftClose.summary(id);
+    }
+
+    @PostMapping("/{id}/close")
+    public ShiftCloseSummaryResponse close(@PathVariable Long id, @Valid @RequestBody CloseShiftRequest request) {
+        return shiftClose.close(id, request);
     }
 }

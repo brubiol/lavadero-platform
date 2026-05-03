@@ -480,3 +480,82 @@ Frontend:
 - Open `Gastos` from the sidebar.
 - Use `Nuevo gasto`, `Nuevo retiro`, and `Nuevo prestamo`.
 - Filter tables by date range and expense category.
+
+Phase 6 shift close / corte v1
+
+Phase 6 adds the first real corte flow without inventory. It stores a cash denomination count, calculates expected cash on the backend, saves the final close summary, and closes the shift.
+
+Formula v1:
+
+```text
+expected_cash = ticketRevenue - expenses - withdrawals
+variance = total_counted - expected_cash
+```
+
+Rules:
+
+- `totalCounted` is calculated by the backend from bills, coins, and `morrallaTotal`.
+- Voided tickets and courtesy tickets do not count toward `ticketRevenue`.
+- Employee advances are not part of the corte formula yet.
+- If `variance` is negative, `closingReason` is required.
+- Closing a shift sets the shift to `CLOSED`, stores `closedAt`, and blocks normal ticket edits.
+
+Endpoint examples:
+
+```bash
+# Create a cash count for a shift
+curl -X POST localhost:8080/api/v1/cash-counts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "shiftId": 1,
+    "currency": "MXN",
+    "bills1000": 0,
+    "bills500": 0,
+    "bills200": 0,
+    "bills100": 3,
+    "bills50": 1,
+    "bills20": 2,
+    "coins10": 1,
+    "coins5": 0,
+    "coins2": 0,
+    "coins1": 0,
+    "coins05": 0,
+    "morrallaTotal": 0
+  }'
+
+# Read a cash count
+curl localhost:8080/api/v1/cash-counts/1
+
+# Preview close summary
+curl localhost:8080/api/v1/shifts/1/close-summary
+
+# Close exact match or sobrante
+curl -X POST localhost:8080/api/v1/shifts/1/close \
+  -H 'Content-Type: application/json' \
+  -d '{"cashCountId": 1}'
+
+# Close faltante with required reason
+curl -X POST localhost:8080/api/v1/shifts/1/close \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "cashCountId": 1,
+    "closingReason": "Falto cambio en caja"
+  }'
+```
+
+Frontend:
+
+- Open `Corte` from the sidebar.
+- Select the shift.
+- Count bills, coins, and morralla.
+- Review ingresos, gastos, retiros, esperado, contado, and diferencia.
+- If there is faltante, enter the required reason.
+- Click `Cerrar turno`.
+
+Manual checklist:
+
+- Exact cash close works.
+- Sobrante works without reason.
+- Faltante requires reason.
+- Closed shift prevents normal ticket edits.
+- Dashboard shows `Sobrante/Faltante` after a shift is closed.

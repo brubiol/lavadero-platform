@@ -13,4 +13,7 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, Long> {
 
     @Query("select coalesce(sum(w.amount), 0) from Withdrawal w where w.withdrawalDate = :date")
     BigDecimal sumForDate(@Param("date") LocalDate date);
+
+    @Query("select coalesce(sum(w.amount), 0) from Withdrawal w where w.shift.id = :shiftId")
+    BigDecimal sumForShift(@Param("shiftId") Long shiftId);
 }
