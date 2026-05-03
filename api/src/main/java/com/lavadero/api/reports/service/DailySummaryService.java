@@ -1,5 +1,8 @@
 package com.lavadero.api.reports.service;
 
+import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
+import com.lavadero.api.money.repository.ExpenseRepository;
+import com.lavadero.api.money.repository.WithdrawalRepository;
 import com.lavadero.api.operations.domain.Ticket;
 import com.lavadero.api.operations.domain.TicketStatus;
 import com.lavadero.api.operations.repository.TicketRepository;
@@ -17,9 +20,16 @@ public class DailySummaryService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
 
     private final TicketRepository tickets;
+    private final ExpenseRepository expenses;
+    private final WithdrawalRepository withdrawals;
+    private final EmployeeAdvanceRepository advances;
 
-    public DailySummaryService(TicketRepository tickets) {
+    public DailySummaryService(TicketRepository tickets, ExpenseRepository expenses, WithdrawalRepository withdrawals,
+            EmployeeAdvanceRepository advances) {
         this.tickets = tickets;
+        this.expenses = expenses;
+        this.withdrawals = withdrawals;
+        this.advances = advances;
     }
 
     @Transactional(readOnly = true)
@@ -42,7 +52,9 @@ public class DailySummaryService {
                 .map(Ticket::getPriceAmount)
                 .reduce(ZERO, BigDecimal::add);
 
-        BigDecimal expensesTotal = ZERO;
+        BigDecimal expensesTotal = expenses.sumForDate(date)
+                .add(withdrawals.sumForDate(date))
+                .add(advances.sumForDate(date));
         BigDecimal result = ticketRevenue.subtract(expensesTotal);
         List<Ticket> recentTickets = dailyTickets.stream().limit(10).toList();
 

@@ -401,3 +401,82 @@ python3 scripts/load_marzo_sample.py --limit 0
 ```
 
 After loading the sample, open the Dashboard and select `2026-03-01`.
+
+Phase 5 expenses, withdrawals, and employee advances
+
+Phase 5 adds the money-out side of the daily operation:
+
+- `expenses`: categorized business expenses.
+- `withdrawals`: cash withdrawals from the register.
+- `employee_advances`: loans/advances to lavadores.
+
+Common expense categories:
+
+- `CFE`
+- `TELMEX`
+- `BASURA`
+- `NOMINA`
+- `MATERIAL`
+- `GARRAFON_DE_AGUA`
+- `TAXI`
+- `COMISION_DEPOSITO`
+- `OTHER`
+
+Endpoint examples:
+
+```bash
+# Create expense
+curl -X POST localhost:8080/api/v1/expenses \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "businessDayId": 1,
+    "shiftId": 1,
+    "expenseDate": "2026-05-03",
+    "category": "MATERIAL",
+    "amount": 250.00,
+    "description": "Jabon y aromatizante"
+  }'
+
+# List expenses by date/category
+curl 'localhost:8080/api/v1/expenses?from=2026-05-01&to=2026-05-03'
+curl 'localhost:8080/api/v1/expenses?from=2026-05-01&to=2026-05-03&category=CFE'
+
+# Create withdrawal
+curl -X POST localhost:8080/api/v1/withdrawals \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "businessDayId": 1,
+    "shiftId": 1,
+    "withdrawalDate": "2026-05-03",
+    "amount": 500.00,
+    "reason": "Retiro del dueno"
+  }'
+
+curl 'localhost:8080/api/v1/withdrawals?from=2026-05-01&to=2026-05-03'
+
+# Create employee advance
+curl -X POST localhost:8080/api/v1/employee-advances \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "businessDayId": 1,
+    "shiftId": 1,
+    "employeeId": 1,
+    "advanceDate": "2026-05-03",
+    "amount": 200.00,
+    "reason": "Prestamo semanal"
+  }'
+
+curl 'localhost:8080/api/v1/employee-advances?from=2026-05-01&to=2026-05-03'
+curl 'localhost:8080/api/v1/employee-advances?employee_id=1&from=2026-05-01&to=2026-05-03'
+```
+
+Dashboard update:
+
+- `expensesTotal` now includes expenses, withdrawals, and employee advances for the selected date.
+- `result = ticketRevenue - expensesTotal`.
+
+Frontend:
+
+- Open `Gastos` from the sidebar.
+- Use `Nuevo gasto`, `Nuevo retiro`, and `Nuevo prestamo`.
+- Filter tables by date range and expense category.

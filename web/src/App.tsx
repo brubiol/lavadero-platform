@@ -97,6 +97,50 @@ type DailySummary = {
   cashVariance?: number | null
 }
 
+type ExpenseCategory = 'CFE' | 'TELMEX' | 'BASURA' | 'NOMINA' | 'MATERIAL' | 'GARRAFON_DE_AGUA' | 'TAXI' | 'COMISION_DEPOSITO' | 'OTHER'
+
+type Expense = {
+  id: number
+  businessDayId?: number | null
+  shiftId?: number | null
+  expenseDate: string
+  category: ExpenseCategory
+  amount: number
+  description?: string | null
+}
+
+type Withdrawal = {
+  id: number
+  businessDayId?: number | null
+  shiftId?: number | null
+  withdrawalDate: string
+  amount: number
+  reason?: string | null
+}
+
+type EmployeeAdvance = {
+  id: number
+  businessDayId?: number | null
+  shiftId?: number | null
+  employeeId: number
+  employeeName: string
+  advanceDate: string
+  amount: number
+  reason?: string | null
+}
+
+const expenseCategories: ExpenseCategory[] = [
+  'CFE',
+  'TELMEX',
+  'BASURA',
+  'NOMINA',
+  'MATERIAL',
+  'GARRAFON_DE_AGUA',
+  'TAXI',
+  'COMISION_DEPOSITO',
+  'OTHER',
+]
+
 const ticketSchema = z.object({
   businessDayId: z.coerce.number().positive('Abre un dia de trabajo primero'),
   shiftId: z.coerce.number().positive('Selecciona un turno abierto'),
@@ -171,6 +215,38 @@ const operationsSchema = z.object({
 
 type OperationsFormValues = z.infer<typeof operationsSchema>
 
+const expenseSchema = z.object({
+  expenseDate: z.string().min(1, 'Selecciona fecha'),
+  businessDayId: z.coerce.number().optional(),
+  shiftId: z.coerce.number().optional(),
+  category: z.enum(expenseCategories),
+  amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
+  description: z.string().max(500, 'Maximo 500 caracteres').optional(),
+})
+
+type ExpenseFormValues = z.infer<typeof expenseSchema>
+
+const withdrawalSchema = z.object({
+  withdrawalDate: z.string().min(1, 'Selecciona fecha'),
+  businessDayId: z.coerce.number().optional(),
+  shiftId: z.coerce.number().optional(),
+  amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
+  reason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+})
+
+type WithdrawalFormValues = z.infer<typeof withdrawalSchema>
+
+const advanceSchema = z.object({
+  advanceDate: z.string().min(1, 'Selecciona fecha'),
+  businessDayId: z.coerce.number().optional(),
+  shiftId: z.coerce.number().optional(),
+  employeeId: z.coerce.number().positive('Selecciona lavador'),
+  amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
+  reason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+})
+
+type AdvanceFormValues = z.infer<typeof advanceSchema>
+
 const today = new Date().toISOString().slice(0, 10)
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -207,6 +283,7 @@ function AppShell() {
           <SideLink to="/" label="Dashboard" />
           <SideLink to="/tickets/nuevo" label="Nuevo ticket" />
           <SideLink to="/tickets" label="Tickets" />
+          <SideLink to="/gastos" label="Gastos" />
           <SideLink to="/catalogos" label="Catalogos" />
         </nav>
       </aside>
@@ -221,6 +298,7 @@ function AppShell() {
               <MobileLink to="/" label="Inicio" />
               <MobileLink to="/tickets/nuevo" label="Nuevo" />
               <MobileLink to="/tickets" label="Tickets" />
+              <MobileLink to="/gastos" label="Gastos" />
               <MobileLink to="/catalogos" label="Datos" />
             </nav>
           </div>
@@ -230,6 +308,7 @@ function AppShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
             <Route path="/tickets" element={<TicketsBrowser />} />
+            <Route path="/gastos" element={<ExpenseLedgerScreen />} />
             <Route path="/catalogos" element={<CatalogsScreen />} />
           </Routes>
         </main>
@@ -926,6 +1005,114 @@ function CatalogsScreen() {
   )
 }
 
+function ExpenseLedgerScreen() {
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const [category, setCategory] = useState<ExpenseCategory | ''>('')
+  const [modal, setModal] = useState<'expense' | 'withdrawal' | 'advance' | null>(null)
+  const data = usePhaseData()
+
+  const expenses = useQuery({
+    queryKey: ['expenses', from, to, category],
+    queryFn: () => api<Expense[]>(`/api/v1/expenses?from=${from}&to=${to}${category ? `&category=${category}` : ''}`),
+  })
+  const withdrawals = useQuery({
+    queryKey: ['withdrawals', from, to],
+    queryFn: () => api<Withdrawal[]>(`/api/v1/withdrawals?from=${from}&to=${to}`),
+  })
+  const advances = useQuery({
+    queryKey: ['employee-advances', from, to],
+    queryFn: () => api<EmployeeAdvance[]>(`/api/v1/employee-advances?from=${from}&to=${to}`),
+  })
+
+  const totals = {
+    expenses: (expenses.data ?? []).reduce((sum, row) => sum + row.amount, 0),
+    withdrawals: (withdrawals.data ?? []).reduce((sum, row) => sum + row.amount, 0),
+    advances: (advances.data ?? []).reduce((sum, row) => sum + row.amount, 0),
+  }
+  const combinedTotal = totals.expenses + totals.withdrawals + totals.advances
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">Gastos</h2>
+          <p className="text-sm text-slate-600">Registro de gastos, retiros y prestamos a lavadores.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={() => setModal('expense')}>Nuevo gasto</button>
+          <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
+          <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setModal('advance')}>Nuevo prestamo</button>
+        </div>
+      </div>
+
+      <Panel title="Filtros">
+        <div className="grid gap-3 md:grid-cols-[180px_180px_220px]">
+          <TextField label="Desde">
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          </TextField>
+          <TextField label="Hasta">
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          </TextField>
+          <SelectField label="Categoria">
+            <select value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory | '')}>
+              <option value="">Todas</option>
+              {expenseCategories.map((item) => (
+                <option key={item} value={item}>{categoryLabel(item)}</option>
+              ))}
+            </select>
+          </SelectField>
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric label="Gastos" value={money(totals.expenses, 'MXN')} />
+        <Metric label="Retiros" value={money(totals.withdrawals, 'MXN')} />
+        <Metric label="Prestamos" value={money(totals.advances, 'MXN')} />
+        <Metric label="Total salida" value={money(combinedTotal, 'MXN')} />
+      </div>
+
+      <MoneyTable
+        title="Gastos"
+        rows={(expenses.data ?? []).map((row) => ({
+          id: row.id,
+          date: row.expenseDate,
+          concept: categoryLabel(row.category),
+          detail: row.description || '-',
+          amount: row.amount,
+        }))}
+        empty="No hay gastos en este rango."
+      />
+      <MoneyTable
+        title="Retiros"
+        rows={(withdrawals.data ?? []).map((row) => ({
+          id: row.id,
+          date: row.withdrawalDate,
+          concept: 'Retiro',
+          detail: row.reason || '-',
+          amount: row.amount,
+        }))}
+        empty="No hay retiros en este rango."
+      />
+      <MoneyTable
+        title="Prestamos a lavadores"
+        rows={(advances.data ?? []).map((row) => ({
+          id: row.id,
+          date: row.advanceDate,
+          concept: row.employeeName,
+          detail: row.reason || '-',
+          amount: row.amount,
+        }))}
+        empty="No hay prestamos en este rango."
+      />
+
+      {modal === 'expense' && <ExpenseModal data={data} onClose={() => setModal(null)} />}
+      {modal === 'withdrawal' && <WithdrawalModal data={data} onClose={() => setModal(null)} />}
+      {modal === 'advance' && <AdvanceModal data={data} onClose={() => setModal(null)} />}
+    </section>
+  )
+}
+
 function TicketsBrowser() {
   const queryClient = useQueryClient()
   const data = usePhaseData()
@@ -1062,6 +1249,152 @@ function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: ()
   )
 }
 
+function ExpenseModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const openShift = (data.shifts.data ?? []).find((shift) => shift.status === 'OPEN')
+  const form = useForm<ExpenseFormValues>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: { expenseDate: today, category: 'MATERIAL', amount: 0, description: '' },
+  })
+  const mutation = useMutation({
+    mutationFn: (values: ExpenseFormValues) => api<Expense>('/api/v1/expenses', {
+      method: 'POST',
+      body: JSON.stringify({
+        businessDayId: data.currentBusinessDay?.id,
+        shiftId: openShift?.id,
+        expenseDate: values.expenseDate,
+        category: values.category,
+        amount: Number(values.amount),
+        description: values.description || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateMoney(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <Modal title="Nuevo gasto" onClose={onClose} narrow>
+      <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+        <TextField label="Fecha" error={form.formState.errors.expenseDate?.message}>
+          <input type="date" {...form.register('expenseDate')} />
+        </TextField>
+        <SelectField label="Categoria" error={form.formState.errors.category?.message}>
+          <select {...form.register('category')}>
+            {expenseCategories.map((item) => (
+              <option key={item} value={item}>{categoryLabel(item)}</option>
+            ))}
+          </select>
+        </SelectField>
+        <TextField label="Monto" error={form.formState.errors.amount?.message}>
+          <input type="number" min={0} step="0.01" {...form.register('amount')} />
+        </TextField>
+        <TextField label="Descripcion" error={form.formState.errors.description?.message}>
+          <textarea rows={3} placeholder="Ej. Material de limpieza" {...form.register('description')} />
+        </TextField>
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
+        <ModalActions onClose={onClose} submitLabel={mutation.isPending ? 'Guardando...' : 'Guardar gasto'} />
+      </form>
+    </Modal>
+  )
+}
+
+function WithdrawalModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const openShift = (data.shifts.data ?? []).find((shift) => shift.status === 'OPEN')
+  const form = useForm<WithdrawalFormValues>({
+    resolver: zodResolver(withdrawalSchema),
+    defaultValues: { withdrawalDate: today, amount: 0, reason: '' },
+  })
+  const mutation = useMutation({
+    mutationFn: (values: WithdrawalFormValues) => api<Withdrawal>('/api/v1/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify({
+        businessDayId: data.currentBusinessDay?.id,
+        shiftId: openShift?.id,
+        withdrawalDate: values.withdrawalDate,
+        amount: Number(values.amount),
+        reason: values.reason || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateMoney(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <Modal title="Nuevo retiro" onClose={onClose} narrow>
+      <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+        <TextField label="Fecha" error={form.formState.errors.withdrawalDate?.message}>
+          <input type="date" {...form.register('withdrawalDate')} />
+        </TextField>
+        <TextField label="Monto" error={form.formState.errors.amount?.message}>
+          <input type="number" min={0} step="0.01" {...form.register('amount')} />
+        </TextField>
+        <TextField label="Motivo" error={form.formState.errors.reason?.message}>
+          <textarea rows={3} placeholder="Ej. Retiro del dueno" {...form.register('reason')} />
+        </TextField>
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
+        <ModalActions onClose={onClose} submitLabel={mutation.isPending ? 'Guardando...' : 'Guardar retiro'} />
+      </form>
+    </Modal>
+  )
+}
+
+function AdvanceModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const openShift = (data.shifts.data ?? []).find((shift) => shift.status === 'OPEN')
+  const form = useForm<AdvanceFormValues>({
+    resolver: zodResolver(advanceSchema),
+    defaultValues: { advanceDate: today, employeeId: 0, amount: 0, reason: '' },
+  })
+  const mutation = useMutation({
+    mutationFn: (values: AdvanceFormValues) => api<EmployeeAdvance>('/api/v1/employee-advances', {
+      method: 'POST',
+      body: JSON.stringify({
+        businessDayId: data.currentBusinessDay?.id,
+        shiftId: openShift?.id,
+        employeeId: Number(values.employeeId),
+        advanceDate: values.advanceDate,
+        amount: Number(values.amount),
+        reason: values.reason || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateMoney(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <Modal title="Nuevo prestamo" onClose={onClose} narrow>
+      <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+        <TextField label="Fecha" error={form.formState.errors.advanceDate?.message}>
+          <input type="date" {...form.register('advanceDate')} />
+        </TextField>
+        <SelectField label="Lavador" error={form.formState.errors.employeeId?.message}>
+          <select {...form.register('employeeId')}>
+            <option value={0}>Selecciona lavador</option>
+            {(data.employees.data ?? []).map((employee) => (
+              <option key={employee.id} value={employee.id}>{employee.fullName}</option>
+            ))}
+          </select>
+        </SelectField>
+        <TextField label="Monto" error={form.formState.errors.amount?.message}>
+          <input type="number" min={0} step="0.01" {...form.register('amount')} />
+        </TextField>
+        <TextField label="Motivo" error={form.formState.errors.reason?.message}>
+          <textarea rows={3} placeholder="Ej. Adelanto semanal" {...form.register('reason')} />
+        </TextField>
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
+        <ModalActions onClose={onClose} submitLabel={mutation.isPending ? 'Guardando...' : 'Guardar prestamo'} />
+      </form>
+    </Modal>
+  )
+}
+
 function FormButton({ label, loading }: { label: string; loading: boolean }) {
   return (
     <div className="flex items-end">
@@ -1078,6 +1411,83 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
 
 function ErrorMessage({ message }: { message: string }) {
   return <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{message}</p>
+}
+
+function MoneyTable({
+  title,
+  rows,
+  empty,
+}: {
+  title: string
+  rows: { id: number; date: string; concept: string; detail: string; amount: number }[]
+  empty: string
+}) {
+  return (
+    <Panel title={title}>
+      <div className="overflow-hidden rounded-md border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3">Concepto</th>
+              <th className="px-4 py-3">Detalle</th>
+              <th className="px-4 py-3 text-right">Monto</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((row) => (
+              <tr key={row.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3">{row.date}</td>
+                <td className="px-4 py-3 font-semibold">{row.concept}</td>
+                <td className="px-4 py-3">{row.detail}</td>
+                <td className="px-4 py-3 text-right">{money(row.amount, 'MXN')}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">{empty}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  )
+}
+
+function ModalActions({ onClose, submitLabel }: { onClose: () => void; submitLabel: string }) {
+  return (
+    <div className="flex justify-end gap-2">
+      <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold" onClick={onClose}>Volver</button>
+      <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+        {submitLabel}
+      </button>
+    </div>
+  )
+}
+
+function categoryLabel(category: ExpenseCategory) {
+  const labels: Record<ExpenseCategory, string> = {
+    CFE: 'CFE',
+    TELMEX: 'TELMEX',
+    BASURA: 'Basura',
+    NOMINA: 'Nomina',
+    MATERIAL: 'Material',
+    GARRAFON_DE_AGUA: 'Garrafon de agua',
+    TAXI: 'Taxi',
+    COMISION_DEPOSITO: 'Comision deposito',
+    OTHER: 'Otro',
+  }
+  return labels[category]
+}
+
+async function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+    queryClient.invalidateQueries({ queryKey: ['withdrawals'] }),
+    queryClient.invalidateQueries({ queryKey: ['employee-advances'] }),
+    queryClient.invalidateQueries({ queryKey: ['daily-summary'] }),
+  ])
 }
 
 function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail: string }[]; empty: string }) {
