@@ -16,3 +16,15 @@ management:
 
 server:
   port: 8080
+
+lavadero:
+  auth:
+    enabled: true
+    jwt-secret: ${LAVADERO_JWT_SECRET:dev-only-change-this-secret-32-bytes-minimum}
+    access-token-minutes: 30
+    refresh-token-days: 14
+    bootstrap-owner:
+      enabled: true
+      username: ${LAVADERO_BOOTSTRAP_USERNAME:dueno}
+      password: ${LAVADERO_BOOTSTRAP_PASSWORD:cambia-esto-123}
+      full-name: ${LAVADERO_BOOTSTRAP_FULL_NAME:Dueno Lavadero}

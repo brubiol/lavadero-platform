@@ -15,4 +15,8 @@ public interface ShiftCloseSummaryRepository extends JpaRepository<ShiftCloseSum
 
     @EntityGraph(attributePaths = {"shift", "shift.businessDay", "cashCount"})
     List<ShiftCloseSummary> findByShiftBusinessDayBusinessDate(LocalDate businessDate);
+
+    @EntityGraph(attributePaths = {"shift", "shift.businessDay", "cashCount"})
+    List<ShiftCloseSummary> findByShiftBusinessDayBusinessDateBetweenOrderByShiftBusinessDayBusinessDateAsc(
+            LocalDate from, LocalDate to);
 }

@@ -9,4 +9,7 @@ public interface PayrollPeriodRepository extends JpaRepository<PayrollPeriod, Lo
     List<PayrollPeriod> findAllByOrderByStartDateDesc();
 
     List<PayrollPeriod> findByStatusOrderByStartDateDesc(PayrollPeriodStatus status);
+
+    List<PayrollPeriod> findByStartDateLessThanEqualAndEndDateGreaterThanEqualOrderByStartDateAsc(
+            java.time.LocalDate to, java.time.LocalDate from);
 }

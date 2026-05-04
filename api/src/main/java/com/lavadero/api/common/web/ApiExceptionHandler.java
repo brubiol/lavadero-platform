@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -20,6 +21,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     Map<String, String> badRequest(IllegalArgumentException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    Map<String, String> unauthorized(BadCredentialsException ex) {
         return Map.of("error", ex.getMessage());
     }
 

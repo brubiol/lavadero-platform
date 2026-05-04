@@ -1,12 +1,27 @@
-import { useMemo, useState } from 'react'
+import { createContext, useContext, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { useForm, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
 type Currency = 'MXN' | 'USD'
 type TicketStatus = 'ACTIVE' | 'VOIDED'
+type AuthRole = 'OPERADOR' | 'GERENTE' | 'DUENO'
+
+type AuthUser = {
+  id: number
+  username: string
+  fullName: string
+  role: AuthRole
+}
+
+type AuthPayload = {
+  accessToken: string
+  refreshToken: string
+  expiresInSeconds: number
+  user: AuthUser
+}
 
 type Employee = {
   id: number
@@ -207,6 +222,109 @@ type DebtBalance = {
   balance: number
 }
 
+type MovementType = 'SALE' | 'FIADO' | 'PURCHASE' | 'ADJUSTMENT' | 'OPENING_COUNT' | 'CLOSING_COUNT'
+
+type Product = {
+  id: number
+  name: string
+  sku: string
+  currentUnitPrice: number
+  trackInventory: boolean
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+type ProductMovement = {
+  id: number
+  productId: number
+  productName: string
+  movementType: MovementType
+  movementDate: string
+  quantity: number
+  unitPrice: number
+  totalAmount: number
+  reason?: string | null
+}
+
+type ProductSnapshot = {
+  product: Product
+  quantityOnHand: number
+  recentMovements: ProductMovement[]
+}
+
+type InventorySnapshot = {
+  asOf: string
+  products: ProductSnapshot[]
+}
+
+type DailySummaryRange = {
+  from: string
+  to: string
+  carsWashed: number
+  ticketRevenue: number
+  expensesTotal: number
+  withdrawalsTotal: number
+  advancesTotal: number
+  result: number
+  courtesyCount: number
+  voidedCount: number
+  cashVariance?: number | null
+  days: DailySummary[]
+}
+
+type MonthlySummary = DailySummaryRange & {
+  year: number
+  month: number
+}
+
+type CashVarianceRow = {
+  date: string
+  shiftId: number
+  shiftType: string
+  expectedCash: number
+  totalCounted: number
+  variance: number
+  closingReason?: string | null
+}
+
+type CashVarianceReport = {
+  from: string
+  to: string
+  expectedCash: number
+  totalCounted: number
+  variance: number
+  rows: CashVarianceRow[]
+}
+
+type EmployeePerformanceRow = {
+  employeeId: number
+  employeeName: string
+  carsWashed: number
+  ticketRevenue: number
+  ticketCount: number
+}
+
+type EmployeePerformanceReport = {
+  from: string
+  to: string
+  employees: EmployeePerformanceRow[]
+}
+
+type ExportPreview = {
+  type: string
+  from: string
+  to: string
+  ticketCount: number
+  ticketRevenue: number
+  expensesTotal: number
+  withdrawalsTotal: number
+  advancesTotal: number
+  shiftCloseCount: number
+  inventoryMovementCount: number
+  payrollPeriodCount: number
+}
+
 const expenseCategories: ExpenseCategory[] = [
   'CFE',
   'TELMEX',
@@ -357,16 +475,98 @@ const payrollPeriodSchema = z.object({
 
 type PayrollPeriodFormValues = z.infer<typeof payrollPeriodSchema>
 
+const productSchema = z.object({
+  name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
+  sku: z.string().max(60, 'Maximo 60 caracteres').optional(),
+  currentUnitPrice: z.coerce.number().min(0, 'Minimo 0'),
+  trackInventory: z.boolean().default(true),
+  active: z.boolean().default(true),
+})
+
+type ProductFormValues = z.infer<typeof productSchema>
+
+const inventorySaleSchema = z.object({
+  productId: z.coerce.number().positive('Selecciona producto'),
+  quantity: z.coerce.number().positive('Cantidad mayor que 0'),
+  unitPrice: z.coerce.number().min(0, 'Minimo 0').optional(),
+  movementDate: z.string().optional(),
+  fiado: z.boolean().default(false),
+})
+
+type InventorySaleFormValues = z.infer<typeof inventorySaleSchema>
+
+const inventoryPurchaseSchema = z.object({
+  productId: z.coerce.number().positive('Selecciona producto'),
+  quantity: z.coerce.number().positive('Cantidad mayor que 0'),
+  unitPrice: z.coerce.number().min(0, 'Minimo 0').optional(),
+  movementDate: z.string().optional(),
+})
+
+type InventoryPurchaseFormValues = z.infer<typeof inventoryPurchaseSchema>
+
+const inventoryAdjustmentSchema = z.object({
+  productId: z.coerce.number().positive('Selecciona producto'),
+  quantity: z.coerce.number().refine((value) => value !== 0, 'Cantidad no puede ser 0'),
+  reason: z.string().min(1, 'El ajuste requiere motivo').max(500, 'Maximo 500 caracteres'),
+  movementDate: z.string().optional(),
+})
+
+type InventoryAdjustmentFormValues = z.infer<typeof inventoryAdjustmentSchema>
+
 const today = new Date().toISOString().slice(0, 10)
 
+const authStorageKey = 'lavadero.auth'
+
+function readStoredAuth(): AuthPayload | null {
+  const raw = window.localStorage.getItem(authStorageKey)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AuthPayload
+  } catch {
+    window.localStorage.removeItem(authStorageKey)
+    return null
+  }
+}
+
+function writeStoredAuth(payload: AuthPayload | null) {
+  if (payload) {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(payload))
+  } else {
+    window.localStorage.removeItem(authStorageKey)
+  }
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const auth = readStoredAuth()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(auth?.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {}),
+    ...(init?.headers ?? {}),
+  }
+  let response = await fetch(path, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
   })
+  if (response.status === 401 && auth?.refreshToken && !path.includes('/api/v1/auth/refresh')) {
+    const refreshed = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: auth.refreshToken }),
+    })
+    if (refreshed.ok) {
+      const nextAuth = await refreshed.json() as AuthPayload
+      writeStoredAuth(nextAuth)
+      response = await fetch(path, {
+        ...init,
+        headers: {
+          ...headers,
+          Authorization: `Bearer ${nextAuth.accessToken}`,
+        },
+      })
+    } else {
+      writeStoredAuth(null)
+    }
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
     throw new Error(body.error || `Error ${response.status}`)
@@ -381,30 +581,98 @@ function money(value: number, currency: Currency) {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(value)
 }
 
-function AppShell() {
+type AuthContextValue = {
+  auth: AuthPayload | null
+  login: (username: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  hasRole: (role: AuthRole) => boolean
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [auth, setAuth] = useState<AuthPayload | null>(() => readStoredAuth())
+
+  const login = async (username: string, password: string) => {
+    const payload = await api<AuthPayload>('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    })
+    writeStoredAuth(payload)
+    setAuth(payload)
+  }
+
+  const logout = async () => {
+    const current = readStoredAuth()
+    if (current?.refreshToken) {
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${current.accessToken}`,
+        },
+        body: JSON.stringify({ refreshToken: current.refreshToken }),
+      }).catch(() => undefined)
+    }
+    writeStoredAuth(null)
+    setAuth(null)
+  }
+
+  const hasRole = (role: AuthRole) => {
+    if (!auth) return false
+    const rank: Record<AuthRole, number> = { OPERADOR: 1, GERENTE: 2, DUENO: 3 }
+    return rank[auth.user.role] >= rank[role]
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-950">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-slate-200 bg-white px-4 py-5 lg:block">
-        <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Lavadero</p>
-          <h1 className="text-xl font-bold">Operacion diaria</h1>
+    <AuthContext.Provider value={{ auth, login, logout, hasRole }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) throw new Error('AuthProvider is missing')
+  return context
+}
+
+function AppShell() {
+  const { auth, logout, hasRole } = useAuth()
+  if (!auth) {
+    return <LoginScreen />
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 bg-zinc-950 px-4 py-6 lg:block">
+        <div className="mb-8 px-2">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-sm font-black text-white shadow-sm shadow-sky-500/40">
+              L
+            </div>
+            <span className="text-sm font-bold tracking-wide text-white">Lavadero</span>
+          </div>
+          <p className="mt-2.5 text-xs text-zinc-500">Operacion diaria</p>
         </div>
-        <nav className="space-y-1">
+        <nav className="space-y-0.5">
           <SideLink to="/" label="Dashboard" />
           <SideLink to="/tickets/nuevo" label="Nuevo ticket" />
           <SideLink to="/tickets" label="Tickets" />
           <SideLink to="/gastos" label="Gastos" />
           <SideLink to="/corte" label="Corte" />
-          <SideLink to="/nomina" label="Nomina" />
-          <SideLink to="/catalogos" label="Catalogos" />
+          {hasRole('GERENTE') && <SideLink to="/nomina" label="Nomina" />}
+          {hasRole('GERENTE') && <SideLink to="/inventario" label="Inventario" />}
+          {hasRole('DUENO') && <SideLink to="/reportes" label="Reportes" />}
+          {hasRole('GERENTE') && <SideLink to="/catalogos" label="Catalogos" />}
         </nav>
       </aside>
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:px-8">
+        <header className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phase 4 MVP</p>
-              <p className="text-lg font-semibold">Tickets y lavadores</p>
+              <p className="text-sm font-semibold text-gray-900">{auth.user.fullName}</p>
+              <p className="text-xs text-gray-400">{roleLabel(auth.user.role)}</p>
             </div>
             <nav className="flex gap-2 lg:hidden">
               <MobileLink to="/" label="Inicio" />
@@ -412,9 +680,17 @@ function AppShell() {
               <MobileLink to="/tickets" label="Tickets" />
               <MobileLink to="/gastos" label="Gastos" />
               <MobileLink to="/corte" label="Corte" />
-              <MobileLink to="/nomina" label="Nomina" />
-              <MobileLink to="/catalogos" label="Datos" />
+              {hasRole('GERENTE') && <MobileLink to="/nomina" label="Nomina" />}
+              {hasRole('GERENTE') && <MobileLink to="/inventario" label="Inv" />}
+              {hasRole('DUENO') && <MobileLink to="/reportes" label="Rep" />}
+              {hasRole('GERENTE') && <MobileLink to="/catalogos" label="Datos" />}
             </nav>
+            <button
+              onClick={() => void logout()}
+              className="hidden rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 lg:block"
+            >
+              Salir
+            </button>
           </div>
         </header>
         <main className="px-4 py-6 lg:px-8">
@@ -424,8 +700,10 @@ function AppShell() {
             <Route path="/tickets" element={<TicketsBrowser />} />
             <Route path="/gastos" element={<ExpenseLedgerScreen />} />
             <Route path="/corte" element={<ShiftCloseScreen />} />
-            <Route path="/nomina" element={<PayrollScreen />} />
-            <Route path="/catalogos" element={<CatalogsScreen />} />
+            <Route path="/nomina" element={<RequireRole role="GERENTE"><PayrollScreen /></RequireRole>} />
+            <Route path="/inventario" element={<RequireRole role="GERENTE"><InventoryScreen /></RequireRole>} />
+            <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
+            <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
           </Routes>
         </main>
       </div>
@@ -438,8 +716,10 @@ function SideLink({ to, label }: { to: string; label: string }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `block rounded-md px-3 py-2 text-sm font-medium ${
-          isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100'
+        `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          isActive
+            ? 'bg-sky-500/15 text-sky-400'
+            : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-white'
         }`
       }
     >
@@ -453,13 +733,228 @@ function MobileLink({ to, label }: { to: string; label: string }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `rounded-md px-3 py-2 text-sm font-medium ${
-          isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+        `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          isActive ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
         }`
       }
     >
       {label}
     </NavLink>
+  )
+}
+
+function LoginScreen() {
+  const { login } = useAuth()
+  const [username, setUsername] = useState('dueno')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await login(username, password)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesion')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800 px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500 text-2xl font-black text-white shadow-lg shadow-sky-500/30">
+            L
+          </div>
+          <h1 className="text-2xl font-bold text-white">Lavadero</h1>
+          <p className="mt-1 text-sm text-zinc-400">Sistema de operacion diaria</p>
+        </div>
+        <form className="rounded-2xl bg-white p-8 shadow-2xl" onSubmit={submit}>
+          <div className="space-y-4">
+            <TextField label="Usuario">
+              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+            </TextField>
+            <TextField label="Contrasena">
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </TextField>
+            {error && <ErrorMessage message={error} />}
+            <button
+              disabled={loading}
+              className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
+            >
+              {loading ? 'Entrando...' : 'Iniciar sesion'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </main>
+  )
+}
+
+function roleLabel(role: AuthRole) {
+  const labels: Record<AuthRole, string> = {
+    OPERADOR: 'Operador',
+    GERENTE: 'Gerente',
+    DUENO: 'Dueno',
+  }
+  return labels[role]
+}
+
+function RequireRole({ role, children }: { role: AuthRole; children: ReactNode }) {
+  const { hasRole } = useAuth()
+  if (!hasRole(role)) {
+    return (
+      <Panel title="Sin permiso">
+        <p className="text-sm text-gray-500">Tu usuario no tiene permiso para esta pantalla.</p>
+      </Panel>
+    )
+  }
+  return <>{children}</>
+}
+
+function DayStatusCard() {
+  const { hasRole } = useAuth()
+  const queryClient = useQueryClient()
+  const data = usePhaseData()
+  const [shiftType, setShiftType] = useState<'MATUTINO' | 'VESPERTINO'>('MATUTINO')
+  const [toast, setToast] = useState<string | null>(null)
+
+  const openShifts = (data.shifts.data ?? []).filter((s) => s.status === 'OPEN')
+  const allShifts = data.shifts.data ?? []
+  const day = data.currentBusinessDay
+
+  const openDayMutation = useMutation({
+    mutationFn: () => api<BusinessDay>('/api/v1/business-days/open', {
+      method: 'POST',
+      body: JSON.stringify({ businessDate: today }),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['business-days'] })
+      await queryClient.invalidateQueries({ queryKey: ['daily-summary'] })
+      setToast('Dia abierto')
+      setTimeout(() => setToast(null), 2000)
+    },
+  })
+
+  const openShiftMutation = useMutation({
+    mutationFn: (type: 'MATUTINO' | 'VESPERTINO') => api<Shift>('/api/v1/shifts/open', {
+      method: 'POST',
+      body: JSON.stringify({ businessDayId: day?.id, shiftType: type }),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['shifts'] })
+      await queryClient.invalidateQueries({ queryKey: ['daily-summary'] })
+      setToast('Turno abierto')
+      setTimeout(() => setToast(null), 2000)
+    },
+  })
+
+  const canAct = hasRole('GERENTE')
+
+  if (!day) {
+    return (
+      <>
+        {toast && <Toast message={toast} />}
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <div>
+            <p className="font-semibold text-amber-900">Sin dia de trabajo abierto</p>
+            <p className="text-sm text-amber-700">Hoy es {today}. Abre el dia para poder capturar tickets.</p>
+          </div>
+          {canAct && (
+            <button
+              onClick={() => openDayMutation.mutate()}
+              disabled={openDayMutation.isPending}
+              className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:bg-amber-300"
+            >
+              {openDayMutation.isPending ? 'Abriendo...' : 'Abrir dia de hoy'}
+            </button>
+          )}
+          {openDayMutation.error && <p className="text-sm text-red-700">{openDayMutation.error.message}</p>}
+        </div>
+      </>
+    )
+  }
+
+  if (openShifts.length === 0) {
+    const matiExists = allShifts.some((s) => s.shiftType === 'MATUTINO')
+    const vespeExists = allShifts.some((s) => s.shiftType === 'VESPERTINO')
+    return (
+      <>
+        {toast && <Toast message={toast} />}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-sky-200 bg-sky-50 px-5 py-4">
+          <div>
+            <p className="font-semibold text-sky-900">Dia abierto — sin turno activo</p>
+            <p className="text-sm text-sky-700">
+              {allShifts.length === 0
+                ? 'Abre el turno para empezar a capturar tickets.'
+                : 'Todos los turnos de hoy estan cerrados.'}
+            </p>
+          </div>
+          {canAct && (
+            <div className="flex gap-2">
+              {!matiExists && (
+                <button
+                  onClick={() => openShiftMutation.mutate('MATUTINO')}
+                  disabled={openShiftMutation.isPending}
+                  className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:bg-sky-300"
+                >
+                  {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Matutino'}
+                </button>
+              )}
+              {!vespeExists && (
+                <button
+                  onClick={() => openShiftMutation.mutate('VESPERTINO')}
+                  disabled={openShiftMutation.isPending}
+                  className="rounded-lg border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition-colors hover:bg-sky-50"
+                >
+                  {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Vespertino'}
+                </button>
+              )}
+            </div>
+          )}
+          {openShiftMutation.error && <p className="w-full text-sm text-red-700">{openShiftMutation.error.message}</p>}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      {toast && <Toast message={toast} />}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+        <div>
+          <p className="font-semibold text-emerald-900">En operacion — {today}</p>
+          <p className="text-sm text-emerald-700">
+            {openShifts.map((s) => s.shiftType === 'MATUTINO' ? 'Turno Matutino' : 'Turno Vespertino').join(' + ')} activo
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {openShifts.map((s) => (
+            <span key={s.id} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+              {s.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'} activo
+            </span>
+          ))}
+          {canAct && !allShifts.some((s) => s.shiftType === 'VESPERTINO') && (
+            <button
+              onClick={() => openShiftMutation.mutate('VESPERTINO')}
+              disabled={openShiftMutation.isPending}
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+            >
+              + Turno Vespertino
+            </button>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -477,30 +972,32 @@ function Dashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Dashboard</h2>
-          <p className="text-sm text-slate-600">Resumen diario de ventas, carros y tickets recientes.</p>
+          <p className="text-sm text-gray-500">Resumen del dia — ventas, carros, estado del turno.</p>
         </div>
         <label className="w-full max-w-48">
-          <span className="mb-1 block text-sm font-medium text-slate-700">Fecha</span>
+          <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
         </label>
       </div>
 
+      <DayStatusCard />
+
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
       <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} />
-        <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} />
-        <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} />
-        <Metric label="Carros lavados" value={String(data?.carsWashed ?? '...')} />
+        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="success" />
+        <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} variant="danger" />
+        <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} variant="info" />
+        <Metric label="Carros lavados" value={String(data?.carsWashed ?? '...')} variant="info" />
         <Metric label="Cortesias" value={String(data?.courtesyCount ?? '...')} />
-        <Metric label="Tickets anulados" value={String(data?.voidedCount ?? '...')} />
+        <Metric label="Anulados" value={String(data?.voidedCount ?? '...')} />
         <Metric label="Sobrante/Faltante" value={data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN')} />
       </div>
 
       <Panel title="Tickets recientes">
-        <div className="overflow-hidden rounded-md border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
               <tr>
                 <th className="px-4 py-3">Nota</th>
                 <th className="px-4 py-3">Vehiculo</th>
@@ -510,9 +1007,9 @@ function Dashboard() {
                 <th className="px-4 py-3">Estado</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-gray-100">
               {(data?.recentTickets ?? []).map((ticket) => (
-                <tr key={ticket.id} className="hover:bg-slate-50">
+                <tr key={ticket.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-semibold">{ticket.notaNumber}</td>
                   <td className="px-4 py-3">{ticket.vehicleDescription || '-'}</td>
                   <td className="px-4 py-3">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
@@ -525,7 +1022,7 @@ function Dashboard() {
               ))}
               {!summary.isLoading && (data?.recentTickets.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
                     No hay tickets para esta fecha. Crea tickets desde Nuevo ticket para ver el resumen.
                   </td>
                 </tr>
@@ -538,11 +1035,31 @@ function Dashboard() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+type MetricVariant = 'default' | 'success' | 'danger' | 'info'
+
+function Metric({ label, value, variant = 'default' }: { label: string; value: string; variant?: MetricVariant }) {
+  const bg: Record<MetricVariant, string> = {
+    default: 'bg-white border border-gray-100',
+    success: 'bg-emerald-50 border border-emerald-100',
+    danger:  'bg-red-50 border border-red-100',
+    info:    'bg-sky-50 border border-sky-100',
+  }
+  const text: Record<MetricVariant, string> = {
+    default: 'text-gray-900',
+    success: 'text-emerald-700',
+    danger:  'text-red-700',
+    info:    'text-sky-700',
+  }
+  const label_: Record<MetricVariant, string> = {
+    default: 'text-gray-500',
+    success: 'text-emerald-600',
+    danger:  'text-red-500',
+    info:    'text-sky-600',
+  }
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-5">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
+    <div className={`rounded-xl p-5 shadow-sm ${bg[variant]}`}>
+      <p className={`text-xs font-medium uppercase tracking-wide ${label_[variant]}`}>{label}</p>
+      <p className={`mt-2 text-2xl font-bold ${text[variant]}`}>{value}</p>
     </div>
   )
 }
@@ -682,16 +1199,16 @@ function TicketWorkspace({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">{mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}</h2>
-          <p className="text-sm text-slate-600">Captura rapida para operacion de mostrador.</p>
+          <p className="text-sm text-gray-500">Captura rapida para operacion de mostrador.</p>
         </div>
-        <div className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm">
-          <span className="text-slate-500">Dia: </span>
+        <div className="rounded-lg border border-gray-100 bg-white px-4 py-2 text-sm">
+          <span className="text-gray-400">Dia: </span>
           <strong>{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</strong>
         </div>
       </div>
 
       {disabledReason && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           {disabledReason} Abre el dia y el turno desde Catalogos antes de capturar tickets.
         </div>
       )}
@@ -704,7 +1221,7 @@ function TicketWorkspace({
                 <select {...form.register('shiftId')} disabled={Boolean(disabledReason)}>
                   <option value={0}>Selecciona turno</option>
                   {openShifts.map((shift) => (
-                    <option key={shift.id} value={shift.id}>{shift.shiftType}</option>
+                    <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}</option>
                   ))}
                 </select>
               </SelectField>
@@ -742,12 +1259,12 @@ function TicketWorkspace({
           <Panel title="Lavadores">
             <div className="grid gap-2 md:grid-cols-2">
               {(data.employees.data ?? []).map((employee) => (
-                <label key={employee.id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                <label key={employee.id} className="flex items-center gap-3 rounded-md border border-gray-100 bg-white px-3 py-2 text-sm">
                   <input
                     type="checkbox"
                     value={employee.id}
                     {...form.register('employeeIds')}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                    className="h-4 w-4 rounded border-gray-200 text-sky-600"
                   />
                   <span>{employee.fullName}</span>
                 </label>
@@ -758,7 +1275,7 @@ function TicketWorkspace({
 
           <Panel title="Cortesia">
             <label className="flex items-center gap-3 text-sm font-medium">
-              <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
+              <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
               Marcar como cortesia
             </label>
             {watched.courtesy && (
@@ -776,11 +1293,11 @@ function TicketWorkspace({
               <SummaryRow label="Lavadores" value={String(watched.employeeIds?.length ?? 0)} />
               <SummaryRow label="Tipo" value={watched.courtesy ? 'Cortesia' : 'Venta'} />
             </div>
-            {save.error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{save.error.message}</p>}
+            {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
             <button
               type="submit"
               disabled={save.isPending || Boolean(disabledReason)}
-              className="mt-5 w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="mt-5 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
             >
               {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
             </button>
@@ -925,9 +1442,9 @@ function CatalogsScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Catalogos</h2>
-          <p className="text-sm text-slate-600">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
+          <p className="text-sm text-gray-500">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
         </div>
-        <NavLink to="/tickets/nuevo" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+        <NavLink to="/tickets/nuevo" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">
           Ir a nuevo ticket
         </NavLink>
       </div>
@@ -1043,9 +1560,9 @@ function CatalogsScreen() {
               </div>
             </form>
             {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
-            <div className="overflow-hidden rounded-md border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
                   <tr>
                     <th className="px-4 py-3">Servicio</th>
                     <th className="px-4 py-3">Tamano</th>
@@ -1053,7 +1570,7 @@ function CatalogsScreen() {
                     <th className="px-4 py-3">Desde</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-gray-100">
                   {prices.map((price) => (
                     <tr key={price.id}>
                       <td className="px-4 py-3">{price.serviceTypeName}</td>
@@ -1064,7 +1581,7 @@ function CatalogsScreen() {
                   ))}
                   {prices.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">No hay precios vigentes para hoy.</td>
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400">No hay precios vigentes para hoy.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1082,14 +1599,14 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openBusinessDay.isPending}
-                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {openBusinessDay.isPending ? 'Abriendo...' : 'Abrir dia'}
               </button>
             </form>
             {openBusinessDay.error && <ErrorMessage message={openBusinessDay.error.message} />}
-            <div className="rounded-md bg-slate-50 p-3 text-sm">
-              <p className="text-slate-500">Dia abierto</p>
+            <div className="rounded-md bg-gray-50 p-3 text-sm">
+              <p className="text-gray-400">Dia abierto</p>
               <p className="font-semibold">{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</p>
             </div>
           </Panel>
@@ -1098,14 +1615,14 @@ function CatalogsScreen() {
             <form className="space-y-4" onSubmit={operationsForm.handleSubmit((values) => openShift.mutate(values))}>
               <SelectField label="Tipo de turno" error={operationsForm.formState.errors.shiftType?.message}>
                 <select {...operationsForm.register('shiftType')}>
-                  <option value="MATUTINO">MATUTINO</option>
-                  <option value="VESPERTINO">VESPERTINO</option>
+                  <option value="MATUTINO">Matutino (manana)</option>
+                  <option value="VESPERTINO">Vespertino (tarde)</option>
                 </select>
               </SelectField>
               <button
                 type="submit"
                 disabled={openShift.isPending || !data.currentBusinessDay}
-                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {openShift.isPending ? 'Abriendo...' : 'Abrir turno'}
               </button>
@@ -1115,8 +1632,8 @@ function CatalogsScreen() {
               empty="No hay turno abierto."
               rows={openShifts.map((shift) => ({
                 id: shift.id,
-                title: shift.shiftType,
-                detail: shift.status,
+                title: shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino',
+                detail: shift.status === 'OPEN' ? 'Abierto' : 'Cerrado',
               }))}
             />
           </Panel>
@@ -1158,12 +1675,12 @@ function ExpenseLedgerScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Gastos</h2>
-          <p className="text-sm text-slate-600">Registro de gastos, retiros y prestamos a lavadores.</p>
+          <p className="text-sm text-gray-500">Registro de gastos, retiros y prestamos a lavadores.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={() => setModal('expense')}>Nuevo gasto</button>
-          <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
-          <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setModal('advance')}>Nuevo prestamo</button>
+          <button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700" onClick={() => setModal('expense')}>Nuevo gasto</button>
+          <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
+          <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setModal('advance')}>Nuevo prestamo</button>
         </div>
       </div>
 
@@ -1321,7 +1838,7 @@ function ShiftCloseScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Corte de turno</h2>
-          <p className="text-sm text-slate-600">Conteo de efectivo, revision de salidas y cierre del turno.</p>
+          <p className="text-sm text-gray-500">Conteo de efectivo, revision de salidas y cierre del turno.</p>
         </div>
         <SelectField label="Turno">
           <select value={effectiveShiftId} onChange={(event) => {
@@ -1330,15 +1847,22 @@ function ShiftCloseScreen() {
           }}>
             <option value={0}>Selecciona turno</option>
             {shifts.map((shift) => (
-              <option key={shift.id} value={shift.id}>{shift.shiftType} / {shift.status}</option>
+              <option key={shift.id} value={shift.id}>
+                {shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'} — {shift.status === 'OPEN' ? 'Abierto' : 'Cerrado'}
+              </option>
             ))}
           </select>
         </SelectField>
       </div>
 
       {!data.currentBusinessDay && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          No hay dia abierto para hoy. Abre el dia desde Catalogos antes de hacer corte.
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No hay dia abierto para hoy. Ve al Dashboard y abre el dia antes de hacer corte.
+        </div>
+      )}
+      {data.currentBusinessDay && shifts.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No hay turnos para hoy. Ve al Dashboard y abre un turno.
         </div>
       )}
       {closeSummary.error && <ErrorMessage message={closeSummary.error.message} />}
@@ -1369,15 +1893,15 @@ function ShiftCloseScreen() {
               <TextField label="Morralla total">
                 <input type="number" min={0} step="0.01" {...cashForm.register('morrallaTotal')} />
               </TextField>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-slate-50 p-3 text-sm">
-                <span className="text-slate-600">Total contado preview</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3 text-sm">
+                <span className="text-gray-500">Total contado preview</span>
                 <strong className="text-lg">{money(localCountPreview, watchedCount.currency)}</strong>
               </div>
               {countMutation.error && <ErrorMessage message={countMutation.error.message} />}
               <button
                 type="submit"
                 disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
               </button>
@@ -1390,7 +1914,7 @@ function ShiftCloseScreen() {
               <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
               <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
             </div>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-gray-500">
               Formula v1: efectivo esperado = ingresos de tickets activos - gastos - retiros.
             </p>
           </Panel>
@@ -1402,12 +1926,12 @@ function ShiftCloseScreen() {
               <Metric label="Diferencia" value={variance == null ? 'Pendiente' : money(variance, 'MXN')} />
             </div>
             {isShort && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                 Hay faltante. El sistema exige motivo antes de cerrar el turno.
               </div>
             )}
             {variance != null && variance > 0 && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                 Hay sobrante. Puedes cerrar sin motivo obligatorio.
               </div>
             )}
@@ -1429,7 +1953,7 @@ function ShiftCloseScreen() {
               <button
                 type="submit"
                 disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
-                className="w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? 'Turno cerrado' : 'Cerrar turno'}
               </button>
@@ -1439,6 +1963,605 @@ function ShiftCloseScreen() {
       </div>
     </section>
   )
+}
+
+function ReportsScreen() {
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const [exportType, setExportType] = useState('full')
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
+  const daily = useQuery({
+    queryKey: ['reports-daily-range', from, to],
+    queryFn: () => api<DailySummaryRange>(`/api/v1/reports/daily-summary?from=${from}&to=${to}`),
+  })
+  const monthly = useQuery({
+    queryKey: ['reports-monthly', from],
+    queryFn: () => {
+      const [year, month] = from.split('-').map(Number)
+      return api<MonthlySummary>(`/api/v1/reports/monthly?year=${year}&month=${month}`)
+    },
+  })
+  const cashVariance = useQuery({
+    queryKey: ['reports-cash-variance', from, to],
+    queryFn: () => api<CashVarianceReport>(`/api/v1/reports/cash-variance?from=${from}&to=${to}`),
+  })
+  const performance = useQuery({
+    queryKey: ['reports-employee-performance', from, to],
+    queryFn: () => api<EmployeePerformanceReport>(`/api/v1/reports/employee-performance?from=${from}&to=${to}`),
+  })
+  const preview = useQuery({
+    queryKey: ['reports-export-preview', exportType, from, to],
+    queryFn: () => api<ExportPreview>(`/api/v1/reports/export/preview?type=${exportType}&from=${from}&to=${to}`),
+  })
+
+  const range = daily.data
+
+  const downloadExport = async () => {
+    setDownloadError(null)
+    try {
+      const auth = readStoredAuth()
+      const response = await fetch(`/api/v1/reports/export?type=${exportType}&from=${from}&to=${to}&format=xlsx`, {
+        headers: auth?.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {},
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.error || `Error ${response.status}`)
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `lavadero-${exportType}-${from}-${to}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'No se pudo descargar el Excel')
+    }
+  }
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">Reportes</h2>
+          <p className="text-sm text-gray-500">Resumen diario, mensual, corte de caja, lavadores y exportacion Excel.</p>
+        </div>
+      </div>
+
+      <Panel title="Rango">
+        <div className="grid gap-3 md:grid-cols-[180px_180px_220px_auto]">
+          <TextField label="Desde">
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          </TextField>
+          <TextField label="Hasta">
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          </TextField>
+          <SelectField label="Tipo exportacion">
+            <select value={exportType} onChange={(event) => setExportType(event.target.value)}>
+              <option value="full">Completo</option>
+              <option value="daily">Diario</option>
+              <option value="monthly">Mensual</option>
+            </select>
+          </SelectField>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={downloadExport}
+              className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+            >
+              Descargar Excel
+            </button>
+          </div>
+        </div>
+        {downloadError && <ErrorMessage message={downloadError} />}
+      </Panel>
+
+      {(daily.error || monthly.error || cashVariance.error || performance.error || preview.error) && (
+        <ErrorMessage message={(daily.error || monthly.error || cashVariance.error || performance.error || preview.error)!.message} />
+      )}
+
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <Metric label="Ingresos" value={range ? money(range.ticketRevenue, 'MXN') : '...'} />
+        <Metric label="Salidas" value={range ? money(range.expensesTotal, 'MXN') : '...'} />
+        <Metric label="Resultado" value={range ? money(range.result, 'MXN') : '...'} />
+        <Metric label="Carros" value={String(range?.carsWashed ?? '...')} />
+        <Metric label="Cortesias" value={String(range?.courtesyCount ?? '...')} />
+        <Metric label="Anulados" value={String(range?.voidedCount ?? '...')} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-5">
+          <Panel title="Resumen por dia">
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3 text-right">Carros</th>
+                    <th className="px-4 py-3 text-right">Ingresos</th>
+                    <th className="px-4 py-3 text-right">Gastos</th>
+                    <th className="px-4 py-3 text-right">Resultado</th>
+                    <th className="px-4 py-3 text-right">Varianza</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(range?.days ?? []).map((day) => (
+                    <tr key={day.date} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold">{day.date}</td>
+                      <td className="px-4 py-3 text-right">{day.carsWashed}</td>
+                      <td className="px-4 py-3 text-right">{money(day.ticketRevenue, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(day.expensesTotal, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(day.result, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{day.cashVariance == null ? '-' : money(day.cashVariance, 'MXN')}</td>
+                    </tr>
+                  ))}
+                  {!daily.isLoading && (range?.days.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">No hay datos en este rango.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          <Panel title="Rendimiento de lavadores">
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Lavador</th>
+                    <th className="px-4 py-3 text-right">Tickets</th>
+                    <th className="px-4 py-3 text-right">Carros acreditados</th>
+                    <th className="px-4 py-3 text-right">Ingreso referencia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(performance.data?.employees ?? []).map((employee) => (
+                    <tr key={employee.employeeId} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold">{employee.employeeName}</td>
+                      <td className="px-4 py-3 text-right">{employee.ticketCount}</td>
+                      <td className="px-4 py-3 text-right">{employee.carsWashed.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{money(employee.ticketRevenue, 'MXN')}</td>
+                    </tr>
+                  ))}
+                  {!performance.isLoading && (performance.data?.employees.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400">No hay lavadores con tickets en este rango.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          <Panel title="Varianza de caja">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Metric label="Esperado" value={cashVariance.data ? money(cashVariance.data.expectedCash, 'MXN') : '...'} />
+              <Metric label="Contado" value={cashVariance.data ? money(cashVariance.data.totalCounted, 'MXN') : '...'} />
+              <Metric label="Diferencia" value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : '...'} />
+            </div>
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3">Turno</th>
+                    <th className="px-4 py-3 text-right">Esperado</th>
+                    <th className="px-4 py-3 text-right">Contado</th>
+                    <th className="px-4 py-3 text-right">Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(cashVariance.data?.rows ?? []).map((row) => (
+                    <tr key={`${row.shiftId}-${row.date}`}>
+                      <td className="px-4 py-3">{row.date}</td>
+                      <td className="px-4 py-3">{row.shiftType}</td>
+                      <td className="px-4 py-3 text-right">{money(row.expectedCash, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(row.totalCounted, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(row.variance, 'MXN')}</td>
+                    </tr>
+                  ))}
+                  {!cashVariance.isLoading && (cashVariance.data?.rows.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-gray-400">No hay cortes cerrados en este rango.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+
+        <aside className="space-y-5">
+          <Panel title="Export preview">
+            <div className="space-y-3 text-sm">
+              <SummaryRow label="Tickets" value={String(preview.data?.ticketCount ?? '...')} />
+              <SummaryRow label="Ingresos" value={preview.data ? money(preview.data.ticketRevenue, 'MXN') : '...'} />
+              <SummaryRow label="Gastos" value={preview.data ? money(preview.data.expensesTotal, 'MXN') : '...'} />
+              <SummaryRow label="Retiros" value={preview.data ? money(preview.data.withdrawalsTotal, 'MXN') : '...'} />
+              <SummaryRow label="Prestamos" value={preview.data ? money(preview.data.advancesTotal, 'MXN') : '...'} />
+              <SummaryRow label="Cortes" value={String(preview.data?.shiftCloseCount ?? '...')} />
+              <SummaryRow label="Inventario" value={String(preview.data?.inventoryMovementCount ?? '...')} />
+              <SummaryRow label="Nomina" value={String(preview.data?.payrollPeriodCount ?? '...')} />
+            </div>
+          </Panel>
+
+          <Panel title="Resumen mensual">
+            <div className="space-y-3 text-sm">
+              <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : '...'} />
+              <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? '...')} />
+              <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : '...'} />
+              <SummaryRow label="Resultado" value={monthly.data ? money(monthly.data.result, 'MXN') : '...'} />
+            </div>
+          </Panel>
+        </aside>
+      </div>
+    </section>
+  )
+}
+
+function InventoryScreen() {
+  const [asOf, setAsOf] = useState('')
+  const [modal, setModal] = useState<'product' | 'sale' | 'purchase' | 'adjustment' | null>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+
+  const products = useQuery({
+    queryKey: ['products', 'active'],
+    queryFn: () => api<Product[]>('/api/v1/products?active=true'),
+  })
+  const snapshot = useQuery({
+    queryKey: ['inventory-snapshot', asOf],
+    queryFn: () => api<InventorySnapshot>(`/api/v1/inventory/snapshot${asOf ? `?as_of=${encodeURIComponent(toIsoDateTime(asOf))}` : ''}`),
+  })
+
+  const rows = snapshot.data?.products ?? []
+  const totalValue = rows.reduce((sum, row) => sum + row.quantityOnHand * row.product.currentUnitPrice, 0)
+  const lowCount = rows.filter((row) => row.product.trackInventory && row.quantityOnHand <= 5).length
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">Inventario</h2>
+          <p className="text-sm text-gray-500">Productos y movimientos. El stock se calcula desde entradas y salidas.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700" onClick={() => setModal('product')}>Nuevo producto</button>
+          <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setModal('sale')}>Registrar venta</button>
+          <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setModal('purchase')}>Registrar compra</button>
+          <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setModal('adjustment')}>Ajuste</button>
+        </div>
+      </div>
+
+      <Panel title="Corte de inventario">
+        <div className="grid gap-3 md:grid-cols-[260px_1fr]">
+          <TextField label="Ver hasta">
+            <input type="datetime-local" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
+          </TextField>
+          <div className="flex items-end text-sm text-gray-500">
+            Si lo dejas vacio, el snapshot usa la hora actual.
+          </div>
+        </div>
+      </Panel>
+
+      {(products.error || snapshot.error) && <ErrorMessage message={(products.error || snapshot.error)!.message} />}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Metric label="Productos activos" value={String(products.data?.length ?? '...')} />
+        <Metric label="Valor estimado" value={money(totalValue, 'MXN')} />
+        <Metric label="Stock bajo" value={String(lowCount)} />
+      </div>
+
+      <Panel title="Productos">
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <tr>
+                <th className="px-4 py-3">Producto</th>
+                <th className="px-4 py-3">SKU</th>
+                <th className="px-4 py-3 text-right">Stock</th>
+                <th className="px-4 py-3 text-right">Precio</th>
+                <th className="px-4 py-3">Ultimo movimiento</th>
+                <th className="px-4 py-3">Indicador</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row) => {
+                const latest = row.recentMovements[0]
+                const lowStock = row.product.trackInventory && row.quantityOnHand <= 5
+                return (
+                  <tr key={row.product.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-semibold">{row.product.name}</td>
+                    <td className="px-4 py-3">{row.product.sku || '-'}</td>
+                    <td className="px-4 py-3 text-right">{row.quantityOnHand.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">{money(row.product.currentUnitPrice, 'MXN')}</td>
+                    <td className="px-4 py-3">
+                      {latest ? `${movementLabel(latest.movementType)} / ${latest.quantity}` : 'Sin movimientos'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <InventoryStatusPill lowStock={lowStock} tracked={row.product.trackInventory} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                        onClick={() => {
+                          setEditingProduct(row.product)
+                          setModal('product')
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {!snapshot.isLoading && rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                    No hay productos todavia. Crea un producto y registra una compra inicial.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {modal === 'product' && (
+        <ProductModal
+          product={editingProduct}
+          onClose={() => {
+            setModal(null)
+            setEditingProduct(null)
+          }}
+        />
+      )}
+      {modal === 'sale' && <InventorySaleModal products={products.data ?? []} onClose={() => setModal(null)} />}
+      {modal === 'purchase' && <InventoryPurchaseModal products={products.data ?? []} onClose={() => setModal(null)} />}
+      {modal === 'adjustment' && <InventoryAdjustmentModal products={products.data ?? []} onClose={() => setModal(null)} />}
+    </section>
+  )
+}
+
+function ProductModal({ product, onClose }: { product?: Product | null; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: product
+      ? {
+          name: product.name,
+          sku: product.sku,
+          currentUnitPrice: product.currentUnitPrice,
+          trackInventory: product.trackInventory,
+          active: product.active,
+        }
+      : { name: '', sku: '', currentUnitPrice: 0, trackInventory: true, active: true },
+  })
+  const mutation = useMutation({
+    mutationFn: (values: ProductFormValues) => api<Product>(product ? `/api/v1/products/${product.id}` : '/api/v1/products', {
+      method: product ? 'PATCH' : 'POST',
+      body: JSON.stringify({
+        name: values.name.trim(),
+        sku: values.sku?.trim() || undefined,
+        currentUnitPrice: Number(values.currentUnitPrice),
+        trackInventory: values.trackInventory,
+        active: values.active,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <Modal title={product ? 'Editar producto' : 'Nuevo producto'} onClose={onClose} narrow>
+      <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+        <TextField label="Nombre" error={form.formState.errors.name?.message}>
+          <input placeholder="Ej. Armor All" {...form.register('name')} />
+        </TextField>
+        <TextField label="SKU" error={form.formState.errors.sku?.message}>
+          <input placeholder="Opcional" {...form.register('sku')} />
+        </TextField>
+        <TextField label="Precio actual" error={form.formState.errors.currentUnitPrice?.message}>
+          <input type="number" min={0} step="0.01" {...form.register('currentUnitPrice')} />
+        </TextField>
+        <label className="flex items-center gap-3 text-sm font-medium">
+          <input type="checkbox" {...form.register('trackInventory')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+          Controlar inventario
+        </label>
+        <label className="flex items-center gap-3 text-sm font-medium">
+          <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+          Activo
+        </label>
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
+        <ModalActions onClose={onClose} submitLabel={mutation.isPending ? 'Guardando...' : 'Guardar producto'} />
+      </form>
+    </Modal>
+  )
+}
+
+function InventorySaleModal({ products, onClose }: { products: Product[]; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const form = useForm<InventorySaleFormValues>({
+    resolver: zodResolver(inventorySaleSchema),
+    defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '', fiado: false },
+  })
+  const product = products.find((item) => item.id === Number(form.watch('productId')))
+  const mutation = useMutation({
+    mutationFn: (values: InventorySaleFormValues) => api<ProductMovement>('/api/v1/inventory/sales', {
+      method: 'POST',
+      body: JSON.stringify({
+        productId: Number(values.productId),
+        quantity: Number(values.quantity),
+        unitPrice: Number(values.unitPrice || product?.currentUnitPrice || 0),
+        movementDate: values.movementDate ? toIsoDateTime(values.movementDate) : undefined,
+        fiado: values.fiado,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <InventoryMovementModal
+      title="Registrar venta"
+      products={products}
+      form={form}
+      mutation={mutation}
+      onClose={onClose}
+      submitLabel="Guardar venta"
+    >
+      <label className="flex items-center gap-3 text-sm font-medium">
+        <input type="checkbox" {...form.register('fiado')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+        Venta fiada
+      </label>
+    </InventoryMovementModal>
+  )
+}
+
+function InventoryPurchaseModal({ products, onClose }: { products: Product[]; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const form = useForm<InventoryPurchaseFormValues>({
+    resolver: zodResolver(inventoryPurchaseSchema),
+    defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '' },
+  })
+  const mutation = useMutation({
+    mutationFn: (values: InventoryPurchaseFormValues) => api<ProductMovement>('/api/v1/inventory/purchases', {
+      method: 'POST',
+      body: JSON.stringify({
+        productId: Number(values.productId),
+        quantity: Number(values.quantity),
+        unitPrice: Number(values.unitPrice || 0),
+        movementDate: values.movementDate ? toIsoDateTime(values.movementDate) : undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <InventoryMovementModal
+      title="Registrar compra"
+      products={products}
+      form={form}
+      mutation={mutation}
+      onClose={onClose}
+      submitLabel="Guardar compra"
+    />
+  )
+}
+
+function InventoryAdjustmentModal({ products, onClose }: { products: Product[]; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const form = useForm<InventoryAdjustmentFormValues>({
+    resolver: zodResolver(inventoryAdjustmentSchema),
+    defaultValues: { productId: 0, quantity: 0, reason: '', movementDate: '' },
+  })
+  const mutation = useMutation({
+    mutationFn: (values: InventoryAdjustmentFormValues) => api<ProductMovement>('/api/v1/inventory/adjustments', {
+      method: 'POST',
+      body: JSON.stringify({
+        productId: Number(values.productId),
+        quantity: Number(values.quantity),
+        reason: values.reason.trim(),
+        movementDate: values.movementDate ? toIsoDateTime(values.movementDate) : undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      onClose()
+    },
+  })
+
+  return (
+    <Modal title="Ajuste de inventario" onClose={onClose} narrow>
+      <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+        <ProductSelect products={products} form={form} />
+        <TextField label="Cantidad (+ entra, - sale)" error={form.formState.errors.quantity?.message}>
+          <input type="number" step="0.01" {...form.register('quantity')} />
+        </TextField>
+        <TextField label="Fecha y hora">
+          <input type="datetime-local" {...form.register('movementDate')} />
+        </TextField>
+        <TextField label="Motivo" error={form.formState.errors.reason?.message}>
+          <textarea rows={3} placeholder="Ej. Conteo fisico, merma, correccion" {...form.register('reason')} />
+        </TextField>
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
+        <ModalActions onClose={onClose} submitLabel={mutation.isPending ? 'Guardando...' : 'Guardar ajuste'} />
+      </form>
+    </Modal>
+  )
+}
+
+function InventoryMovementModal<T extends InventorySaleFormValues | InventoryPurchaseFormValues>({
+  title,
+  products,
+  form,
+  mutation,
+  onClose,
+  submitLabel,
+  children,
+}: {
+  title: string
+  products: Product[]
+  form: UseFormReturn<T>
+  mutation: UseMutationResult<ProductMovement, Error, T>
+  onClose: () => void
+  submitLabel: string
+  children?: React.ReactNode
+}) {
+  return (
+    <Modal title={title} onClose={onClose} narrow>
+      <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+        <ProductSelect products={products} form={form} />
+        <TextField label="Cantidad" error={form.formState.errors.quantity?.message}>
+          <input type="number" min={0} step="0.01" {...form.register('quantity')} />
+        </TextField>
+        <TextField label="Precio unitario" error={form.formState.errors.unitPrice?.message}>
+          <input type="number" min={0} step="0.01" placeholder="0 usa precio del producto en venta" {...form.register('unitPrice')} />
+        </TextField>
+        <TextField label="Fecha y hora">
+          <input type="datetime-local" {...form.register('movementDate')} />
+        </TextField>
+        {children}
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
+        <ModalActions onClose={onClose} submitLabel={mutation.isPending ? 'Guardando...' : submitLabel} />
+      </form>
+    </Modal>
+  )
+}
+
+function ProductSelect({ products, form }: { products: Product[]; form: UseFormReturn<any> }) {
+  return (
+    <SelectField label="Producto" error={form.formState.errors.productId?.message as string | undefined}>
+      <select {...form.register('productId')}>
+        <option value={0}>Selecciona producto</option>
+        {products.map((product) => (
+          <option key={product.id} value={product.id}>{product.name}</option>
+        ))}
+      </select>
+    </SelectField>
+  )
+}
+
+function InventoryStatusPill({ lowStock, tracked }: { lowStock: boolean; tracked: boolean }) {
+  if (!tracked) {
+    return <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-500">Sin control</span>
+  }
+  if (lowStock) {
+    return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Stock bajo</span>
+  }
+  return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span>
 }
 
 function PayrollScreen() {
@@ -1510,13 +2633,13 @@ function PayrollScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Nomina</h2>
-          <p className="text-sm text-slate-600">Calculo semanal de lavadores, bonos por carros y prestamos.</p>
+          <p className="text-sm text-gray-500">Calculo semanal de lavadores, bonos por carros y prestamos.</p>
         </div>
         <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))}>
           <TextField label="Domingo" error={form.formState.errors.startDate?.message}>
             <input type="date" {...form.register('startDate')} />
           </TextField>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">
             Crear periodo
           </button>
         </form>
@@ -1533,11 +2656,11 @@ function PayrollScreen() {
               <option value="LOCKED">Bloqueados</option>
             </select>
           </SelectField>
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
             {(periods.data ?? []).map((item) => (
               <button
                 key={item.id}
-                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm hover:bg-slate-50 ${
+                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm hover:bg-gray-50 ${
                   selectedId === item.id ? 'bg-blue-50 text-blue-800' : ''
                 }`}
                 onClick={() => {
@@ -1547,13 +2670,13 @@ function PayrollScreen() {
               >
                 <span>
                   <strong className="block">{item.startDate}</strong>
-                  <span className="text-slate-500">al {item.endDate}</span>
+                  <span className="text-gray-400">al {item.endDate}</span>
                 </span>
                 <PayrollStatusPill status={item.status} />
               </button>
             ))}
             {!periods.isLoading && (periods.data ?? []).length === 0 && (
-              <p className="p-4 text-sm text-slate-500">No hay periodos de nomina.</p>
+              <p className="p-4 text-sm text-gray-400">No hay periodos de nomina.</p>
             )}
           </div>
         </Panel>
@@ -1562,20 +2685,20 @@ function PayrollScreen() {
           <Panel title="Resumen semanal">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-slate-500">Periodo</p>
+                <p className="text-sm text-gray-400">Periodo</p>
                 <p className="font-semibold">{selectedPeriod ? `${selectedPeriod.startDate} al ${selectedPeriod.endDate}` : 'Sin seleccionar'}</p>
               </div>
               <div className="flex gap-2">
                 <button
                   disabled={!selectedId || selectedPeriod?.status === 'LOCKED' || compute.isPending}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                  className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
                   onClick={() => compute.mutate()}
                 >
                   Recalcular
                 </button>
                 <button
                   disabled={!selectedId || selectedPeriod?.status !== 'COMPUTED' || lock.isPending}
-                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:text-slate-400"
+                  className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:text-gray-400"
                   onClick={() => {
                     if (window.confirm('Bloquear nomina? Ya no se podra recalcular en v1.')) {
                       lock.mutate()
@@ -1596,9 +2719,9 @@ function PayrollScreen() {
           </Panel>
 
           <Panel title="Grid semanal">
-            <div className="overflow-hidden rounded-md border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
                   <tr>
                     <th className="px-4 py-3">Lavador</th>
                     <th className="px-4 py-3 text-right">Carros</th>
@@ -1608,11 +2731,11 @@ function PayrollScreen() {
                     <th className="px-4 py-3 text-right">Neto</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-gray-100">
                   {(selectedPeriod?.entries ?? []).map((entry) => (
                     <tr
                       key={entry.id}
-                      className="cursor-pointer hover:bg-slate-50"
+                      className="cursor-pointer hover:bg-gray-50"
                       onClick={() => setSelectedEmployeeId(entry.employeeId)}
                     >
                       <td className="px-4 py-3 font-semibold">{entry.employeeName}</td>
@@ -1625,7 +2748,7 @@ function PayrollScreen() {
                   ))}
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                         Crea o selecciona un periodo y presiona Recalcular.
                       </td>
                     </tr>
@@ -1645,16 +2768,16 @@ function PayrollScreen() {
                   <SummaryRow label="Neto" value={money(selectedEntry.netPay, 'MXN')} />
                   <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
                 </div>
-                <div className="overflow-hidden rounded-md border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <div className="overflow-hidden rounded-xl border border-gray-100">
+                  <table className="min-w-full divide-y divide-gray-100 text-sm">
+                    <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
                       <tr>
                         <th className="px-4 py-3">Dia</th>
                         <th className="px-4 py-3 text-right">Carros</th>
                         <th className="px-4 py-3 text-right">Revenue ref.</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-gray-100">
                       {(selectedPeriod?.days ?? []).filter((day) => day.employeeId === selectedEntry.employeeId).map((day) => (
                         <tr key={day.id}>
                           <td className="px-4 py-3">{day.workDate}</td>
@@ -1667,7 +2790,7 @@ function PayrollScreen() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-slate-500">Selecciona una fila para ver detalle y saldo de deuda.</p>
+              <p className="text-sm text-gray-400">Selecciona una fila para ver detalle y saldo de deuda.</p>
             )}
           </Panel>
         </div>
@@ -1678,7 +2801,7 @@ function PayrollScreen() {
 
 function PayrollStatusPill({ status }: { status: PayrollPeriodStatus }) {
   const styles: Record<PayrollPeriodStatus, string> = {
-    OPEN: 'bg-slate-100 text-slate-700',
+    OPEN: 'bg-gray-100 text-gray-700',
     COMPUTED: 'bg-blue-50 text-blue-700',
     LOCKED: 'bg-emerald-50 text-emerald-700',
   }
@@ -1763,9 +2886,9 @@ function TicketsBrowser() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Tickets</h2>
-          <p className="text-sm text-slate-600">Busqueda y revision de tickets capturados.</p>
+          <p className="text-sm text-gray-500">Busqueda y revision de tickets capturados.</p>
         </div>
-        <NavLink to="/tickets/nuevo" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+        <NavLink to="/tickets/nuevo" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">
           Nuevo ticket
         </NavLink>
       </div>
@@ -1785,9 +2908,9 @@ function TicketsBrowser() {
         </div>
       </Panel>
 
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+        <table className="min-w-full divide-y divide-gray-100 text-sm">
+          <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
             <tr>
               <th className="px-4 py-3">Nota</th>
               <th className="px-4 py-3">Vehiculo</th>
@@ -1798,9 +2921,9 @@ function TicketsBrowser() {
               <th className="px-4 py-3 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-gray-100">
             {filtered.map((ticket) => (
-              <tr key={ticket.id} className="hover:bg-slate-50">
+              <tr key={ticket.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-semibold">{ticket.notaNumber}</td>
                 <td className="px-4 py-3">{ticket.vehicleDescription || '-'}</td>
                 <td className="px-4 py-3">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
@@ -1819,7 +2942,7 @@ function TicketsBrowser() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">No hay tickets para estos filtros.</td>
+                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">No hay tickets para estos filtros.</td>
               </tr>
             )}
           </tbody>
@@ -1858,14 +2981,14 @@ function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: ()
   return (
     <Modal title="Cancelar ticket" onClose={onClose} narrow>
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-        <p className="text-sm text-slate-600">El ticket queda guardado como cancelado y no cuenta para ingresos.</p>
+        <p className="text-sm text-gray-500">El ticket queda guardado como cancelado y no cuenta para ingresos.</p>
         <TextField label="Motivo" error={form.formState.errors.reason?.message}>
           <textarea rows={4} placeholder="Ej. Capturado por error" {...form.register('reason')} />
         </TextField>
-        {mutation.error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{mutation.error.message}</p>}
+        {mutation.error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{mutation.error.message}</p>}
         <div className="flex justify-end gap-2">
-          <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold" onClick={onClose}>Volver</button>
-          <button type="submit" className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+          <button type="button" className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" onClick={onClose}>Volver</button>
+          <button type="submit" className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700">
             Confirmar cancelacion
           </button>
         </div>
@@ -2026,7 +3149,7 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+        className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400"
       >
         {loading ? 'Guardando...' : label}
       </button>
@@ -2035,7 +3158,7 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
 }
 
 function ErrorMessage({ message }: { message: string }) {
-  return <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{message}</p>
+  return <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{message}</p>
 }
 
 function MoneyTable({
@@ -2049,9 +3172,9 @@ function MoneyTable({
 }) {
   return (
     <Panel title={title}>
-      <div className="overflow-hidden rounded-md border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-xl border border-gray-100">
+        <table className="min-w-full divide-y divide-gray-100 text-sm">
+          <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
             <tr>
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3">Concepto</th>
@@ -2059,9 +3182,9 @@ function MoneyTable({
               <th className="px-4 py-3 text-right">Monto</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-gray-100">
             {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
+              <tr key={row.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">{row.date}</td>
                 <td className="px-4 py-3 font-semibold">{row.concept}</td>
                 <td className="px-4 py-3">{row.detail}</td>
@@ -2070,7 +3193,7 @@ function MoneyTable({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">{empty}</td>
+                <td colSpan={4} className="px-4 py-8 text-center text-gray-400">{empty}</td>
               </tr>
             )}
           </tbody>
@@ -2083,8 +3206,8 @@ function MoneyTable({
 function ModalActions({ onClose, submitLabel }: { onClose: () => void; submitLabel: string }) {
   return (
     <div className="flex justify-end gap-2">
-      <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold" onClick={onClose}>Volver</button>
-      <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+      <button type="button" className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" onClick={onClose}>Volver</button>
+      <button type="submit" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700">
         {submitLabel}
       </button>
     </div>
@@ -2106,6 +3229,23 @@ function categoryLabel(category: ExpenseCategory) {
   return labels[category]
 }
 
+function movementLabel(type: MovementType) {
+  const labels: Record<MovementType, string> = {
+    SALE: 'Venta',
+    FIADO: 'Fiado',
+    PURCHASE: 'Compra',
+    ADJUSTMENT: 'Ajuste',
+    OPENING_COUNT: 'Conteo apertura',
+    CLOSING_COUNT: 'Conteo cierre',
+  }
+  return labels[type]
+}
+
+function toIsoDateTime(value: string) {
+  if (!value) return value
+  return new Date(value).toISOString()
+}
+
 async function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['expenses'] }),
@@ -2115,17 +3255,24 @@ async function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>) {
   ])
 }
 
+async function invalidateInventory(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['products'] }),
+    queryClient.invalidateQueries({ queryKey: ['inventory-snapshot'] }),
+  ])
+}
+
 function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail: string }[]; empty: string }) {
   if (rows.length === 0) {
-    return <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">{empty}</p>
+    return <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">{empty}</p>
   }
 
   return (
-    <div className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+    <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
       {rows.map((row) => (
         <div key={row.id} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
           <span className="font-medium">{row.title}</span>
-          <span className="text-right text-slate-500">{row.detail}</span>
+          <span className="text-right text-gray-400">{row.detail}</span>
         </div>
       ))}
     </div>
@@ -2134,8 +3281,8 @@ function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5">
-      <h3 className="mb-4 text-base font-semibold">{title}</h3>
+    <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <h3 className="mb-5 text-sm font-semibold uppercase tracking-wide text-gray-400">{title}</h3>
       <div className="space-y-4">{children}</div>
     </section>
   )
@@ -2144,7 +3291,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 function SelectField({ label, error, children }: { label: string; error?: string; children: React.ReactElement }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
       {children}
       {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
     </label>
@@ -2154,7 +3301,7 @@ function SelectField({ label, error, children }: { label: string; error?: string
 function TextField({ label, error, children }: { label: string; error?: string; children: React.ReactElement }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
       {children}
       {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
     </label>
@@ -2163,8 +3310,8 @@ function TextField({ label, error, children }: { label: string; error?: string; 
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-100 py-2">
-      <span className="text-slate-500">{label}</span>
+    <div className="flex items-center justify-between border-b border-gray-100 py-2">
+      <span className="text-gray-400">{label}</span>
       <strong>{value}</strong>
     </div>
   )
@@ -2182,13 +3329,13 @@ function TicketStatusPill({ ticket }: { ticket: Ticket }) {
 
 function Modal({ title, children, onClose, narrow = false }: { title: string; children: React.ReactNode; onClose: () => void; narrow?: boolean }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/40 px-4 py-8">
-      <div className={`rounded-md bg-white shadow-xl ${narrow ? 'w-full max-w-lg' : 'w-full max-w-6xl'}`}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100" onClick={onClose}>Cerrar</button>
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-8 backdrop-blur-sm">
+      <div className={`rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-6xl'}`}>
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <button className="rounded-lg px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors" onClick={onClose}>Cerrar</button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
   )
@@ -2196,12 +3343,16 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
 
 function Toast({ message }: { message: string }) {
   return (
-    <div className="fixed right-5 top-5 z-50 rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg">
+    <div className="fixed right-5 top-5 z-50 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white shadow-xl ring-1 ring-white/10">
       {message}
     </div>
   )
 }
 
 export default function App() {
-  return <AppShell />
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  )
 }

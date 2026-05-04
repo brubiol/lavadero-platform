@@ -41,7 +41,7 @@ Health check
 Phase 1 foundational domain
 
 Backend source lives in `/api`. The Phase 1 modules are:
-- `employees`
+- `employees`maw
 - `service_types`
 - `vehicle_sizes`
 - `service_prices`
@@ -637,3 +637,227 @@ Manual checklist:
 - Employee advances deduct correctly.
 - Debt balance appears.
 - Lock payroll.
+
+Phase 7 inventory MVP
+
+Phase 7 adds simple movement-based inventory. Products do not store current stock directly. Stock is calculated from `product_movements`.
+
+Movement types:
+
+- `SALE`: product sold, subtracts quantity.
+- `FIADO`: product given on credit, subtracts quantity.
+- `PURCHASE`: product purchased, adds quantity.
+- `ADJUSTMENT`: manual correction, signed quantity, requires reason.
+- `OPENING_COUNT`: reserved for future opening count movement.
+- `CLOSING_COUNT`: reserved for future closing count movement.
+
+Snapshot rule:
+
+```text
+quantity_on_hand = sum(product_movements.quantity where movement_date <= as_of)
+```
+
+Endpoint examples:
+
+```bash
+# Products
+curl localhost:8080/api/v1/products?active=true
+
+curl -X POST localhost:8080/api/v1/products \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Armor All",
+    "sku": "ARMOR_ALL",
+    "currentUnitPrice": 120.00,
+    "trackInventory": true
+  }'
+
+curl -X PATCH localhost:8080/api/v1/products/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"currentUnitPrice": 130.00}'
+
+# Inventory snapshot
+curl localhost:8080/api/v1/inventory/snapshot
+curl 'localhost:8080/api/v1/inventory/snapshot?as_of=2026-05-03T23:59:00Z'
+
+# Purchase adds stock
+curl -X POST localhost:8080/api/v1/inventory/purchases \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "productId": 1,
+    "quantity": 10,
+    "unitPrice": 80.00
+  }'
+
+# Sale subtracts stock
+curl -X POST localhost:8080/api/v1/inventory/sales \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "productId": 1,
+    "quantity": 2,
+    "unitPrice": 120.00,
+    "fiado": false
+  }'
+
+# Adjustment can add or subtract but requires reason
+curl -X POST localhost:8080/api/v1/inventory/adjustments \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "productId": 1,
+    "quantity": -1,
+    "reason": "Merma"
+  }'
+```
+
+Frontend:
+
+- Open `Inventario` from the sidebar.
+- Create products.
+- Register purchases to add stock.
+- Register sales or fiado to subtract stock.
+- Use adjustment for corrections and always enter a reason.
+- The table shows stock, estimated value, latest movement, and a low-stock placeholder.
+
+Manual checklist:
+
+- Create product.
+- Register purchase.
+- Register sale.
+- Register fiado.
+- Register adjustment with reason.
+- Confirm snapshot stock changes correctly.
+
+Phase 9 reports and Excel export
+
+Phase 9 adds reporting endpoints and an owner-facing Reports screen. The Excel export uses Apache POI and keeps the old spreadsheet workflow simple: readable tabs, headers, currency columns, and total rows.
+
+Backend endpoints:
+
+```bash
+# Existing single-day dashboard still works
+curl 'localhost:8080/api/v1/reports/daily-summary?date=2026-12-10'
+
+# New date-range daily summary
+curl 'localhost:8080/api/v1/reports/daily-summary?from=2026-12-01&to=2026-12-31'
+
+# Monthly summary
+curl 'localhost:8080/api/v1/reports/monthly?year=2026&month=12'
+
+# Cash variance from closed shifts
+curl 'localhost:8080/api/v1/reports/cash-variance?from=2026-12-01&to=2026-12-31'
+
+# Employee performance from ticket assignments
+curl 'localhost:8080/api/v1/reports/employee-performance?from=2026-12-01&to=2026-12-31'
+
+# Export preview counts
+curl 'localhost:8080/api/v1/reports/export/preview?type=full&from=2026-12-01&to=2026-12-31'
+
+# Download XLSX
+curl -L 'localhost:8080/api/v1/reports/export?type=full&from=2026-12-01&to=2026-12-31&format=xlsx' \
+  -o lavadero-report.xlsx
+```
+
+Export sheets:
+
+- `Resumen`
+- `Tickets`
+- `Expenses`
+- `Withdrawals`
+- `Advances`
+- `Shift Close`
+- `Inventory`
+- `Payroll`
+
+Rules:
+
+- Voided tickets do not count as ticket revenue.
+- Courtesy tickets do not count as ticket revenue.
+- Employee performance uses `ticket_assignments.share_pct / 100`.
+- Cash variance comes from closed shift summaries.
+- Inventory export includes movement rows when inventory exists.
+- Payroll export includes computed payroll entries when payroll exists.
+
+Frontend:
+
+- Open `Reportes` from the sidebar.
+- Select `Desde` and `Hasta`.
+- Review daily summary, employee performance, cash variance, monthly summary, and export preview.
+- Click `Descargar Excel` to download the XLSX.
+
+Manual checklist:
+
+- Create tickets for a date range.
+- Add a gasto/retiro/prestamo.
+- Close a shift if you want cash variance rows.
+- Open `Reportes`.
+- Confirm the summary numbers match Dashboard/Gastos.
+- Download Excel and confirm each sheet opens.
+
+Phase 10 auth hardening
+
+Phase 10 adds JWT authentication, BCrypt password hashing, opaque refresh tokens, and role-aware frontend navigation.
+
+Roles:
+
+- `OPERADOR`: create tickets, view ticket/day operations, record basic expenses, start cash count.
+- `GERENTE`: all operator work plus edit/void tickets, close shifts, manage catalogs, inventory, payroll, withdrawals, and advances.
+- `DUENO`: all manager work plus reports and Excel export.
+
+Local bootstrap user:
+
+- Username: `dueno`
+- Password: `cambia-esto-123`
+- Role: `DUENO`
+
+Override these before production:
+
+```bash
+export LAVADERO_JWT_SECRET='change-this-to-a-long-random-secret-at-least-32-bytes'
+export LAVADERO_BOOTSTRAP_USERNAME='owner'
+export LAVADERO_BOOTSTRAP_PASSWORD='replace-with-real-password'
+export LAVADERO_BOOTSTRAP_FULL_NAME='Owner Name'
+```
+
+Auth endpoints:
+
+```bash
+# Login
+curl -X POST localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"dueno","password":"cambia-esto-123"}'
+
+# Save the accessToken and refreshToken from login
+TOKEN='paste-access-token'
+REFRESH='paste-refresh-token'
+
+# Current user
+curl localhost:8080/api/v1/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+
+# Refresh access token
+curl -X POST localhost:8080/api/v1/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d "{\"refreshToken\":\"$REFRESH\"}"
+
+# Logout / revoke refresh token
+curl -X POST localhost:8080/api/v1/auth/logout \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"refreshToken\":\"$REFRESH\"}"
+```
+
+Frontend:
+
+- Open `http://127.0.0.1:5173`.
+- Login with the bootstrap user.
+- Navigation changes by role.
+- Direct route access shows a no-permission state when the user role is too low.
+- Logout revokes the refresh token and clears local auth state.
+
+Practical v1 tradeoffs:
+
+- Access tokens are short-lived JWTs.
+- Refresh tokens are opaque random strings and only their SHA-256 hash is stored in Postgres.
+- Refresh tokens rotate on refresh.
+- Frontend stores tokens in `localStorage` for speed in v1. For production on a real domain, prefer an HttpOnly Secure SameSite cookie for refresh tokens.
+- Tests run with `lavadero.auth.enabled=false` so existing business endpoint integration tests stay focused; Phase 10 includes auth endpoint tests.
