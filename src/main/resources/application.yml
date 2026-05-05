@@ -8,6 +8,13 @@ spring:
   flyway:
     locations: classpath:db/migration
 
+app:
+  jwt:
+    # override this in prod via environment variable APP_JWT_SECRET
+    secret: NGTTuGKDZ18eUAdoVYQVc9xm9QQOV7OxH9HY4OisJm0=
+    access-expiry-seconds: 900   # 15 min
+    refresh-expiry-days: 7
+
 management:
   endpoints:
     web:
