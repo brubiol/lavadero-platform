@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
 type Currency = 'MXN' | 'USD'
+type PaymentMethod = 'CASH' | 'CARD'
 type TicketStatus = 'ACTIVE' | 'VOIDED'
 type AuthRole = 'OPERADOR' | 'GERENTE' | 'DUENO'
 
@@ -97,6 +98,8 @@ type ShiftCloseSummary = {
   businessDayId: number
   shiftStatus: Shift['status']
   ticketRevenue: number
+  cashRevenue: number
+  cardRevenue: number
   expensesTotal: number
   withdrawalsTotal: number
   expectedCash: number
@@ -127,6 +130,7 @@ type Ticket = {
   vehicleDescription?: string | null
   priceAmount: number
   currency: Currency
+  paymentMethod: PaymentMethod
   courtesy: boolean
   courtesyReason?: string | null
   status: TicketStatus
@@ -343,6 +347,7 @@ const ticketSchema = z.object({
   serviceTypeId: z.coerce.number().positive('Selecciona un servicio'),
   vehicleSizeId: z.coerce.number().positive('Selecciona un tamano'),
   currency: z.enum(['MXN', 'USD']),
+  paymentMethod: z.enum(['CASH', 'CARD']).default('CASH'),
   vehicleDescription: z.string().max(160, 'Maximo 160 caracteres').optional(),
   notes: z.string().max(500, 'Maximo 500 caracteres').optional(),
   courtesy: z.boolean().default(false),
@@ -648,10 +653,8 @@ function AppShell() {
       <aside className="fixed inset-y-0 left-0 hidden w-64 bg-zinc-950 px-4 py-6 lg:block">
         <div className="mb-8 px-2">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-sm font-black text-white shadow-sm shadow-sky-500/40">
-              L
-            </div>
-            <span className="text-sm font-bold tracking-wide text-white">Lavadero</span>
+            <img src="/logo.png" alt="Turbo Lavado" className="h-10 w-10 shrink-0 rounded-lg object-contain" />
+            <span className="text-sm font-bold tracking-wide text-white">Turbo Lavado</span>
           </div>
           <p className="mt-2.5 text-xs text-zinc-500">Operacion diaria</p>
         </div>
@@ -767,10 +770,8 @@ function LoginScreen() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500 text-2xl font-black text-white shadow-lg shadow-sky-500/30">
-            L
-          </div>
-          <h1 className="text-2xl font-bold text-white">Lavadero</h1>
+          <img src="/logo.png" alt="Turbo Lavado" className="mx-auto mb-4 h-28 w-28 rounded-2xl object-contain shadow-lg" />
+          <h1 className="text-2xl font-bold text-white">Turbo Lavado</h1>
           <p className="mt-1 text-sm text-zinc-400">Sistema de operacion diaria</p>
         </div>
         <form className="rounded-2xl bg-white p-8 shadow-2xl" onSubmit={submit}>
@@ -1004,6 +1005,7 @@ function Dashboard() {
                 <th className="px-4 py-3">Servicio</th>
                 <th className="px-4 py-3">Lavadores</th>
                 <th className="px-4 py-3 text-right">Importe</th>
+                <th className="px-4 py-3">Pago</th>
                 <th className="px-4 py-3">Estado</th>
               </tr>
             </thead>
@@ -1016,13 +1018,20 @@ function Dashboard() {
                   <td className="px-4 py-3">{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
                   <td className="px-4 py-3 text-right">{money(ticket.priceAmount, ticket.currency)}</td>
                   <td className="px-4 py-3">
+                    {!ticket.courtesy && (
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
                     <TicketStatusPill ticket={ticket} />
                   </td>
                 </tr>
               ))}
               {!summary.isLoading && (data?.recentTickets.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
                     No hay tickets para esta fecha. Crea tickets desde Nuevo ticket para ver el resumen.
                   </td>
                 </tr>
@@ -1138,6 +1147,7 @@ function TicketWorkspace({
       serviceTypeId: ticket?.serviceTypeId ?? 0,
       vehicleSizeId: ticket?.vehicleSizeId ?? 0,
       currency: ticket?.currency ?? 'MXN',
+      paymentMethod: ticket?.paymentMethod ?? 'CASH',
       vehicleDescription: ticket?.vehicleDescription ?? '',
       notes: '',
       courtesy: ticket?.courtesy ?? false,
@@ -1164,6 +1174,7 @@ function TicketWorkspace({
         serviceTypeId: Number(values.serviceTypeId),
         vehicleSizeId: Number(values.vehicleSizeId),
         currency: values.currency,
+        paymentMethod: values.courtesy ? 'CASH' : values.paymentMethod,
         vehicleDescription: values.vehicleDescription || undefined,
         courtesy: values.courtesy,
         courtesyReason: values.courtesyReason || undefined,
@@ -1231,6 +1242,12 @@ function TicketWorkspace({
                   <option value="USD">USD</option>
                 </select>
               </SelectField>
+              <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
+                <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
+                  <option value="CASH">Efectivo</option>
+                  <option value="CARD">Tarjeta</option>
+                </select>
+              </SelectField>
               <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
                 <select {...form.register('serviceTypeId')}>
                   <option value={0}>Selecciona servicio</option>
@@ -1292,6 +1309,7 @@ function TicketWorkspace({
               <SummaryRow label="Precio preview" value={livePrice === undefined ? 'Sin precio' : money(livePrice, watched.currency)} />
               <SummaryRow label="Lavadores" value={String(watched.employeeIds?.length ?? 0)} />
               <SummaryRow label="Tipo" value={watched.courtesy ? 'Cortesia' : 'Venta'} />
+              <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'} />
             </div>
             {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
             <button
@@ -1910,12 +1928,22 @@ function ShiftCloseScreen() {
 
           <Panel title="2. Gastos y retiros del turno">
             <div className="grid gap-4 md:grid-cols-3">
-              <Metric label="Ingresos tickets" value={summary ? money(summary.ticketRevenue, 'MXN') : '...'} />
+              <Metric label="Ingresos totales" value={summary ? money(summary.ticketRevenue, 'MXN') : '...'} />
               <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
               <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
             </div>
-            <p className="text-sm text-gray-500">
-              Formula v1: efectivo esperado = ingresos de tickets activos - gastos - retiros.
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                <span className="text-gray-500">Efectivo</span>
+                <strong>{summary ? money(summary.cashRevenue, 'MXN') : '...'}</strong>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-sm">
+                <span className="text-blue-600">Tarjeta</span>
+                <strong className="text-blue-700">{summary ? money(summary.cardRevenue, 'MXN') : '...'}</strong>
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-gray-500">
+              Efectivo esperado = ingresos en efectivo - gastos - retiros. Los pagos con tarjeta no cuentan para el conteo de caja.
             </p>
           </Panel>
 
@@ -2917,6 +2945,7 @@ function TicketsBrowser() {
               <th className="px-4 py-3">Servicio</th>
               <th className="px-4 py-3">Lavadores</th>
               <th className="px-4 py-3 text-right">Importe</th>
+              <th className="px-4 py-3">Pago</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3 text-right">Acciones</th>
             </tr>
@@ -2930,6 +2959,13 @@ function TicketsBrowser() {
                 <td className="px-4 py-3">{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
                 <td className="px-4 py-3 text-right">{money(ticket.priceAmount, ticket.currency)}</td>
                 <td className="px-4 py-3">
+                  {!ticket.courtesy && (
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
                   <TicketStatusPill ticket={ticket} />
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -2942,7 +2978,7 @@ function TicketsBrowser() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">No hay tickets para estos filtros.</td>
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-400">No hay tickets para estos filtros.</td>
               </tr>
             )}
           </tbody>

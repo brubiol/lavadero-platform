@@ -60,6 +60,10 @@ public class Ticket extends AuditedEntity {
     @Column(nullable = false, length = 3)
     private TicketCurrency currency;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", nullable = false, length = 10)
+    private PaymentMethod paymentMethod = PaymentMethod.CASH;
+
     @Column(nullable = false)
     private boolean courtesy;
 
@@ -84,7 +88,7 @@ public class Ticket extends AuditedEntity {
 
     public Ticket(BusinessDay businessDay, Shift shift, ServiceType serviceType, VehicleSize vehicleSize,
             Integer dailySeq, String notaNumber, String vehicleDescription, BigDecimal priceAmount,
-            TicketCurrency currency, boolean courtesy, String courtesyReason) {
+            TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason) {
         this.businessDay = businessDay;
         this.shift = shift;
         this.serviceType = serviceType;
@@ -94,6 +98,7 @@ public class Ticket extends AuditedEntity {
         this.vehicleDescription = vehicleDescription;
         this.priceAmount = priceAmount;
         this.currency = currency;
+        this.paymentMethod = paymentMethod != null ? paymentMethod : PaymentMethod.CASH;
         this.courtesy = courtesy;
         this.courtesyReason = courtesyReason;
     }
@@ -138,6 +143,10 @@ public class Ticket extends AuditedEntity {
         return currency;
     }
 
+    public PaymentMethod getPaymentMethod() {
+        return paymentMethod;
+    }
+
     public boolean isCourtesy() {
         return courtesy;
     }
@@ -163,12 +172,13 @@ public class Ticket extends AuditedEntity {
     }
 
     public void update(ServiceType serviceType, VehicleSize vehicleSize, String vehicleDescription,
-            BigDecimal priceAmount, TicketCurrency currency, boolean courtesy, String courtesyReason) {
+            BigDecimal priceAmount, TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason) {
         this.serviceType = serviceType;
         this.vehicleSize = vehicleSize;
         this.vehicleDescription = vehicleDescription;
         this.priceAmount = priceAmount;
         this.currency = currency;
+        this.paymentMethod = paymentMethod != null ? paymentMethod : this.paymentMethod;
         this.courtesy = courtesy;
         this.courtesyReason = courtesyReason;
     }

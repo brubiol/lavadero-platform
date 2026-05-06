@@ -1,5 +1,6 @@
 package com.lavadero.api.operations.repository;
 
+import com.lavadero.api.operations.domain.PaymentMethod;
 import com.lavadero.api.operations.domain.Ticket;
 import com.lavadero.api.operations.domain.TicketStatus;
 import java.math.BigDecimal;
@@ -24,6 +25,17 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
               and t.courtesy = false
             """)
     BigDecimal sumRevenueForShift(@Param("shiftId") Long shiftId, @Param("status") TicketStatus status);
+
+    @Query("""
+            select coalesce(sum(t.priceAmount), 0)
+            from Ticket t
+            where t.shift.id = :shiftId
+              and t.status = :status
+              and t.courtesy = false
+              and t.paymentMethod = :paymentMethod
+            """)
+    BigDecimal sumRevenueForShiftByPaymentMethod(@Param("shiftId") Long shiftId, @Param("status") TicketStatus status,
+            @Param("paymentMethod") PaymentMethod paymentMethod);
 
     @EntityGraph(attributePaths = {
             "businessDay",

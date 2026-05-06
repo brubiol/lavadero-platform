@@ -8,6 +8,7 @@ import com.lavadero.api.cash.web.ShiftCloseDtos.CloseShiftRequest;
 import com.lavadero.api.cash.web.ShiftCloseDtos.ShiftCloseSummaryResponse;
 import com.lavadero.api.money.repository.ExpenseRepository;
 import com.lavadero.api.money.repository.WithdrawalRepository;
+import com.lavadero.api.operations.domain.PaymentMethod;
 import com.lavadero.api.operations.domain.Shift;
 import com.lavadero.api.operations.domain.ShiftStatus;
 import com.lavadero.api.operations.domain.TicketStatus;
@@ -40,20 +41,25 @@ public class ShiftCloseService {
 
     @Transactional(readOnly = true)
     public ShiftCloseSummaryResponse summary(Long shiftId) {
-        return closeSummaries.findByShiftId(shiftId)
-                .map(ShiftCloseSummaryResponse::closed)
-                .orElseGet(() -> {
-                    Shift shift = getShift(shiftId);
-                    CashCount latestCount = cashCounts.findByShiftIdOrderByCreatedAtDesc(shiftId).stream()
-                            .findFirst()
-                            .orElse(null);
-                    BigDecimal ticketRevenue = tickets.sumRevenueForShift(shiftId, TicketStatus.ACTIVE);
-                    BigDecimal expensesTotal = expenses.sumForShift(shiftId);
-                    BigDecimal withdrawalsTotal = withdrawals.sumForShift(shiftId);
-                    BigDecimal expectedCash = ticketRevenue.subtract(expensesTotal).subtract(withdrawalsTotal);
-                    return ShiftCloseSummaryResponse.open(shift, ticketRevenue, expensesTotal, withdrawalsTotal,
-                            expectedCash, latestCount);
-                });
+        if (closeSummaries.existsByShiftId(shiftId)) {
+            ShiftCloseSummary existing = closeSummaries.findByShiftId(shiftId).get();
+            BigDecimal cashRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CASH);
+            BigDecimal cardRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CARD);
+            return ShiftCloseSummaryResponse.closed(existing, cashRevenue, cardRevenue);
+        }
+        Shift shift = getShift(shiftId);
+        CashCount latestCount = cashCounts.findByShiftIdOrderByCreatedAtDesc(shiftId).stream()
+                .findFirst()
+                .orElse(null);
+        BigDecimal ticketRevenue = tickets.sumRevenueForShift(shiftId, TicketStatus.ACTIVE);
+        BigDecimal cashRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CASH);
+        BigDecimal cardRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CARD);
+        BigDecimal expensesTotal = expenses.sumForShift(shiftId);
+        BigDecimal withdrawalsTotal = withdrawals.sumForShift(shiftId);
+        // expected cash in drawer only counts cash payments, not card (card goes to processor)
+        BigDecimal expectedCash = cashRevenue.subtract(expensesTotal).subtract(withdrawalsTotal);
+        return ShiftCloseSummaryResponse.open(shift, ticketRevenue, cashRevenue, cardRevenue, expensesTotal,
+                withdrawalsTotal, expectedCash, latestCount);
     }
 
     @Transactional
@@ -72,9 +78,11 @@ public class ShiftCloseService {
         }
 
         BigDecimal ticketRevenue = tickets.sumRevenueForShift(shiftId, TicketStatus.ACTIVE);
+        BigDecimal cashRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CASH);
+        BigDecimal cardRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CARD);
         BigDecimal expensesTotal = expenses.sumForShift(shiftId);
         BigDecimal withdrawalsTotal = withdrawals.sumForShift(shiftId);
-        BigDecimal expectedCash = ticketRevenue.subtract(expensesTotal).subtract(withdrawalsTotal);
+        BigDecimal expectedCash = cashRevenue.subtract(expensesTotal).subtract(withdrawalsTotal);
         BigDecimal variance = cashCount.getTotalCounted().subtract(expectedCash);
         String closingReason = normalize(request.closingReason());
         if (variance.signum() < 0 && closingReason == null) {
@@ -85,7 +93,7 @@ public class ShiftCloseService {
         shifts.save(shift);
         ShiftCloseSummary saved = closeSummaries.save(new ShiftCloseSummary(shift, cashCount, ticketRevenue,
                 expensesTotal, withdrawalsTotal, expectedCash, cashCount.getTotalCounted(), variance, closingReason));
-        return ShiftCloseSummaryResponse.closed(saved);
+        return ShiftCloseSummaryResponse.closed(saved, cashRevenue, cardRevenue);
     }
 
     private Shift getShift(Long shiftId) {

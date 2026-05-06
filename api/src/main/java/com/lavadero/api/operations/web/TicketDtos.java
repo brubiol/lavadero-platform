@@ -1,5 +1,6 @@
 package com.lavadero.api.operations.web;
 
+import com.lavadero.api.operations.domain.PaymentMethod;
 import com.lavadero.api.operations.domain.Ticket;
 import com.lavadero.api.operations.domain.TicketAssignment;
 import com.lavadero.api.operations.domain.TicketCurrency;
@@ -21,6 +22,7 @@ public final class TicketDtos {
             @NotNull Long serviceTypeId,
             @NotNull Long vehicleSizeId,
             @NotNull TicketCurrency currency,
+            PaymentMethod paymentMethod,
             @Size(max = 160) String vehicleDescription,
             Boolean courtesy,
             @Size(max = 500) String courtesyReason,
@@ -31,6 +33,7 @@ public final class TicketDtos {
             Long serviceTypeId,
             Long vehicleSizeId,
             TicketCurrency currency,
+            PaymentMethod paymentMethod,
             @Size(max = 160) String vehicleDescription,
             Boolean courtesy,
             @Size(max = 500) String courtesyReason,
@@ -49,15 +52,16 @@ public final class TicketDtos {
 
     public record TicketResponse(Long id, Long businessDayId, Long shiftId, Long serviceTypeId, String serviceTypeName,
             Long vehicleSizeId, String vehicleSizeName, Integer dailySeq, String notaNumber,
-            String vehicleDescription, BigDecimal priceAmount, TicketCurrency currency, boolean courtesy,
-            String courtesyReason, TicketStatus status, String voidReason, Instant voidedAt,
+            String vehicleDescription, BigDecimal priceAmount, TicketCurrency currency, PaymentMethod paymentMethod,
+            boolean courtesy, String courtesyReason, TicketStatus status, String voidReason, Instant voidedAt,
             List<TicketAssignmentResponse> assignments, Instant createdAt, Instant updatedAt) {
         public static TicketResponse from(Ticket ticket) {
             return new TicketResponse(ticket.getId(), ticket.getBusinessDay().getId(), ticket.getShift().getId(),
                     ticket.getServiceType().getId(), ticket.getServiceType().getName(), ticket.getVehicleSize().getId(),
                     ticket.getVehicleSize().getName(), ticket.getDailySeq(), ticket.getNotaNumber(),
-                    ticket.getVehicleDescription(), ticket.getPriceAmount(), ticket.getCurrency(), ticket.isCourtesy(),
-                    ticket.getCourtesyReason(), ticket.getStatus(), ticket.getVoidReason(), ticket.getVoidedAt(),
+                    ticket.getVehicleDescription(), ticket.getPriceAmount(), ticket.getCurrency(),
+                    ticket.getPaymentMethod(), ticket.isCourtesy(), ticket.getCourtesyReason(), ticket.getStatus(),
+                    ticket.getVoidReason(), ticket.getVoidedAt(),
                     ticket.getAssignments().stream().map(TicketAssignmentResponse::from).toList(),
                     ticket.getCreatedAt(), ticket.getUpdatedAt());
         }

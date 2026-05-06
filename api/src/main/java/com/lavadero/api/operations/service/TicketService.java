@@ -10,6 +10,7 @@ import com.lavadero.api.catalog.service.ServiceTypeService;
 import com.lavadero.api.catalog.service.VehicleSizeService;
 import com.lavadero.api.operations.domain.BusinessDay;
 import com.lavadero.api.operations.domain.BusinessDayStatus;
+import com.lavadero.api.operations.domain.PaymentMethod;
 import com.lavadero.api.operations.domain.Shift;
 import com.lavadero.api.operations.domain.ShiftStatus;
 import com.lavadero.api.operations.domain.Ticket;
@@ -72,10 +73,12 @@ public class TicketService {
         BigDecimal priceAmount = resolvePrice(serviceType.getId(), vehicleSize.getId(), request.currency(), businessDay,
                 courtesy, request.courtesyReason());
 
+        PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
+                : (request.paymentMethod() != null ? request.paymentMethod() : PaymentMethod.CASH);
         int dailySeq = tickets.maxDailySeq(businessDay.getId()) + 1;
         String notaNumber = businessDay.getBusinessDate().format(NOTA_DATE) + "-" + String.format("%04d", dailySeq);
         Ticket ticket = new Ticket(businessDay, shift, serviceType, vehicleSize, dailySeq, notaNumber,
-                request.vehicleDescription(), priceAmount, request.currency(), courtesy, request.courtesyReason());
+                request.vehicleDescription(), priceAmount, request.currency(), paymentMethod, courtesy, request.courtesyReason());
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         return tickets.save(ticket);
     }
@@ -128,10 +131,12 @@ public class TicketService {
         String vehicleDescription = request.vehicleDescription() == null
                 ? ticket.getVehicleDescription()
                 : request.vehicleDescription();
+        PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
+                : (request.paymentMethod() != null ? request.paymentMethod() : ticket.getPaymentMethod());
 
         BigDecimal priceAmount = resolvePrice(serviceType.getId(), vehicleSize.getId(), currency, ticket.getBusinessDay(),
                 courtesy, courtesyReason);
-        ticket.update(serviceType, vehicleSize, vehicleDescription, priceAmount, currency, courtesy, courtesyReason);
+        ticket.update(serviceType, vehicleSize, vehicleDescription, priceAmount, currency, paymentMethod, courtesy, courtesyReason);
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }
