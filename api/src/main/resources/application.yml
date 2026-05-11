@@ -28,3 +28,12 @@ lavadero:
       username: ${LAVADERO_BOOTSTRAP_USERNAME:dueno}
       password: ${LAVADERO_BOOTSTRAP_PASSWORD:cambia-esto-123}
       full-name: ${LAVADERO_BOOTSTRAP_FULL_NAME:Dueno Lavadero}
+  ai:
+    enabled: ${LAVADERO_AI_ENABLED:true}
+    provider: ${LAVADERO_AI_PROVIDER:deterministic-local}
+    api-key: ${LAVADERO_AI_API_KEY:}
+    model: ${LAVADERO_AI_MODEL:local}
+    base-url: ${LAVADERO_AI_BASE_URL:}
+    timeout-seconds: ${LAVADERO_AI_TIMEOUT_SECONDS:20}
+    scheduler:
+      enabled: ${LAVADERO_AI_SCHEDULER_ENABLED:false}

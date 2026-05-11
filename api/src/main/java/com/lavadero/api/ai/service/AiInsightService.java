@@ -1,0 +1,400 @@
+package com.lavadero.api.ai.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lavadero.api.ai.domain.AiFeatureType;
+import com.lavadero.api.ai.domain.AiInsight;
+import com.lavadero.api.ai.domain.AiInsightSeverity;
+import com.lavadero.api.ai.domain.AiInsightStatus;
+import com.lavadero.api.ai.provider.AiProvider;
+import com.lavadero.api.ai.provider.AiRequest;
+import com.lavadero.api.ai.repository.AiInsightRepository;
+import com.lavadero.api.ai.web.AiDtos.AiInsightResponse;
+import com.lavadero.api.ai.web.AiDtos.AnalystChatResponse;
+import com.lavadero.api.ai.web.AiDtos.InvestigationResponse;
+import com.lavadero.api.inventory.service.InventoryService;
+import com.lavadero.api.inventory.web.InventoryDtos.InventorySnapshotResponse;
+import com.lavadero.api.inventory.web.InventoryDtos.ProductSnapshotResponse;
+import com.lavadero.api.reports.service.DailySummaryService;
+import com.lavadero.api.reports.web.DailySummaryDtos.CashVarianceResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.DailySummaryRangeResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.DailySummaryResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.EmployeePerformanceResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.HistoricalRangeResponse;
+import jakarta.persistence.EntityNotFoundException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class AiInsightService {
+    private static final BigDecimal ZERO = new BigDecimal("0.00");
+    private static final BigDecimal CASH_VARIANCE_THRESHOLD = new BigDecimal("100.00");
+    private static final BigDecimal LOW_INVENTORY_THRESHOLD = new BigDecimal("5.00");
+    private static final BigDecimal SPIKE_MULTIPLIER = new BigDecimal("1.50");
+    private static final BigDecimal DROP_MULTIPLIER = new BigDecimal("0.75");
+
+    private final AiInsightRepository insights;
+    private final DailySummaryService reports;
+    private final InventoryService inventory;
+    private final AiProvider aiProvider;
+    private final ObjectMapper objectMapper;
+
+    public AiInsightService(AiInsightRepository insights, DailySummaryService reports, InventoryService inventory,
+            AiProvider aiProvider, ObjectMapper objectMapper) {
+        this.insights = insights;
+        this.reports = reports;
+        this.inventory = inventory;
+        this.aiProvider = aiProvider;
+        this.objectMapper = objectMapper;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AiInsightResponse> list(AiFeatureType featureType, AiInsightStatus status,
+            LocalDate from, LocalDate to) {
+        List<AiInsight> result;
+        if (featureType != null && status != null && from != null && to != null) {
+            result = insights.findByFeatureTypeAndStatusAndSourceFromGreaterThanEqualAndSourceToLessThanEqualOrderByGeneratedAtDesc(
+                    featureType, status, from, to);
+        } else if (featureType != null && from != null && to != null) {
+            result = insights.findByFeatureTypeAndSourceFromGreaterThanEqualAndSourceToLessThanEqualOrderByGeneratedAtDesc(
+                    featureType, from, to);
+        } else if (status != null && from != null && to != null) {
+            result = insights.findByStatusAndSourceFromGreaterThanEqualAndSourceToLessThanEqualOrderByGeneratedAtDesc(
+                    status, from, to);
+        } else if (from != null && to != null) {
+            result = insights.findBySourceFromGreaterThanEqualAndSourceToLessThanEqualOrderByGeneratedAtDesc(from, to);
+        } else if (featureType != null && status != null) {
+            result = insights.findByFeatureTypeAndStatusOrderByGeneratedAtDesc(featureType, status);
+        } else if (featureType != null) {
+            result = insights.findByFeatureTypeOrderByGeneratedAtDesc(featureType);
+        } else if (status != null) {
+            result = insights.findByStatusOrderByGeneratedAtDesc(status);
+        } else {
+            result = insights.findAll().stream()
+                    .sorted(Comparator.comparing(AiInsight::getGeneratedAt).reversed())
+                    .toList();
+        }
+        return result.stream().map(this::response).toList();
+    }
+
+    @Transactional
+    public AiInsightResponse acknowledge(Long id) {
+        AiInsight insight = get(id);
+        insight.acknowledge();
+        return response(insight);
+    }
+
+    @Transactional
+    public AiInsightResponse dismiss(Long id) {
+        AiInsight insight = get(id);
+        insight.dismiss();
+        return response(insight);
+    }
+
+    @Transactional
+    public AiInsightResponse dailyBrief(LocalDate date, boolean force) {
+        if (!force) {
+            var existing = insights.findFirstByFeatureTypeAndSourceFromAndSourceToOrderByGeneratedAtDesc(
+                    AiFeatureType.DAILY_BRIEF, date, date);
+            if (existing.isPresent()) {
+                return response(existing.get());
+            }
+        }
+
+        DailySummaryResponse day = reports.get(date);
+        HistoricalRangeResponse history = safeHistorical(date.minusDays(30), date.minusDays(1));
+        EmployeePerformanceResponse performance = reports.employeePerformance(date, date);
+        InventorySnapshotResponse stock = inventory.snapshot(Instant.now());
+        BigDecimal avgCars = averageCars(history);
+        BigDecimal avgRevenue = averageRevenue(history);
+        List<String> bullets = new ArrayList<>();
+        bullets.add("Carros lavados: %d contra promedio reciente de %s.".formatted(
+                day.carsWashed(), number(avgCars)));
+        bullets.add("Ingresos de autos: %s contra promedio reciente de %s.".formatted(
+                money(day.ticketRevenue()), money(avgRevenue)));
+        bullets.add("Salidas registradas: %s; resultado del dia: %s.".formatted(
+                money(day.expensesTotal()), money(day.result())));
+        if (day.cashVariance() != null) {
+            bullets.add("Diferencia de caja acumulada: %s.".formatted(money(day.cashVariance())));
+        }
+        lowStock(stock).stream().limit(3)
+                .forEach(item -> bullets.add("Inventario bajo: %s con %s unidades.".formatted(
+                        item.product().name(), number(item.quantityOnHand()))));
+
+        String providerText = aiProvider.complete(new AiRequest(AiFeatureType.DAILY_BRIEF,
+                "Resume la operacion diaria para el dueno de un lavadero.",
+                String.join("\n", bullets)));
+        String title = "Brief del dueno - " + date;
+        String summary = title + "\n" + providerText + "\n- " + String.join("\n- ", bullets);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("carsWashed", day.carsWashed());
+        payload.put("ticketRevenue", day.ticketRevenue());
+        payload.put("expensesTotal", day.expensesTotal());
+        payload.put("result", day.result());
+        payload.put("cashVariance", day.cashVariance());
+        payload.put("topEmployees", performance.employees().stream().limit(3).toList());
+        payload.put("lowInventory", lowStock(stock).stream().limit(5).toList());
+        String details = details(payload);
+        return response(save(AiFeatureType.DAILY_BRIEF, AiInsightSeverity.INFO, title, summary, details, date, date));
+    }
+
+    @Transactional
+    public List<AiInsightResponse> runAlerts(LocalDate from, LocalDate to) {
+        validateRange(from, to);
+        List<AlertCandidate> candidates = alertCandidates(from, to);
+        List<AiInsightResponse> created = new ArrayList<>();
+        for (AlertCandidate candidate : candidates) {
+            if (insights.existsByFeatureTypeAndTitleAndSourceFromAndSourceTo(
+                    AiFeatureType.ANOMALY_ALERT, candidate.title, from, to)) {
+                continue;
+            }
+            String providerText = aiProvider.complete(new AiRequest(AiFeatureType.ANOMALY_ALERT,
+                    "Explica una alerta operativa para el dueno de un lavadero.",
+                    candidate.summary));
+            String summary = candidate.summary + "\n" + providerText;
+            created.add(response(save(AiFeatureType.ANOMALY_ALERT, candidate.severity, candidate.title,
+                    summary, details(candidate.details), from, to)));
+        }
+        return created;
+    }
+
+    @Transactional
+    public AnalystChatResponse chat(String message, LocalDate from, LocalDate to) {
+        validateRange(from, to);
+        DailySummaryRangeResponse range = reports.getRange(from, to);
+        CashVarianceResponse cash = reports.cashVariance(from, to);
+        EmployeePerformanceResponse performance = reports.employeePerformance(from, to);
+        List<String> numbers = supportNumbers(range, cash, performance);
+        String answer = answerFor(message, range, cash, performance);
+        String providerText = aiProvider.complete(new AiRequest(AiFeatureType.ANALYST_CHAT,
+                "Contesta como analista del negocio usando datos reales.",
+                message + "\n" + String.join("\n", numbers)));
+        String summary = answer + "\n" + providerText;
+        AiInsight insight = save(AiFeatureType.ANALYST_CHAT, AiInsightSeverity.INFO,
+                "Pregunta AI: " + shorten(message, 120), summary,
+                details(Map.of("question", message, "supportingNumbers", numbers)), from, to);
+        return new AnalystChatResponse(summary, numbers, from, to, List.of(
+                "Comparar contra el mes anterior",
+                "Revisar dias con diferencia de caja",
+                "Ver lavadores con mas carros acreditados"), response(insight));
+    }
+
+    @Transactional
+    public InvestigationResponse investigate(String question, LocalDate from, LocalDate to) {
+        validateRange(from, to);
+        DailySummaryRangeResponse range = reports.getRange(from, to);
+        HistoricalRangeResponse historical = reports.getHistorical(from, to);
+        CashVarianceResponse cash = reports.cashVariance(from, to);
+        EmployeePerformanceResponse performance = reports.employeePerformance(from, to);
+        InventorySnapshotResponse stock = inventory.snapshot(Instant.now());
+
+        List<String> steps = List.of(
+                "Consulte resumen diario del rango",
+                "Compare contra historico disponible",
+                "Revise diferencias de caja",
+                "Revise rendimiento de lavadores",
+                "Revise inventario actual");
+        List<String> evidence = new ArrayList<>(supportNumbers(range, cash, performance));
+        evidence.add("Historico del rango: %d dias, %d carros, %s ingresos.".formatted(
+                historical.totalDays(), historical.totalCars(), money(historical.totalRevenue())));
+        lowStock(stock).stream().limit(5)
+                .forEach(item -> evidence.add("Inventario bajo: %s (%s).".formatted(
+                        item.product().name(), number(item.quantityOnHand()))));
+        String confidence = range.days().isEmpty() ? "LOW" : historical.totalDays() > 0 ? "HIGH" : "MEDIUM";
+        String conclusion = "Investigacion: %s. Resultado del rango: %s con %d carros. Diferencia de caja: %s.".formatted(
+                question, money(range.result()), range.carsWashed(), money(cash.variance()));
+        String providerText = aiProvider.complete(new AiRequest(AiFeatureType.AGENT_INVESTIGATION,
+                "Investiga una pregunta de negocio usando herramientas internas.",
+                question + "\n" + String.join("\n", evidence)));
+        String summary = conclusion + "\n" + providerText;
+        AiInsight insight = save(AiFeatureType.AGENT_INVESTIGATION, AiInsightSeverity.INFO,
+                "Investigacion AI: " + shorten(question, 110), summary,
+                details(Map.of("question", question, "steps", steps, "evidence", evidence, "confidence", confidence)),
+                from, to);
+        return new InvestigationResponse(summary, evidence, steps, confidence, from, to, response(insight));
+    }
+
+    private List<AlertCandidate> alertCandidates(LocalDate from, LocalDate to) {
+        DailySummaryRangeResponse current = reports.getRange(from, to);
+        LocalDate previousFrom = from.minusDays(Math.max(7, ChronoUnit.DAYS.between(from, to) + 1L));
+        LocalDate previousTo = from.minusDays(1);
+        DailySummaryRangeResponse previous = reports.getRange(previousFrom, previousTo);
+        CashVarianceResponse cash = reports.cashVariance(from, to);
+        InventorySnapshotResponse stock = inventory.snapshot(Instant.now());
+        List<AlertCandidate> candidates = new ArrayList<>();
+
+        if (cash.variance() != null && cash.variance().abs().compareTo(CASH_VARIANCE_THRESHOLD) >= 0) {
+            candidates.add(new AlertCandidate(AiInsightSeverity.WARNING, "Diferencia de caja relevante",
+                    "La diferencia acumulada de caja fue %s entre %s y %s.".formatted(
+                            money(cash.variance()), from, to), Map.of("variance", cash.variance())));
+        }
+        BigDecimal previousExpenses = previous.expensesTotal().compareTo(ZERO) == 0 ? ZERO : previous.expensesTotal();
+        if (previousExpenses.compareTo(ZERO) > 0
+                && current.expensesTotal().compareTo(previousExpenses.multiply(SPIKE_MULTIPLIER)) > 0) {
+            candidates.add(new AlertCandidate(AiInsightSeverity.WARNING, "Gastos arriba de lo normal",
+                    "Las salidas subieron a %s contra %s del periodo anterior.".formatted(
+                            money(current.expensesTotal()), money(previousExpenses)),
+                    Map.of("currentExpenses", current.expensesTotal(), "previousExpenses", previousExpenses)));
+        }
+        if (previous.ticketRevenue().compareTo(ZERO) > 0
+                && current.ticketRevenue().compareTo(previous.ticketRevenue().multiply(DROP_MULTIPLIER)) < 0) {
+            candidates.add(new AlertCandidate(AiInsightSeverity.CRITICAL, "Ingresos por debajo del promedio",
+                    "Los ingresos bajaron a %s contra %s del periodo anterior.".formatted(
+                            money(current.ticketRevenue()), money(previous.ticketRevenue())),
+                    Map.of("currentRevenue", current.ticketRevenue(), "previousRevenue", previous.ticketRevenue())));
+        }
+        if (previous.carsWashed() > 0 && current.carsWashed() < Math.round(previous.carsWashed() * 0.75)) {
+            candidates.add(new AlertCandidate(AiInsightSeverity.WARNING, "Menos carros lavados",
+                    "Se lavaron %d carros contra %d del periodo anterior.".formatted(
+                            current.carsWashed(), previous.carsWashed()),
+                    Map.of("currentCars", current.carsWashed(), "previousCars", previous.carsWashed())));
+        }
+        if (current.courtesyCount() >= 5 || current.voidedCount() >= 3) {
+            candidates.add(new AlertCandidate(AiInsightSeverity.WARNING, "Cortesias o cancelaciones elevadas",
+                    "Hubo %d cortesias y %d tickets cancelados en el rango.".formatted(
+                            current.courtesyCount(), current.voidedCount()),
+                    Map.of("courtesyCount", current.courtesyCount(), "voidedCount", current.voidedCount())));
+        }
+        for (ProductSnapshotResponse item : lowStock(stock)) {
+            candidates.add(new AlertCandidate(AiInsightSeverity.INFO, "Inventario bajo: " + item.product().name(),
+                    "%s esta en %s unidades disponibles.".formatted(
+                            item.product().name(), number(item.quantityOnHand())),
+                    Map.of("productId", item.product().id(), "quantityOnHand", item.quantityOnHand())));
+        }
+        return candidates;
+    }
+
+    private List<ProductSnapshotResponse> lowStock(InventorySnapshotResponse stock) {
+        return stock.products().stream()
+                .filter(item -> item.product().trackInventory())
+                .filter(item -> item.quantityOnHand().compareTo(LOW_INVENTORY_THRESHOLD) <= 0)
+                .sorted(Comparator.comparing(ProductSnapshotResponse::quantityOnHand))
+                .toList();
+    }
+
+    private List<String> supportNumbers(DailySummaryRangeResponse range, CashVarianceResponse cash,
+            EmployeePerformanceResponse performance) {
+        List<String> numbers = new ArrayList<>();
+        numbers.add("Rango %s a %s: %d carros, %s ingresos, %s salidas, %s resultado.".formatted(
+                range.from(), range.to(), range.carsWashed(), money(range.ticketRevenue()),
+                money(range.expensesTotal()), money(range.result())));
+        numbers.add("Caja: esperado %s, contado %s, diferencia %s.".formatted(
+                money(cash.expectedCash()), money(cash.totalCounted()), money(cash.variance())));
+        performance.employees().stream().findFirst().ifPresent(employee -> numbers.add(
+                "Lavador lider: %s con %s carros acreditados y %d tickets.".formatted(
+                        employee.employeeName(), number(employee.carsWashed()), employee.ticketCount())));
+        return numbers;
+    }
+
+    private String answerFor(String message, DailySummaryRangeResponse range, CashVarianceResponse cash,
+            EmployeePerformanceResponse performance) {
+        String lower = message.toLowerCase();
+        if (lower.contains("lavador") || lower.contains("empleado")) {
+            return performance.employees().stream().findFirst()
+                    .map(employee -> "%s lidera el rango con %s carros acreditados y %s de ingreso referencia.".formatted(
+                            employee.employeeName(), number(employee.carsWashed()), money(employee.ticketRevenue())))
+                    .orElse("No hay lavadores con tickets activos en el rango.");
+        }
+        if (lower.contains("caja") || lower.contains("diferencia")) {
+            return "La diferencia de caja del rango es %s. Revisa los cortes con mayor variacion antes de cerrar conclusiones."
+                    .formatted(money(cash.variance()));
+        }
+        if (lower.contains("bajo") || lower.contains("menos") || lower.contains("why")) {
+            return "El rango tuvo %d carros y %s de ingresos. La primera revision debe comparar carros, gastos y diferencia de caja."
+                    .formatted(range.carsWashed(), money(range.ticketRevenue()));
+        }
+        return "En el rango seleccionado hubo %d carros, %s de ingresos, %s de salidas y %s de resultado."
+                .formatted(range.carsWashed(), money(range.ticketRevenue()), money(range.expensesTotal()),
+                        money(range.result()));
+    }
+
+    private HistoricalRangeResponse safeHistorical(LocalDate from, LocalDate to) {
+        if (to.isBefore(from)) {
+            return new HistoricalRangeResponse(from, to, 0, 0, ZERO, ZERO, ZERO, List.of());
+        }
+        return reports.getHistorical(from, to);
+    }
+
+    private AiInsight save(AiFeatureType featureType, AiInsightSeverity severity, String title, String summary,
+            String detailsJson, LocalDate sourceFrom, LocalDate sourceTo) {
+        return insights.save(new AiInsight(featureType, severity, shorten(title, 160), summary,
+                detailsJson, sourceFrom, sourceTo, aiProvider.name()));
+    }
+
+    private AiInsight get(Long id) {
+        return insights.findById(id).orElseThrow(() -> new EntityNotFoundException("AI insight not found"));
+    }
+
+    private AiInsightResponse response(AiInsight insight) {
+        return AiInsightResponse.from(insight, readDetails(insight.getDetailsJson()));
+    }
+
+    private JsonNode readDetails(String detailsJson) {
+        try {
+            return objectMapper.readTree(detailsJson);
+        } catch (JsonProcessingException ex) {
+            return objectMapper.createObjectNode();
+        }
+    }
+
+    private String details(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Could not serialize AI details", ex);
+        }
+    }
+
+    private void validateRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("from and to are required");
+        }
+        if (to.isBefore(from)) {
+            throw new IllegalArgumentException("Date range is invalid");
+        }
+    }
+
+    private BigDecimal averageCars(HistoricalRangeResponse history) {
+        if (history.totalDays() == 0) {
+            return ZERO;
+        }
+        return BigDecimal.valueOf(history.totalCars()).divide(BigDecimal.valueOf(history.totalDays()), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal averageRevenue(HistoricalRangeResponse history) {
+        if (history.totalDays() == 0) {
+            return ZERO;
+        }
+        return history.totalRevenue().divide(BigDecimal.valueOf(history.totalDays()), 2, RoundingMode.HALF_UP);
+    }
+
+    private String money(BigDecimal value) {
+        BigDecimal safe = value == null ? ZERO : value;
+        return "$" + safe.setScale(2, RoundingMode.HALF_UP) + " MXN";
+    }
+
+    private String number(BigDecimal value) {
+        return (value == null ? ZERO : value).setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String shorten(String value, int max) {
+        if (value == null || value.length() <= max) {
+            return value;
+        }
+        return value.substring(0, max - 3) + "...";
+    }
+
+    private record AlertCandidate(AiInsightSeverity severity, String title, String summary, Map<String, Object> details) {
+    }
+}

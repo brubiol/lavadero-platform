@@ -348,6 +348,46 @@ type HistoricalRangeResponse = {
   days: HistoricalSnapshotRow[]
 }
 
+type AiFeatureType = 'DAILY_BRIEF' | 'ANOMALY_ALERT' | 'MONTHLY_ADVISOR' | 'ANALYST_CHAT' | 'AGENT_INVESTIGATION'
+type AiSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
+type AiInsightStatus = 'NEW' | 'ACKNOWLEDGED' | 'DISMISSED'
+type InvestigationConfidence = 'LOW' | 'MEDIUM' | 'HIGH'
+
+type AiInsight = {
+  id: number
+  featureType: AiFeatureType
+  severity: AiSeverity
+  title: string
+  summary: string
+  details: Record<string, unknown> | null
+  sourceFrom: string
+  sourceTo: string
+  status: AiInsightStatus
+  generatedBy: string
+  generatedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+type AnalystChatResponse = {
+  answer: string
+  supportingNumbers: string[]
+  sourceFrom: string
+  sourceTo: string
+  suggestedFollowUps: string[]
+  insight: AiInsight
+}
+
+type InvestigationResponse = {
+  conclusion: string
+  evidence: string[]
+  steps: string[]
+  confidence: InvestigationConfidence
+  sourceFrom: string
+  sourceTo: string
+  insight: AiInsight
+}
+
 type MonthAggregate = {
   month: string
   cars: number
@@ -560,6 +600,18 @@ const inventoryAdjustmentSchema = z.object({
 })
 
 type InventoryAdjustmentFormValues = z.infer<typeof inventoryAdjustmentSchema>
+
+const analystChatSchema = z.object({
+  message: z.string().min(1, 'Escribe una pregunta').max(500, 'Maximo 500 caracteres'),
+})
+
+type AnalystChatFormValues = z.infer<typeof analystChatSchema>
+
+const investigationSchema = z.object({
+  question: z.string().min(1, 'Escribe que investigar').max(500, 'Maximo 500 caracteres'),
+})
+
+type InvestigationFormValues = z.infer<typeof investigationSchema>
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -1109,6 +1161,9 @@ function DayStatusCard() {
 }
 
 function Dashboard() {
+  const { hasRole } = useAuth()
+  const queryClient = useQueryClient()
+  const canSeeAi = hasRole('DUENO')
   const [date, setDate] = useState(today)
   const summary = useQuery({
     queryKey: ['daily-summary', date],
@@ -1118,6 +1173,22 @@ function Dashboard() {
   const monthHist = useQuery({
     queryKey: ['historical-month', monthStart],
     queryFn: () => api<HistoricalRangeResponse>(`/api/v1/reports/historical?from=${monthStart}&to=${today}`),
+  })
+  const aiBrief = useQuery({
+    queryKey: ['ai-daily-brief', date],
+    enabled: canSeeAi,
+    queryFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}`, { method: 'POST' }),
+  })
+  const aiInsights = useQuery({
+    queryKey: ['ai-insights', 'dashboard', date],
+    enabled: canSeeAi,
+    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?status=NEW&from=${date}&to=${date}`),
+  })
+  const runAlerts = useMutation({
+    mutationFn: () => api<AiInsight[]>(`/api/v1/ai/alerts/run?from=${date}&to=${date}`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
   })
 
   const data = summary.data
@@ -1136,6 +1207,18 @@ function Dashboard() {
       </div>
 
       <DayStatusCard />
+
+      {canSeeAi && (
+        <AiInsightsPanel
+          date={date}
+          brief={aiBrief.data}
+          insights={aiInsights.data ?? []}
+          loading={aiBrief.isLoading || aiInsights.isLoading}
+          error={aiBrief.error?.message || aiInsights.error?.message || runAlerts.error?.message}
+          onRunAlerts={() => runAlerts.mutate()}
+          runningAlerts={runAlerts.isPending}
+        />
+      )}
 
       {monthHist.data && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -2274,6 +2357,8 @@ function ReportsScreen() {
         <Metric label="Cortesias" value={String(range?.courtesyCount ?? '...')} />
         <Metric label="Anulados" value={String(range?.voidedCount ?? '...')} />
       </div>
+
+      <AiAnalystSection from={from} to={to} />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
@@ -3426,6 +3511,282 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
   )
 }
 
+function AiInsightsPanel({
+  date,
+  brief,
+  insights,
+  loading,
+  error,
+  onRunAlerts,
+  runningAlerts,
+}: {
+  date: string
+  brief?: AiInsight
+  insights: AiInsight[]
+  loading: boolean
+  error?: string
+  onRunAlerts: () => void
+  runningAlerts: boolean
+}) {
+  const alerts = insights.filter((insight) => insight.featureType === 'ANOMALY_ALERT')
+  const otherInsights = insights.filter((insight) => insight.featureType !== 'ANOMALY_ALERT' && insight.id !== brief?.id)
+
+  return (
+    <Panel title="AI Insights">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Resumen del dueno para {date}</p>
+          <p className="text-sm text-gray-500">Brief diario, alertas y pendientes generados desde reportes reales.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRunAlerts}
+          disabled={runningAlerts}
+          className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition-all hover:bg-sky-100 active:scale-[0.98] disabled:opacity-60"
+        >
+          {runningAlerts ? 'Revisando...' : 'Correr watchdog'}
+        </button>
+      </div>
+      {error && <ErrorMessage message={error} />}
+      {loading && <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Cargando insights...</p>}
+      {brief && <AiInsightCard insight={brief} compact={false} />}
+      {alerts.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Alertas nuevas</p>
+          {alerts.map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
+        </div>
+      )}
+      {!loading && !brief && alerts.length === 0 && (
+        <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Sin insights nuevos para esta fecha.</p>
+      )}
+      {otherInsights.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Otros pendientes</p>
+          {otherInsights.slice(0, 3).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function AiAnalystSection({ from, to }: { from: string; to: string }) {
+  const queryClient = useQueryClient()
+  const chatForm = useForm<AnalystChatFormValues>({
+    resolver: zodResolver(analystChatSchema),
+    defaultValues: { message: '' },
+  })
+  const investigationForm = useForm<InvestigationFormValues>({
+    resolver: zodResolver(investigationSchema),
+    defaultValues: { question: '' },
+  })
+  const chat = useMutation({
+    mutationFn: (values: AnalystChatFormValues) => api<AnalystChatResponse>('/api/v1/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: values.message, from, to }),
+    }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
+  })
+  const investigation = useMutation({
+    mutationFn: (values: InvestigationFormValues) => api<InvestigationResponse>('/api/v1/ai/investigations', {
+      method: 'POST',
+      body: JSON.stringify({ question: values.question, from, to }),
+    }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
+  })
+  const history = useQuery({
+    queryKey: ['ai-insights', 'reports', from, to],
+    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?from=${from}&to=${to}`),
+  })
+  const aiRows = history.data ?? []
+
+  return (
+    <Panel title="AI Analyst">
+      <div className="grid gap-5 xl:grid-cols-2">
+        <form className="space-y-4" onSubmit={chatForm.handleSubmit((values) => chat.mutate(values))}>
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">Chat de negocio</h4>
+            <p className="text-sm text-gray-500">Pregunta sobre ventas, lavadores, cortes o comparativos del rango actual.</p>
+          </div>
+          <TextField label="Pregunta" error={chatForm.formState.errors.message?.message}>
+            <textarea rows={4} placeholder="Ej. Por que esta semana estuvo mas baja?" {...chatForm.register('message')} />
+          </TextField>
+          {chat.error && <ErrorMessage message={chat.error.message} />}
+          <button
+            type="submit"
+            disabled={chat.isPending}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-slate-800 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+          >
+            {chat.isPending ? 'Analizando...' : 'Preguntar'}
+          </button>
+          {chat.data && (
+            <div className="rounded-xl border border-sky-100 bg-sky-50 p-4">
+              <p className="text-sm font-semibold text-sky-950">{chat.data.answer}</p>
+              <AiEvidenceList title="Numeros usados" rows={chat.data.supportingNumbers} />
+              <div className="mt-3 flex flex-wrap gap-2">
+                {chat.data.suggestedFollowUps.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => chatForm.setValue('message', question)}
+                    className="rounded-full bg-white px-3 py-1 text-xs font-medium text-sky-700 ring-1 ring-sky-100 hover:bg-sky-50"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </form>
+
+        <form className="space-y-4" onSubmit={investigationForm.handleSubmit((values) => investigation.mutate(values))}>
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">Investigacion con agente</h4>
+            <p className="text-sm text-gray-500">Ejecuta pasos trazables con resumen diario, historial, caja, lavadores e inventario.</p>
+          </div>
+          <TextField label="Pregunta a investigar" error={investigationForm.formState.errors.question?.message}>
+            <textarea rows={4} placeholder="Ej. Que explica la diferencia de efectivo de este rango?" {...investigationForm.register('question')} />
+          </TextField>
+          {investigation.error && <ErrorMessage message={investigation.error.message} />}
+          <button
+            type="submit"
+            disabled={investigation.isPending}
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+          >
+            {investigation.isPending ? 'Investigando...' : 'Investigar'}
+          </button>
+          {investigation.data && (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-emerald-950">{investigation.data.conclusion}</p>
+                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                  Confianza {confidenceLabel(investigation.data.confidence)}
+                </span>
+              </div>
+              <AiEvidenceList title="Evidencia" rows={investigation.data.evidence} />
+              <AiEvidenceList title="Pasos" rows={investigation.data.steps} ordered />
+            </div>
+          )}
+        </form>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Historial del rango</p>
+          <span className="text-xs text-gray-400">{from} a {to}</span>
+        </div>
+        {history.error && <ErrorMessage message={history.error.message} />}
+        {history.isLoading && <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Cargando historial...</p>}
+        {!history.isLoading && aiRows.length === 0 && (
+          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Sin historial de AI para este rango.</p>
+        )}
+        {aiRows.slice(0, 5).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
+      </div>
+    </Panel>
+  )
+}
+
+function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: boolean }) {
+  const queryClient = useQueryClient()
+  const acknowledge = useMutation({
+    mutationFn: () => api<AiInsight>(`/api/v1/ai/insights/${insight.id}/acknowledge`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
+  })
+  const dismiss = useMutation({
+    mutationFn: () => api<AiInsight>(`/api/v1/ai/insights/${insight.id}/dismiss`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
+  })
+
+  return (
+    <article className={`rounded-xl border p-4 ${aiSeverityClass(insight.severity)}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-semibold ring-1 ring-black/5">
+              {featureLabel(insight.featureType)}
+            </span>
+            <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-semibold ring-1 ring-black/5">
+              {severityLabel(insight.severity)}
+            </span>
+            <span className="text-xs text-gray-500">{insight.sourceFrom} a {insight.sourceTo}</span>
+          </div>
+          <h4 className="mt-2 text-sm font-bold text-gray-950">{insight.title}</h4>
+          <p className={`mt-1 text-sm text-gray-700 ${compact ? 'line-clamp-3' : ''}`}>{insight.summary}</p>
+          {!compact && <AiDetailRows details={insight.details} />}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {insight.status === 'NEW' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => acknowledge.mutate()}
+                disabled={acknowledge.isPending || dismiss.isPending}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                Revisado
+              </button>
+              <button
+                type="button"
+                onClick={() => dismiss.mutate()}
+                disabled={acknowledge.isPending || dismiss.isPending}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-60"
+              >
+                Descartar
+              </button>
+            </>
+          ) : (
+            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-500 ring-1 ring-gray-100">
+              {statusLabel(insight.status)}
+            </span>
+          )}
+        </div>
+      </div>
+      {(acknowledge.error || dismiss.error) && (
+        <p className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{(acknowledge.error || dismiss.error)!.message}</p>
+      )}
+    </article>
+  )
+}
+
+function AiEvidenceList({ title, rows, ordered = false }: { title: string; rows: string[]; ordered?: boolean }) {
+  if (rows.length === 0) return null
+  const Tag = ordered ? 'ol' : 'ul'
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
+      <Tag className={`mt-1 space-y-1 text-sm text-gray-700 ${ordered ? 'list-decimal pl-5' : 'list-disc pl-5'}`}>
+        {rows.map((row) => <li key={row}>{row}</li>)}
+      </Tag>
+    </div>
+  )
+}
+
+function AiDetailRows({ details }: { details: Record<string, unknown> | null }) {
+  if (!details) return null
+  const rows = Object.entries(details)
+    .filter(([, value]) => value !== null && value !== undefined)
+    .slice(0, 8)
+  if (rows.length === 0) return null
+
+  return (
+    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      {rows.map(([key, value]) => (
+        <div key={key} className="rounded-lg bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5">
+          <span className="block font-semibold uppercase tracking-wide text-gray-400">{key}</span>
+          <span className="mt-1 block break-words text-gray-700">{formatAiDetailValue(value)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function ErrorMessage({ message }: { message: string }) {
   return <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{message}</p>
 }
@@ -3584,6 +3945,69 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+async function invalidateAi(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['ai-insights'] }),
+    queryClient.invalidateQueries({ queryKey: ['ai-daily-brief'] }),
+  ])
+}
+
+function featureLabel(feature: AiFeatureType) {
+  const labels: Record<AiFeatureType, string> = {
+    DAILY_BRIEF: 'Brief diario',
+    ANOMALY_ALERT: 'Alerta',
+    MONTHLY_ADVISOR: 'Consejo mensual',
+    ANALYST_CHAT: 'Chat',
+    AGENT_INVESTIGATION: 'Investigacion',
+  }
+  return labels[feature]
+}
+
+function severityLabel(severity: AiSeverity) {
+  const labels: Record<AiSeverity, string> = {
+    INFO: 'Info',
+    WARNING: 'Atencion',
+    CRITICAL: 'Critico',
+  }
+  return labels[severity]
+}
+
+function statusLabel(status: AiInsightStatus) {
+  const labels: Record<AiInsightStatus, string> = {
+    NEW: 'Nuevo',
+    ACKNOWLEDGED: 'Revisado',
+    DISMISSED: 'Descartado',
+  }
+  return labels[status]
+}
+
+function confidenceLabel(confidence: InvestigationConfidence) {
+  const labels: Record<InvestigationConfidence, string> = {
+    LOW: 'baja',
+    MEDIUM: 'media',
+    HIGH: 'alta',
+  }
+  return labels[confidence]
+}
+
+function aiSeverityClass(severity: AiSeverity) {
+  const classes: Record<AiSeverity, string> = {
+    INFO: 'border-sky-100 bg-sky-50',
+    WARNING: 'border-amber-100 bg-amber-50',
+    CRITICAL: 'border-red-100 bg-red-50',
+  }
+  return classes[severity]
+}
+
+function formatAiDetailValue(value: unknown): string {
+  if (typeof value === 'number') return Number(value).toLocaleString('es-MX', { maximumFractionDigits: 2 })
+  if (typeof value === 'string') return value
+  if (typeof value === 'boolean') return value ? 'Si' : 'No'
+  if (Array.isArray(value)) return value.map(formatAiDetailValue).join(', ')
+  if (value && typeof value === 'object') return JSON.stringify(value)
+  return String(value ?? '')
 }
 
 function TicketStatusPill({ ticket }: { ticket: Ticket }) {
