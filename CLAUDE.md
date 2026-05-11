@@ -29,6 +29,7 @@ lavadero-api/
 │   ├── Dockerfile                   ← multi-stage: maven builder → jre-alpine runtime
 │   ├── pom.xml
 │   └── src/main/java/com/lavadero/api/
+│       ├── ai/                      ← owner AI insights, provider abstraction, alerts/chat/investigation
 │       ├── auth/                    ← login, refresh, logout, bootstrap user
 │       ├── cash/                    ← cash counts, shift close summaries
 │       ├── catalog/                 ← employees, service types, vehicle sizes, service prices
@@ -41,18 +42,18 @@ lavadero-api/
 │       ├── payroll/                 ← payroll periods, entries, days, debt ledger
 │       ├── reports/                 ← daily/monthly summaries, cash variance, employee perf, exports
 │       ├── security/                ← SecurityConfig, JwtAuthFilter
-│       └── ApiApplication.java
+│       └── LavaderoApiApplication.java
 │   └── src/main/resources/
 │       ├── application.yml          ← base config
 │       ├── application-local.yml    ← local dev (connects to localhost:5432)
 │       ├── application-docker.yml   ← used inside Docker (connects to postgres:5432)
 │       ├── application-test.yml     ← Testcontainers
-│       └── db/migration/            ← Flyway V1–V11
-└── web/                             ← React 18 + TypeScript + Vite + Tailwind CSS
+│       └── db/migration/            ← Flyway V1–V15
+└── web/                             ← React 19 + TypeScript + Vite + Tailwind CSS
     ├── Dockerfile                   ← multi-stage: node builder → nginx runtime
     ├── nginx.conf                   ← proxies /api/ → api:8080, SPA fallback
     ├── src/
-    │   ├── App.tsx                  ← entire frontend in one file (~3,400 lines)
+    │   ├── App.tsx                  ← app shell and screens, including DUENO-only /ai route
     │   ├── main.tsx
     │   └── styles.css
     └── public/logo.png
@@ -70,13 +71,14 @@ lavadero-api/
 | Web | Spring Web MVC |
 | Security | Spring Security 6 + OAuth2 Resource Server (JWT via `spring-security-oauth2-jose`) |
 | Persistence | Spring Data JPA + PostgreSQL 16 |
-| Migrations | Flyway (forward-only, V1–V11) |
+| Migrations | Flyway (forward-only, V1–V15) |
 | Validation | Bean Validation (`@NotNull`, `@Size`, etc.) |
 | API docs | Springdoc OpenAPI (`/v3/api-docs`, `/swagger-ui.html`) |
 | Excel | Apache POI 5.3 |
 | Tests | JUnit 5 + Testcontainers + Spring Boot Test (no H2) |
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS (raw, no shadcn/ui) |
+| Frontend | React 19 + TypeScript + Vite + Tailwind CSS (raw, no shadcn/ui) |
 | State | TanStack Query v5 + React Hook Form + Zod |
+| AI | OpenAI-compatible provider + deterministic local fallback; advisory `ai_insights` only |
 | Dev infra | Docker Compose (postgres + api + web) |
 | Prod infra | AWS EC2 t3.micro + RDS db.t3.micro PostgreSQL 16 |
 | CI/CD | GitHub Actions → GHCR images → SSH deploy to EC2 |
@@ -135,6 +137,8 @@ Always run `./mvnw verify` before calling a task done. Fix failing tests — nev
 - **RBAC with `@PreAuthorize`.** Three roles: `OPERADOR < GERENTE < DUENO` (hierarchical — DUENO has all GERENTE permissions).
 - **Prices are server-resolved.** Ticket price comes from `service_prices` (effective-dated) and is snapshotted into the ticket row. Never trust a client-supplied price.
 - **Money is `BigDecimal`, never `double`.** Currency stored as a separate enum column alongside every amount.
+- **AI is advisory only.** AI may create `ai_insights` rows and update their review status; it must never create or mutate tickets, expenses, payroll, inventory movements, prices, users, or other source-of-truth records.
+- **AI uses bounded services.** AI services consume report, cash, payroll, inventory, and historical data services instead of ad hoc table queries.
 - **Timestamps are `TIMESTAMPTZ` in SQL, `Instant` in Java, UTC throughout.** UI converts to `America/Monterrey` at the edge.
 - **Test names:** `should_{behavior}_when_{condition}`. Example: `should_return_404_when_ticket_not_found`.
 - **Language rule:** Spanish for UI copy; English for all code identifiers, comments, log messages, exception messages, enum values.
@@ -168,6 +172,26 @@ Spring Security 6 OAuth2 Resource Server with a symmetric HMAC-SHA256 JWT.
 
 ---
 
+## AI configuration
+
+AI is DUENO-only and exposed under `/api/v1/ai/**` plus the `/ai` frontend route.
+
+Production env vars:
+
+```bash
+LAVADERO_AI_ENABLED=true
+LAVADERO_AI_PROVIDER=openai-compatible
+LAVADERO_AI_BASE_URL=https://api.openai.com/v1
+LAVADERO_AI_API_KEY=<real key stored only in prod secrets>
+LAVADERO_AI_MODEL=gpt-4.1-mini
+LAVADERO_AI_TIMEOUT_SECONDS=20
+LAVADERO_AI_SCHEDULER_ENABLED=false
+```
+
+Never commit or paste a real API key into source, docs, frontend code, or logs. Without `LAVADERO_AI_API_KEY`, the deterministic fallback provider keeps tests and local UI behavior stable.
+
+---
+
 ## Flyway migrations
 
 | Version | Description |
@@ -183,8 +207,12 @@ Spring Security 6 OAuth2 Resource Server with a symmetric HMAC-SHA256 JWT.
 | V9 | Payment method |
 | V10 | historical_daily_snapshots table |
 | V11 | Seed: 2025 + Jan–May 2026 historical daily data (493 rows) |
+| V12 | Seed: Jan–May 2026 operational tickets, gastos, cortes, nomina |
+| V13 | Catalog setup |
+| V14 | Handoff-ready catalog and inventory defaults |
+| V15 | AI insights table, enums, indexes |
 
-Next migration: `V12__...`
+Next migration: `V16__...`
 
 ---
 
@@ -201,13 +229,14 @@ Everything in v1 is implemented and working.
 - ✅ Inventory: products, product movements (append-only stock derivation)
 - ✅ Payroll: periods, entries, days, debt ledger
 - ✅ Reports: daily/monthly summary, cash variance, employee performance, Excel export
-- ✅ Historical data seeded (V11): 2025 full year + 2026 Jan 1–May 8
-- ✅ Frontend: all 9 routes, all screens, all modals, role-gated nav
+- ✅ AI: DUENO-only command center, daily brief, watchdog alerts, analyst chat, agent investigations, `ai_insights` audit trail
+- ✅ Historical/operational data seeded (V11–V14): 2025 full year + 2026 Jan–May operational handoff data
+- ✅ Frontend: all 10 routes, all screens, all modals, role-gated nav
 - ✅ Docker multi-stage builds (api + web)
 - ✅ Docker Compose: local dev (full stack) + production (RDS-backed)
 - ✅ GitHub Actions CI/CD: test → GHCR build → SSH deploy
 - ✅ AWS provisioning scripts (EC2 + RDS)
-- ✅ Integration tests: Phase1–Phase10 + ExcelOperationFlows (Testcontainers)
+- ✅ Integration tests: Phase1–Phase11 + ExcelOperationFlows (Testcontainers)
 - ⬜ Custom domain + TLS (Nginx reverse proxy or ACM)
 - ⬜ Prometheus + Grafana (v2)
 - ⬜ Kafka + outbox pattern (v2)

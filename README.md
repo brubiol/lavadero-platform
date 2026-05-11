@@ -56,7 +56,7 @@ Abre el navegador en: **http://localhost:5173**
 
 | Rol | Que puede hacer |
 |-----|----------------|
-| **DUENO** | Todo — incluyendo reportes y exportacion Excel |
+| **DUENO** | Todo — incluyendo reportes, exportacion Excel y AI Command Center |
 | **GERENTE** | Tickets, gastos, corte, nomina, inventario, catalogos |
 | **OPERADOR** | Crear tickets y ver operacion del dia |
 
@@ -188,6 +188,25 @@ Haz clic en **Descargar Excel** para exportar todo en un archivo `.xlsx` con 8 h
 
 ---
 
+### 8. AI Command Center
+
+Ve a **AI** (requiere DUENO).
+
+El modulo de AI es solo asesor. Puede crear y actualizar registros de `ai_insights`, pero nunca crea ni modifica tickets, gastos, nomina, movimientos de inventario, precios, usuarios ni otros registros financieros fuente.
+
+Incluye cuatro flujos:
+
+| Flujo | Para que sirve |
+|-------|----------------|
+| **Brief del dia** | Resumen practico en espanol de ventas, caja, lavadores, inventario, riesgos y acciones del dueno. |
+| **Watchdog de alertas** | Detecta diferencias de caja, gastos atipicos, bajas de ingresos, cortesias/voids altos e inventario bajo. |
+| **Analista AI** | Chat de negocio para preguntar por rangos, comparativos, lavadores, cortes y dias sospechosos. |
+| **Investigacion con agente** | Ejecuta una investigacion trazable con evidencia, pasos realizados y nivel de confianza. |
+
+El historial de insights permite marcar cada resultado como **Revisado** o **Descartado**.
+
+---
+
 ## Configuracion inicial (primera vez)
 
 La base ya se entrega con datos importados de Excel:
@@ -243,6 +262,7 @@ lavadero-api/
 | Base de datos | PostgreSQL 16, Flyway |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS |
 | Auth | JWT + refresh tokens opacos, BCrypt |
+| AI | Proveedor OpenAI-compatible + fallback local deterministico |
 | Testing | Testcontainers + MockMvc |
 | Exportacion | Apache POI (Excel) |
 
@@ -267,4 +287,15 @@ LAVADERO_BOOTSTRAP_USERNAME=<tu usuario>
 LAVADERO_BOOTSTRAP_PASSWORD=<tu contrasena segura>
 LAVADERO_BOOTSTRAP_FULL_NAME=<tu nombre>
 SPRING_PROFILES_ACTIVE=local
+
+# AI opcional para produccion
+LAVADERO_AI_ENABLED=true
+LAVADERO_AI_PROVIDER=openai-compatible
+LAVADERO_AI_BASE_URL=https://api.openai.com/v1
+LAVADERO_AI_API_KEY=<tu OpenAI API key>
+LAVADERO_AI_MODEL=gpt-4.1-mini
+LAVADERO_AI_TIMEOUT_SECONDS=20
+LAVADERO_AI_SCHEDULER_ENABLED=false
 ```
+
+Si no configuras `LAVADERO_AI_API_KEY`, el sistema usa el proveedor local deterministico para que la pantalla siga funcionando sin romper el dashboard. Nunca subas una API key real al repo ni la pegues en codigo frontend.

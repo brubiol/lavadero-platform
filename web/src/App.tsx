@@ -1316,52 +1316,67 @@ function AiScreen() {
     queryKey: ['ai-insights', 'dashboard', date],
     queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?status=NEW&from=${date}&to=${date}`),
   })
+  const history = useQuery({
+    queryKey: ['ai-insights', 'command-center', from, to],
+    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?from=${from}&to=${to}`),
+  })
+  const refreshBrief = useMutation({
+    mutationFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}&force=true`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
+  })
   const runAlerts = useMutation({
     mutationFn: () => api<AiInsight[]>(`/api/v1/ai/alerts/run?from=${date}&to=${date}`, { method: 'POST' }),
     onSuccess: async () => {
       await invalidateAi(queryClient)
     },
   })
+  const alerts = (aiInsights.data ?? []).filter((insight) => insight.featureType === 'ANOMALY_ALERT')
+  const historyRows = history.data ?? []
 
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold">AI</h2>
-          <p className="text-sm text-gray-500">Briefs, alertas, chat analista e investigaciones con evidencia.</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Dueno</p>
+          <h2 className="mt-1 text-2xl font-bold text-slate-950">AI Command Center</h2>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario.
+          </p>
         </div>
+        <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
+          Asesor operativo
+        </span>
       </div>
 
-      <Panel title="Controles AI">
-        <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
-          <TextField label="Fecha para brief y watchdog">
-            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          </TextField>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Desde para analista">
-              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-            </TextField>
-            <TextField label="Hasta para analista">
-              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-            </TextField>
-          </div>
-        </div>
-      </Panel>
-
-      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-5">
-          <AiInsightsPanel
-            date={date}
-            brief={aiBrief.data}
-            insights={aiInsights.data ?? []}
-            loading={aiBrief.isLoading || aiInsights.isLoading}
-            error={aiBrief.error?.message || aiInsights.error?.message || runAlerts.error?.message}
-            onRunAlerts={() => runAlerts.mutate()}
-            runningAlerts={runAlerts.isPending}
-          />
-        </div>
-        <AiAnalystSection from={from} to={to} />
+      <div className="grid gap-3 md:grid-cols-3">
+        <AiStatusCard label="Brief seleccionado" value={date} detail={aiBrief.data ? 'Disponible' : aiBrief.isLoading ? 'Generando...' : 'Pendiente'} tone="sky" />
+        <AiStatusCard label="Alertas nuevas" value={String(alerts.length)} detail={alerts.length === 1 ? 'requiere revision' : 'requieren revision'} tone={alerts.length > 0 ? 'amber' : 'emerald'} />
+        <AiStatusCard label="Rango analista" value={`${from} / ${to}`} detail={`${historyRows.length} insights en historial`} tone="slate" />
       </div>
+
+      <AiBriefSection
+        date={date}
+        setDate={setDate}
+        brief={aiBrief.data}
+        loading={aiBrief.isLoading}
+        error={aiBrief.error?.message || refreshBrief.error?.message}
+        onReload={() => refreshBrief.mutate()}
+        reloading={refreshBrief.isPending}
+      />
+      <AiWatchdogSection
+        date={date}
+        setDate={setDate}
+        alerts={alerts}
+        loading={aiInsights.isLoading}
+        error={aiInsights.error?.message || runAlerts.error?.message}
+        onRun={() => runAlerts.mutate()}
+        running={runAlerts.isPending}
+      />
+      <AiAnalystSection from={from} to={to} setFrom={setFrom} setTo={setTo} />
+      <AiInvestigationSection from={from} to={to} />
+      <AiHistorySection from={from} to={to} rows={historyRows} loading={history.isLoading} error={history.error?.message} />
     </section>
   )
 }
@@ -3551,73 +3566,200 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
   )
 }
 
-function AiInsightsPanel({
-  date,
-  brief,
-  insights,
-  loading,
-  error,
-  onRunAlerts,
-  runningAlerts,
+function AiStatusCard({
+  label,
+  value,
+  detail,
+  tone,
 }: {
-  date: string
-  brief?: AiInsight
-  insights: AiInsight[]
-  loading: boolean
-  error?: string
-  onRunAlerts: () => void
-  runningAlerts: boolean
+  label: string
+  value: string
+  detail: string
+  tone: 'sky' | 'amber' | 'emerald' | 'slate'
 }) {
-  const alerts = insights.filter((insight) => insight.featureType === 'ANOMALY_ALERT')
-  const otherInsights = insights.filter((insight) => insight.featureType !== 'ANOMALY_ALERT' && insight.id !== brief?.id)
+  const toneClass = {
+    sky: 'border-sky-100 bg-sky-50/70 text-sky-700',
+    amber: 'border-amber-100 bg-amber-50/80 text-amber-700',
+    emerald: 'border-emerald-100 bg-emerald-50/80 text-emerald-700',
+    slate: 'border-slate-200 bg-white text-slate-700',
+  }[tone]
 
   return (
-    <Panel title="AI Insights">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Resumen del dueno para {date}</p>
-          <p className="text-sm text-gray-500">Brief diario, alertas y pendientes generados desde reportes reales.</p>
-        </div>
-        <button
-          type="button"
-          onClick={onRunAlerts}
-          disabled={runningAlerts}
-          className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition-all hover:bg-sky-100 active:scale-[0.98] disabled:opacity-60"
-        >
-          {runningAlerts ? 'Revisando...' : 'Correr watchdog'}
-        </button>
-      </div>
-      {error && <ErrorMessage message={error} />}
-      {loading && <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Cargando insights...</p>}
-      {brief && <AiInsightCard insight={brief} compact={false} />}
-      {alerts.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Alertas nuevas</p>
-          {alerts.map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
-        </div>
-      )}
-      {!loading && !brief && alerts.length === 0 && (
-        <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Sin insights nuevos para esta fecha.</p>
-      )}
-      {otherInsights.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Otros pendientes</p>
-          {otherInsights.slice(0, 3).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
-        </div>
-      )}
-    </Panel>
+    <div className={`rounded-xl border p-4 shadow-sm ${toneClass}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
+      <p className="mt-2 break-words text-lg font-bold text-slate-950">{value}</p>
+      <p className="mt-1 text-sm opacity-80">{detail}</p>
+    </div>
   )
 }
 
-function AiAnalystSection({ from, to }: { from: string; to: string }) {
+function AiWorkflowSection({
+  eyebrow,
+  title,
+  description,
+  action,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">{eyebrow}</p>
+          <h3 className="mt-1 text-lg font-bold text-slate-950">{title}</h3>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+        {action && <div className="flex flex-wrap items-end gap-2">{action}</div>}
+      </div>
+      <div className="mt-4 space-y-4">{children}</div>
+    </section>
+  )
+}
+
+function AiDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+      {label}
+      <input
+        type="date"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+      />
+    </label>
+  )
+}
+
+function AiActionButton({
+  label,
+  loadingLabel,
+  loading,
+  onClick,
+  tone = 'slate',
+}: {
+  label: string
+  loadingLabel: string
+  loading: boolean
+  onClick: () => void
+  tone?: 'slate' | 'sky' | 'emerald' | 'amber'
+}) {
+  const toneClass = {
+    slate: 'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400',
+    sky: 'bg-sky-600 text-white hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400',
+    emerald: 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400',
+    amber: 'bg-amber-500 text-white hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400',
+  }[tone]
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] ${toneClass}`}
+    >
+      {loading ? loadingLabel : label}
+    </button>
+  )
+}
+
+function AiBriefSection({
+  date,
+  setDate,
+  brief,
+  loading,
+  error,
+  onReload,
+  reloading,
+}: {
+  date: string
+  setDate: (value: string) => void
+  brief?: AiInsight
+  loading: boolean
+  error?: string
+  onReload: () => void
+  reloading: boolean
+}) {
+  return (
+    <AiWorkflowSection
+      eyebrow="1. Brief del dia"
+      title="Resumen practico para abrir el dia"
+      description="Ventas, caja, lavadores, inventario y acciones del dueno en un bloque legible."
+      action={(
+        <>
+          <AiDateInput label="Fecha" value={date} onChange={setDate} />
+          <AiActionButton label="Generar / recargar" loadingLabel="Generando..." loading={reloading} onClick={onReload} tone="sky" />
+        </>
+      )}
+    >
+      {error && <ErrorMessage message={error} />}
+      {loading && <AiEmptyState text="Preparando brief diario..." />}
+      {!loading && brief && <AiInsightCard insight={brief} compact={false} />}
+      {!loading && !brief && !error && <AiEmptyState text="Todavia no hay brief para esta fecha." />}
+    </AiWorkflowSection>
+  )
+}
+
+function AiWatchdogSection({
+  date,
+  setDate,
+  alerts,
+  loading,
+  error,
+  onRun,
+  running,
+}: {
+  date: string
+  setDate: (value: string) => void
+  alerts: AiInsight[]
+  loading: boolean
+  error?: string
+  onRun: () => void
+  running: boolean
+}) {
+  return (
+    <AiWorkflowSection
+      eyebrow="2. Watchdog de alertas"
+      title="Alertas no financieras que necesitan revision"
+      description="Detecta diferencias de caja, bajas de ingresos, cortesia/voids altos, gastos raros e inventario bajo."
+      action={(
+        <>
+          <AiDateInput label="Fecha" value={date} onChange={setDate} />
+          <AiActionButton label="Correr watchdog" loadingLabel="Revisando..." loading={running} onClick={onRun} tone="amber" />
+        </>
+      )}
+    >
+      {error && <ErrorMessage message={error} />}
+      {loading && <AiEmptyState text="Cargando alertas nuevas..." />}
+      {!loading && alerts.length === 0 && !error && <AiEmptyState text="Sin alertas nuevas para esta fecha." />}
+      {alerts.length > 0 && (
+        <div className="space-y-3">
+          {alerts.map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
+        </div>
+      )}
+    </AiWorkflowSection>
+  )
+}
+
+function AiAnalystSection({
+  from,
+  to,
+  setFrom,
+  setTo,
+}: {
+  from: string
+  to: string
+  setFrom: (value: string) => void
+  setTo: (value: string) => void
+}) {
   const queryClient = useQueryClient()
   const chatForm = useForm<AnalystChatFormValues>({
     resolver: zodResolver(analystChatSchema),
     defaultValues: { message: '' },
-  })
-  const investigationForm = useForm<InvestigationFormValues>({
-    resolver: zodResolver(investigationSchema),
-    defaultValues: { question: '' },
   })
   const chat = useMutation({
     mutationFn: (values: AnalystChatFormValues) => api<AnalystChatResponse>('/api/v1/ai/chat', {
@@ -3628,6 +3770,66 @@ function AiAnalystSection({ from, to }: { from: string; to: string }) {
       await invalidateAi(queryClient)
     },
   })
+
+  return (
+    <AiWorkflowSection
+      eyebrow="3. Analista AI"
+      title="Preguntas rapidas sobre el negocio"
+      description="Responde con numeros visibles del rango seleccionado y sugiere siguientes preguntas."
+      action={(
+        <>
+          <AiDateInput label="Desde" value={from} onChange={setFrom} />
+          <AiDateInput label="Hasta" value={to} onChange={setTo} />
+        </>
+      )}
+    >
+      <form className="space-y-4" onSubmit={chatForm.handleSubmit((values) => chat.mutate(values))}>
+        <TextField label="Pregunta" error={chatForm.formState.errors.message?.message}>
+          <textarea rows={4} placeholder="Ej. Por que esta semana estuvo mas baja?" {...chatForm.register('message')} />
+        </TextField>
+        {chat.error && <ErrorMessage message={chat.error.message} />}
+        <button
+          type="submit"
+          disabled={chat.isPending}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400"
+        >
+          {chat.isPending ? 'Analizando...' : 'Preguntar al analista'}
+        </button>
+      </form>
+
+      {chat.data && (
+        <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-4">
+          <AiLabeledText label="Conclusion" text={chat.data.answer} />
+          <AiEvidenceList title="Numeros usados" rows={chat.data.supportingNumbers} />
+          {chat.data.suggestedFollowUps.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Siguientes preguntas</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {chat.data.suggestedFollowUps.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => chatForm.setValue('message', question)}
+                    className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 ring-1 ring-sky-100 hover:bg-sky-50"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </AiWorkflowSection>
+  )
+}
+
+function AiInvestigationSection({ from, to }: { from: string; to: string }) {
+  const queryClient = useQueryClient()
+  const investigationForm = useForm<InvestigationFormValues>({
+    resolver: zodResolver(investigationSchema),
+    defaultValues: { question: '' },
+  })
   const investigation = useMutation({
     mutationFn: (values: InvestigationFormValues) => api<InvestigationResponse>('/api/v1/ai/investigations', {
       method: 'POST',
@@ -3637,95 +3839,73 @@ function AiAnalystSection({ from, to }: { from: string; to: string }) {
       await invalidateAi(queryClient)
     },
   })
-  const history = useQuery({
-    queryKey: ['ai-insights', 'reports', from, to],
-    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?from=${from}&to=${to}`),
-  })
-  const aiRows = history.data ?? []
 
   return (
-    <Panel title="AI Analyst">
-      <div className="grid gap-5 xl:grid-cols-2">
-        <form className="space-y-4" onSubmit={chatForm.handleSubmit((values) => chat.mutate(values))}>
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900">Chat de negocio</h4>
-            <p className="text-sm text-gray-500">Pregunta sobre ventas, lavadores, cortes o comparativos del rango actual.</p>
-          </div>
-          <TextField label="Pregunta" error={chatForm.formState.errors.message?.message}>
-            <textarea rows={4} placeholder="Ej. Por que esta semana estuvo mas baja?" {...chatForm.register('message')} />
-          </TextField>
-          {chat.error && <ErrorMessage message={chat.error.message} />}
-          <button
-            type="submit"
-            disabled={chat.isPending}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-slate-800 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
-          >
-            {chat.isPending ? 'Analizando...' : 'Preguntar'}
-          </button>
-          {chat.data && (
-            <div className="rounded-xl border border-sky-100 bg-sky-50 p-4">
-              <p className="text-sm font-semibold text-sky-950">{chat.data.answer}</p>
-              <AiEvidenceList title="Numeros usados" rows={chat.data.supportingNumbers} />
-              <div className="mt-3 flex flex-wrap gap-2">
-                {chat.data.suggestedFollowUps.map((question) => (
-                  <button
-                    key={question}
-                    type="button"
-                    onClick={() => chatForm.setValue('message', question)}
-                    className="rounded-full bg-white px-3 py-1 text-xs font-medium text-sky-700 ring-1 ring-sky-100 hover:bg-sky-50"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </form>
+    <AiWorkflowSection
+      eyebrow="4. Investigacion con agente"
+      title="Investigacion trazable con herramientas internas"
+      description={`Usa resumen diario, historial, caja, lavadores e inventario para el rango ${from} a ${to}.`}
+    >
+      <form className="space-y-4" onSubmit={investigationForm.handleSubmit((values) => investigation.mutate(values))}>
+        <TextField label="Pregunta a investigar" error={investigationForm.formState.errors.question?.message}>
+          <textarea rows={4} placeholder="Ej. Que explica la diferencia de efectivo de este rango?" {...investigationForm.register('question')} />
+        </TextField>
+        {investigation.error && <ErrorMessage message={investigation.error.message} />}
+        <button
+          type="submit"
+          disabled={investigation.isPending}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400"
+        >
+          {investigation.isPending ? 'Investigando...' : 'Investigar'}
+        </button>
+      </form>
 
-        <form className="space-y-4" onSubmit={investigationForm.handleSubmit((values) => investigation.mutate(values))}>
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900">Investigacion con agente</h4>
-            <p className="text-sm text-gray-500">Ejecuta pasos trazables con resumen diario, historial, caja, lavadores e inventario.</p>
+      {investigation.data && (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <AiLabeledText label="Conclusion" text={investigation.data.conclusion} />
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+              Confianza {confidenceLabel(investigation.data.confidence)}
+            </span>
           </div>
-          <TextField label="Pregunta a investigar" error={investigationForm.formState.errors.question?.message}>
-            <textarea rows={4} placeholder="Ej. Que explica la diferencia de efectivo de este rango?" {...investigationForm.register('question')} />
-          </TextField>
-          {investigation.error && <ErrorMessage message={investigation.error.message} />}
-          <button
-            type="submit"
-            disabled={investigation.isPending}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
-          >
-            {investigation.isPending ? 'Investigando...' : 'Investigar'}
-          </button>
-          {investigation.data && (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-emerald-950">{investigation.data.conclusion}</p>
-                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
-                  Confianza {confidenceLabel(investigation.data.confidence)}
-                </span>
-              </div>
-              <AiEvidenceList title="Evidencia" rows={investigation.data.evidence} />
-              <AiEvidenceList title="Pasos" rows={investigation.data.steps} ordered />
-            </div>
-          )}
-        </form>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Historial del rango</p>
-          <span className="text-xs text-gray-400">{from} a {to}</span>
+          <AiEvidenceList title="Evidencia" rows={investigation.data.evidence} />
+          <AiEvidenceList title="Pasos realizados" rows={investigation.data.steps} ordered />
         </div>
-        {history.error && <ErrorMessage message={history.error.message} />}
-        {history.isLoading && <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Cargando historial...</p>}
-        {!history.isLoading && aiRows.length === 0 && (
-          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">Sin historial de AI para este rango.</p>
-        )}
-        {aiRows.slice(0, 5).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
-      </div>
-    </Panel>
+      )}
+    </AiWorkflowSection>
+  )
+}
+
+function AiHistorySection({
+  from,
+  to,
+  rows,
+  loading,
+  error,
+}: {
+  from: string
+  to: string
+  rows: AiInsight[]
+  loading: boolean
+  error?: string
+}) {
+  const sortedRows = [...rows].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
+
+  return (
+    <AiWorkflowSection
+      eyebrow="5. Historial de insights"
+      title="Bitacora reciente de AI"
+      description={`Insights guardados del ${from} al ${to}, con estado y acciones de revision.`}
+    >
+      {error && <ErrorMessage message={error} />}
+      {loading && <AiEmptyState text="Cargando historial..." />}
+      {!loading && sortedRows.length === 0 && !error && <AiEmptyState text="Sin historial de AI para este rango." />}
+      {sortedRows.length > 0 && (
+        <div className="space-y-3">
+          {sortedRows.slice(0, 8).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
+        </div>
+      )}
+    </AiWorkflowSection>
   )
 }
 
@@ -3744,21 +3924,33 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
     },
   })
 
+  const summaryLines = aiSummaryLines(insight.summary)
+  const visibleLines = compact ? summaryLines.slice(0, 3) : summaryLines
+
   return (
-    <article className={`rounded-xl border p-4 ${aiSeverityClass(insight.severity)}`}>
+    <article className={`rounded-xl border p-4 shadow-sm ${aiSeverityClass(insight.severity)}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-semibold ring-1 ring-black/5">
+            <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
               {featureLabel(insight.featureType)}
             </span>
-            <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-semibold ring-1 ring-black/5">
+            <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
               {severityLabel(insight.severity)}
             </span>
-            <span className="text-xs text-gray-500">{insight.sourceFrom} a {insight.sourceTo}</span>
+            <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-500 ring-1 ring-black/5">
+              {statusLabel(insight.status)}
+            </span>
+            <span className="text-xs text-slate-500">{insight.sourceFrom} a {insight.sourceTo}</span>
           </div>
-          <h4 className="mt-2 text-sm font-bold text-gray-950">{insight.title}</h4>
-          <p className={`mt-1 text-sm text-gray-700 ${compact ? 'line-clamp-3' : ''}`}>{insight.summary}</p>
+          <h4 className="mt-3 text-sm font-bold text-slate-950">{insight.title}</h4>
+          {visibleLines.length > 0 && (
+            <div className="mt-2 space-y-1.5 text-sm leading-6 text-slate-700">
+              {visibleLines.map((line, index) => (
+                <p key={`${insight.id}-${index}`}>{line}</p>
+              ))}
+            </div>
+          )}
           {!compact && <AiDetailRows details={insight.details} />}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -3768,7 +3960,7 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
                 type="button"
                 onClick={() => acknowledge.mutate()}
                 disabled={acknowledge.isPending || dismiss.isPending}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
               >
                 Revisado
               </button>
@@ -3776,13 +3968,13 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
                 type="button"
                 onClick={() => dismiss.mutate()}
                 disabled={acknowledge.isPending || dismiss.isPending}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-60"
               >
                 Descartar
               </button>
             </>
           ) : (
-            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-500 ring-1 ring-gray-100">
+            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">
               {statusLabel(insight.status)}
             </span>
           )}
@@ -3795,16 +3987,33 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
   )
 }
 
+function AiLabeledText({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold leading-6 text-slate-950">{text}</p>
+    </div>
+  )
+}
+
 function AiEvidenceList({ title, rows, ordered = false }: { title: string; rows: string[]; ordered?: boolean }) {
   if (rows.length === 0) return null
   const Tag = ordered ? 'ol' : 'ul'
   return (
     <div className="mt-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
-      <Tag className={`mt-1 space-y-1 text-sm text-gray-700 ${ordered ? 'list-decimal pl-5' : 'list-disc pl-5'}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <Tag className={`mt-1 space-y-1 text-sm leading-6 text-slate-700 ${ordered ? 'list-decimal pl-5' : 'list-disc pl-5'}`}>
         {rows.map((row) => <li key={row}>{row}</li>)}
       </Tag>
     </div>
+  )
+}
+
+function AiEmptyState({ text }: { text: string }) {
+  return (
+    <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+      {text}
+    </p>
   )
 }
 
@@ -3992,6 +4201,13 @@ async function invalidateAi(queryClient: ReturnType<typeof useQueryClient>) {
     queryClient.invalidateQueries({ queryKey: ['ai-insights'] }),
     queryClient.invalidateQueries({ queryKey: ['ai-daily-brief'] }),
   ])
+}
+
+function aiSummaryLines(summary: string) {
+  return summary
+    .split('\n')
+    .map((line) => line.trim().replace(/^-\s*/, ''))
+    .filter(Boolean)
 }
 
 function featureLabel(feature: AiFeatureType) {
