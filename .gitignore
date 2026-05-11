@@ -35,3 +35,6 @@ build/
 ### Frontend ###
 web/node_modules/
 web/dist/
+.env
+.env.local
+lavadero-key*.pem

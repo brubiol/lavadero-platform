@@ -1,0 +1,38 @@
+# Production compose — no local Postgres, points at RDS.
+# Secrets come from /opt/lavadero/.env on the EC2 host.
+# Never commit a .env file with real values.
+
+services:
+  api:
+    image: ghcr.io/brubiol/lavadero-platform/api:latest
+    container_name: lavadero-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${RDS_HOST}:5432/${RDS_DB}
+      SPRING_DATASOURCE_USERNAME: ${RDS_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${RDS_PASSWORD}
+      LAVADERO_JWT_SECRET: ${LAVADERO_JWT_SECRET}
+      LAVADERO_BOOTSTRAP_USERNAME: ${LAVADERO_BOOTSTRAP_USERNAME}
+      LAVADERO_BOOTSTRAP_PASSWORD: ${LAVADERO_BOOTSTRAP_PASSWORD}
+      LAVADERO_BOOTSTRAP_FULL_NAME: ${LAVADERO_BOOTSTRAP_FULL_NAME}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  web:
+    image: ghcr.io/brubiol/lavadero-platform/web:latest
+    container_name: lavadero-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
