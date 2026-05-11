@@ -734,16 +734,30 @@ function AppShell() {
             <p className="text-xs text-slate-500">Operacion diaria</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          <SideLink to="/" label="Dashboard" icon={<IconHome />} />
-          <SideLink to="/tickets/nuevo" label="Nuevo ticket" icon={<IconPlus />} />
-          <SideLink to="/tickets" label="Tickets" icon={<IconList />} />
-          <SideLink to="/gastos" label="Gastos" icon={<IconWallet />} />
-          <SideLink to="/corte" label="Corte" icon={<IconCalc />} />
-          {hasRole('GERENTE') && <SideLink to="/nomina" label="Nomina" icon={<IconUsers />} />}
-          {hasRole('GERENTE') && <SideLink to="/inventario" label="Inventario" icon={<IconBox />} />}
-          {hasRole('DUENO') && <SideLink to="/reportes" label="Reportes" icon={<IconChart />} />}
-          {hasRole('GERENTE') && <SideLink to="/catalogos" label="Catalogos" icon={<IconSettings />} />}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="space-y-0.5">
+            <SideLink to="/" label="Dashboard" icon={<IconHome />} />
+            <SideLink to="/tickets/nuevo" label="Nuevo ticket" icon={<IconPlus />} />
+            <SideLink to="/tickets" label="Tickets" icon={<IconList />} />
+            <SideLink to="/gastos" label="Gastos" icon={<IconWallet />} />
+            <SideLink to="/corte" label="Corte" icon={<IconCalc />} />
+          </div>
+
+          {hasRole('GERENTE') && (
+            <div className="mt-6 space-y-0.5">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Gestion</p>
+              <SideLink to="/nomina" label="Nomina" icon={<IconUsers />} />
+              <SideLink to="/inventario" label="Inventario" icon={<IconBox />} />
+              <SideLink to="/catalogos" label="Catalogos" icon={<IconSettings />} />
+            </div>
+          )}
+
+          {hasRole('DUENO') && (
+            <div className="mt-6 space-y-0.5">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dueno</p>
+              <SideLink to="/reportes" label="Reportes" icon={<IconChart />} />
+            </div>
+          )}
         </nav>
         <div className="shrink-0 border-t border-slate-800 p-4">
           <div className="flex items-center gap-3">
