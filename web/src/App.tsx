@@ -794,6 +794,13 @@ function IconChart() {
     </svg>
   )
 }
+function IconAi() {
+  return (
+    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 0 0 2.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+    </svg>
+  )
+}
 function IconSettings() {
   return (
     <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -850,6 +857,7 @@ function AppShell() {
           {hasRole('DUENO') && (
             <div className="mt-6 space-y-0.5">
               <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dueno</p>
+              <SideLink to="/ai" label="AI" icon={<IconAi />} />
               <SideLink to="/reportes" label="Reportes" icon={<IconChart />} />
             </div>
           )}
@@ -893,6 +901,7 @@ function AppShell() {
             <Route path="/corte" element={<ShiftCloseScreen />} />
             <Route path="/nomina" element={<RequireRole role="GERENTE"><PayrollScreen /></RequireRole>} />
             <Route path="/inventario" element={<RequireRole role="GERENTE"><InventoryScreen /></RequireRole>} />
+            <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
             <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
             <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
           </Routes>
@@ -905,6 +914,7 @@ function AppShell() {
           <MobileLink to="/tickets" label="Tickets" icon={<IconList />} />
           <MobileLink to="/gastos" label="Gastos" icon={<IconWallet />} />
           <MobileLink to="/corte" label="Corte" icon={<IconCalc />} />
+          {hasRole('DUENO') && <MobileLink to="/ai" label="AI" icon={<IconAi />} />}
         </nav>
       </div>
     </div>
@@ -1161,9 +1171,6 @@ function DayStatusCard() {
 }
 
 function Dashboard() {
-  const { hasRole } = useAuth()
-  const queryClient = useQueryClient()
-  const canSeeAi = hasRole('DUENO')
   const [date, setDate] = useState(today)
   const summary = useQuery({
     queryKey: ['daily-summary', date],
@@ -1173,22 +1180,6 @@ function Dashboard() {
   const monthHist = useQuery({
     queryKey: ['historical-month', monthStart],
     queryFn: () => api<HistoricalRangeResponse>(`/api/v1/reports/historical?from=${monthStart}&to=${today}`),
-  })
-  const aiBrief = useQuery({
-    queryKey: ['ai-daily-brief', date],
-    enabled: canSeeAi,
-    queryFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}`, { method: 'POST' }),
-  })
-  const aiInsights = useQuery({
-    queryKey: ['ai-insights', 'dashboard', date],
-    enabled: canSeeAi,
-    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?status=NEW&from=${date}&to=${date}`),
-  })
-  const runAlerts = useMutation({
-    mutationFn: () => api<AiInsight[]>(`/api/v1/ai/alerts/run?from=${date}&to=${date}`, { method: 'POST' }),
-    onSuccess: async () => {
-      await invalidateAi(queryClient)
-    },
   })
 
   const data = summary.data
@@ -1207,18 +1198,6 @@ function Dashboard() {
       </div>
 
       <DayStatusCard />
-
-      {canSeeAi && (
-        <AiInsightsPanel
-          date={date}
-          brief={aiBrief.data}
-          insights={aiInsights.data ?? []}
-          loading={aiBrief.isLoading || aiInsights.isLoading}
-          error={aiBrief.error?.message || aiInsights.error?.message || runAlerts.error?.message}
-          onRunAlerts={() => runAlerts.mutate()}
-          runningAlerts={runAlerts.isPending}
-        />
-      )}
 
       {monthHist.data && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -1321,6 +1300,69 @@ function Metric({ label, value, variant = 'default' }: { label: string; value: s
       <p className={`text-xs font-medium uppercase tracking-wide ${label_[variant]}`}>{label}</p>
       <p className={`mt-2 text-3xl font-bold ${text[variant]}`}>{value}</p>
     </div>
+  )
+}
+
+function AiScreen() {
+  const queryClient = useQueryClient()
+  const [date, setDate] = useState(today)
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const aiBrief = useQuery({
+    queryKey: ['ai-daily-brief', date],
+    queryFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}`, { method: 'POST' }),
+  })
+  const aiInsights = useQuery({
+    queryKey: ['ai-insights', 'dashboard', date],
+    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?status=NEW&from=${date}&to=${date}`),
+  })
+  const runAlerts = useMutation({
+    mutationFn: () => api<AiInsight[]>(`/api/v1/ai/alerts/run?from=${date}&to=${date}`, { method: 'POST' }),
+    onSuccess: async () => {
+      await invalidateAi(queryClient)
+    },
+  })
+
+  return (
+    <section className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold">AI</h2>
+          <p className="text-sm text-gray-500">Briefs, alertas, chat analista e investigaciones con evidencia.</p>
+        </div>
+      </div>
+
+      <Panel title="Controles AI">
+        <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
+          <TextField label="Fecha para brief y watchdog">
+            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </TextField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField label="Desde para analista">
+              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            </TextField>
+            <TextField label="Hasta para analista">
+              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            </TextField>
+          </div>
+        </div>
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+        <div className="space-y-5">
+          <AiInsightsPanel
+            date={date}
+            brief={aiBrief.data}
+            insights={aiInsights.data ?? []}
+            loading={aiBrief.isLoading || aiInsights.isLoading}
+            error={aiBrief.error?.message || aiInsights.error?.message || runAlerts.error?.message}
+            onRunAlerts={() => runAlerts.mutate()}
+            runningAlerts={runAlerts.isPending}
+          />
+        </div>
+        <AiAnalystSection from={from} to={to} />
+      </div>
+    </section>
   )
 }
 
@@ -2357,8 +2399,6 @@ function ReportsScreen() {
         <Metric label="Cortesias" value={String(range?.courtesyCount ?? '...')} />
         <Metric label="Anulados" value={String(range?.voidedCount ?? '...')} />
       </div>
-
-      <AiAnalystSection from={from} to={to} />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
