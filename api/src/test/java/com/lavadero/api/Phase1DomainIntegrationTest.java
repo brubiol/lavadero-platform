@@ -75,9 +75,9 @@ class Phase1DomainIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].serviceTypeId").value(hasItem(serviceTypeId.intValue())));
 
-        Long businessDayId = openBusinessDay(LocalDate.of(2026, 5, 2));
+        Long businessDayId = openBusinessDay(LocalDate.of(2026, 5, 15));
 
-        mvc.perform(get("/api/v1/business-days?from=2026-05-01&to=2026-05-03"))
+        mvc.perform(get("/api/v1/business-days?from=2026-05-15&to=2026-05-15"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(businessDayId));
 
