@@ -21,6 +21,7 @@ read -rp "RDS password: " -s RDS_PASSWORD; echo ""
 read -rp "JWT secret (leave blank to generate): " JWT_SECRET
 [[ -z "$JWT_SECRET" ]] && JWT_SECRET=$(openssl rand -hex 32)
 read -rp "Bootstrap owner password: " -s BOOTSTRAP_PASSWORD; echo ""
+read -rp "OpenAI API key (leave blank to use local deterministic AI): " -s OPENAI_API_KEY; echo ""
 
 cat > "$ENV_FILE" <<EOF
 RDS_HOST=$RDS_HOST
@@ -33,6 +34,13 @@ LAVADERO_JWT_SECRET=$JWT_SECRET
 LAVADERO_BOOTSTRAP_USERNAME=dueno
 LAVADERO_BOOTSTRAP_PASSWORD=$BOOTSTRAP_PASSWORD
 LAVADERO_BOOTSTRAP_FULL_NAME=Brandon Rubio
+
+LAVADERO_AI_ENABLED=true
+LAVADERO_AI_PROVIDER=$([[ -n "$OPENAI_API_KEY" ]] && echo openai-compatible || echo deterministic-local)
+LAVADERO_AI_BASE_URL=$([[ -n "$OPENAI_API_KEY" ]] && echo https://api.openai.com/v1 || echo "")
+LAVADERO_AI_API_KEY=$OPENAI_API_KEY
+LAVADERO_AI_MODEL=$([[ -n "$OPENAI_API_KEY" ]] && echo gpt-4.1-mini || echo local)
+LAVADERO_AI_TIMEOUT_SECONDS=20
 EOF
 
 chmod 600 "$ENV_FILE"
