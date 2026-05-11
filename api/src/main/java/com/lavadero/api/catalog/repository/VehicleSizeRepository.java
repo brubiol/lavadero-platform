@@ -8,4 +8,6 @@ public interface VehicleSizeRepository extends JpaRepository<VehicleSize, Long> 
     boolean existsByCode(String code);
 
     List<VehicleSize> findAllByOrderBySortOrderAscNameAsc();
+
+    List<VehicleSize> findByActiveTrueOrderBySortOrderAscNameAsc();
 }

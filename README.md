@@ -190,22 +190,35 @@ Haz clic en **Descargar Excel** para exportar todo en un archivo `.xlsx` con 8 h
 
 ## Configuracion inicial (primera vez)
 
-Antes de usar el sistema por primera vez, el DUENO debe configurar los catalogos. Ve a **Catalogos** en el menu.
+La base ya se entrega con datos importados de Excel:
 
-### Orden recomendado:
+- Historico diario 2025 y enero-mayo 2026 para reportes.
+- Tickets operativos enero-mayo 2026 con lavadores y gastos del dia.
+- Catalogo real de servicios, tamanos, precios MXN/USD y lavadores activos.
+- Inventario inicial con productos frecuentes para empezar a capturar compras, ventas, fiados y ajustes.
 
-1. **Lavadores** — nombre, telefono y sueldo base semanal de cada empleado
-2. **Servicios** — los tipos de lavado que ofrecen (Basico, Completo, Encerado, etc.)
-3. **Tamanos** — los tamanos de vehiculo (Chico, Mediano, Grande, Camioneta/SUV)
-4. **Precios** — precio por cada combinacion de servicio + tamano
+### Catalogo precargado
 
-Ejemplo de matriz de precios:
+Servicios:
 
-|              | Chico | Mediano | Grande | Camioneta |
-|--------------|-------|---------|--------|-----------|
-| Basico       | $80   | $100    | $120   | $140      |
-| Completo     | $120  | $150    | $180   | $220      |
-| Encerado     | $200  | $250    | $300   | $350      |
+| Servicio | Chico | Sedan / 1 cabina | Mediano | Grande |
+|----------|-------|------------------|---------|--------|
+| Lavado y Aspirado | $73 MXN / $5 USD | $108 MXN / $6 USD | $168 MXN / $7 USD | $208 MXN / $8 USD |
+| Lavado Exterior | $54 MXN / $4 USD | $73 MXN / $5 USD | $133 MXN / $6 USD | $168 MXN / $7 USD |
+| Solo Aspirado | $62 MXN / $3 USD | $62 MXN / $3 USD | $72 MXN / $4 USD | $72 MXN / $4 USD |
+| Solo Presion | $50 MXN / $5 USD | $50 MXN / $5 USD | $50 MXN / $5 USD | $50 MXN / $5 USD |
+| Lavado de Motor | $72 MXN / $4 USD | $72 MXN / $4 USD | $90 MXN / $5 USD | $90 MXN / $5 USD |
+
+El servicio y tamano `Historico` quedan ocultos para la operacion diaria; solo existen para conservar tickets importados de Excel.
+
+### Checklist antes de entregarlo al dueno
+
+1. En **Catalogos**, revisar lavadores activos y capturar telefono si hace falta.
+2. Confirmar **sueldo base semanal**. La importacion deja sueldos en `0.00` cuando Excel no trae una base fija confiable.
+3. Revisar precios MXN/USD contra el pizarron actual del negocio.
+4. En **Inventario**, ajustar precios de venta y capturar conteo inicial con un movimiento de **Ajuste**.
+5. Cambiar usuario/contrasena inicial antes de produccion.
+6. Probar el flujo completo: abrir dia, abrir turno, crear ticket, registrar gasto, cerrar corte, crear nomina y exportar reporte.
 
 ---
 

@@ -18,7 +18,7 @@ public class ServiceTypeService {
 
     @Transactional(readOnly = true)
     public List<ServiceType> list() {
-        return serviceTypes.findAllByOrderByNameAsc();
+        return serviceTypes.findByActiveTrueOrderByNameAsc();
     }
 
     @Transactional

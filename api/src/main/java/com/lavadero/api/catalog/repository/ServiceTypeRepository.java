@@ -8,4 +8,6 @@ public interface ServiceTypeRepository extends JpaRepository<ServiceType, Long> 
     boolean existsByCode(String code);
 
     List<ServiceType> findAllByOrderByNameAsc();
+
+    List<ServiceType> findByActiveTrueOrderByNameAsc();
 }

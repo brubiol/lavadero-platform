@@ -13,6 +13,8 @@ public interface ServicePriceRepository extends JpaRepository<ServicePrice, Long
             select sp from ServicePrice sp
             join fetch sp.serviceType
             join fetch sp.vehicleSize
+            where sp.serviceType.active = true
+              and sp.vehicleSize.active = true
             order by sp.serviceType.name asc, sp.vehicleSize.sortOrder asc
             """)
     List<ServicePrice> findAllWithCatalog();
@@ -23,6 +25,8 @@ public interface ServicePriceRepository extends JpaRepository<ServicePrice, Long
             join fetch sp.vehicleSize
             where sp.effectiveFrom <= :effectiveOn
               and (sp.effectiveTo is null or sp.effectiveTo >= :effectiveOn)
+              and sp.serviceType.active = true
+              and sp.vehicleSize.active = true
             order by sp.serviceType.name asc, sp.vehicleSize.sortOrder asc
             """)
     List<ServicePrice> findEffectiveOn(@Param("effectiveOn") LocalDate effectiveOn);

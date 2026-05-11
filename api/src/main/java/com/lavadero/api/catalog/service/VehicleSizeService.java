@@ -18,7 +18,7 @@ public class VehicleSizeService {
 
     @Transactional(readOnly = true)
     public List<VehicleSize> list() {
-        return vehicleSizes.findAllByOrderBySortOrderAscNameAsc();
+        return vehicleSizes.findByActiveTrueOrderBySortOrderAscNameAsc();
     }
 
     @Transactional

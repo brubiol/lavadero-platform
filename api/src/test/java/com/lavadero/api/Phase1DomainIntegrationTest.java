@@ -46,12 +46,12 @@ class Phase1DomainIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
 
-        Long serviceTypeId = createServiceType("LAVADO_BASICO", "Lavado basico");
-        Long vehicleSizeId = createVehicleSize("MEDIANO", "Mediano");
+        Long serviceTypeId = createServiceType("LAVADO_BASICO_TEST", "Lavado basico test");
+        Long vehicleSizeId = createVehicleSize("MEDIANO_TEST", "Mediano test");
 
         mvc.perform(get("/api/v1/service-types"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].code").value(hasItem("LAVADO_BASICO")));
+                .andExpect(jsonPath("$[*].code").value(hasItem("LAV_ASPIRADO")));
 
         mvc.perform(get("/api/v1/vehicle-sizes"))
                 .andExpect(status().isOk())
@@ -104,7 +104,7 @@ class Phase1DomainIntegrationTest extends AbstractIntegrationTest {
     @Test
     void should_reject_overlapping_service_price_ranges() throws Exception {
         Long serviceTypeId = createServiceType("DETAIL", "Detail");
-        Long vehicleSizeId = createVehicleSize("GRANDE", "Grande");
+        Long vehicleSizeId = createVehicleSize("GRANDE_TEST", "Grande test");
 
         createServicePrice(serviceTypeId, vehicleSizeId, "2026-06-01", "2026-06-30");
 
