@@ -53,4 +53,13 @@ public final class DailySummaryDtos {
             BigDecimal ticketRevenue, BigDecimal expensesTotal, BigDecimal withdrawalsTotal,
             BigDecimal advancesTotal, int shiftCloseCount, int inventoryMovementCount, int payrollPeriodCount) {
     }
+
+    public record HistoricalSnapshotRow(LocalDate date, Integer totalCars, BigDecimal revenueMxn,
+            BigDecimal expensesMxn, BigDecimal resultadoMxn, String source) {
+    }
+
+    public record HistoricalRangeResponse(LocalDate from, LocalDate to, long totalDays, long totalCars,
+            BigDecimal totalRevenue, BigDecimal totalExpenses, BigDecimal totalResultado,
+            List<HistoricalSnapshotRow> days) {
+    }
 }

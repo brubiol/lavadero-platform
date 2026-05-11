@@ -6,6 +6,7 @@ import com.lavadero.api.reports.web.DailySummaryDtos.CashVarianceResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.DailySummaryResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.EmployeePerformanceResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.ExportPreviewResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.HistoricalRangeResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.MonthlySummaryResponse;
 import java.time.LocalDate;
 import org.springframework.core.io.ByteArrayResource;
@@ -58,6 +59,13 @@ public class DailySummaryController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return service.employeePerformance(from, to);
+    }
+
+    @GetMapping("/historical")
+    public HistoricalRangeResponse historical(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return service.getHistorical(from, to);
     }
 
     @GetMapping("/export/preview")

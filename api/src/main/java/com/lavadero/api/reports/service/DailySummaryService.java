@@ -13,6 +13,8 @@ import com.lavadero.api.operations.repository.TicketAssignmentRepository;
 import com.lavadero.api.operations.repository.TicketRepository;
 import com.lavadero.api.payroll.domain.PayrollPeriod;
 import com.lavadero.api.payroll.repository.PayrollPeriodRepository;
+import com.lavadero.api.reports.domain.HistoricalDailySnapshot;
+import com.lavadero.api.reports.repository.HistoricalDailySnapshotRepository;
 import com.lavadero.api.reports.web.DailySummaryDtos.DailySummaryResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.CashVarianceResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.CashVarianceRow;
@@ -20,6 +22,8 @@ import com.lavadero.api.reports.web.DailySummaryDtos.DailySummaryRangeResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.EmployeePerformanceResponse;
 import com.lavadero.api.reports.web.DailySummaryDtos.EmployeePerformanceRow;
 import com.lavadero.api.reports.web.DailySummaryDtos.ExportPreviewResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.HistoricalRangeResponse;
+import com.lavadero.api.reports.web.DailySummaryDtos.HistoricalSnapshotRow;
 import com.lavadero.api.reports.web.DailySummaryDtos.MonthlySummaryResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -50,11 +54,12 @@ public class DailySummaryService {
     private final TicketAssignmentRepository assignments;
     private final ProductMovementRepository inventoryMovements;
     private final PayrollPeriodRepository payrollPeriods;
+    private final HistoricalDailySnapshotRepository historicalSnapshots;
 
     public DailySummaryService(TicketRepository tickets, ExpenseRepository expenses, WithdrawalRepository withdrawals,
             EmployeeAdvanceRepository advances, ShiftCloseSummaryRepository closeSummaries,
             TicketAssignmentRepository assignments, ProductMovementRepository inventoryMovements,
-            PayrollPeriodRepository payrollPeriods) {
+            PayrollPeriodRepository payrollPeriods, HistoricalDailySnapshotRepository historicalSnapshots) {
         this.tickets = tickets;
         this.expenses = expenses;
         this.withdrawals = withdrawals;
@@ -63,6 +68,7 @@ public class DailySummaryService {
         this.assignments = assignments;
         this.inventoryMovements = inventoryMovements;
         this.payrollPeriods = payrollPeriods;
+        this.historicalSnapshots = historicalSnapshots;
     }
 
     @Transactional(readOnly = true)
@@ -195,6 +201,26 @@ public class DailySummaryService {
                 .findByStartDateLessThanEqualAndEndDateGreaterThanEqualOrderByStartDateAsc(to, from).size();
         return new ExportPreviewResponse(type, from, to, rangeTickets.size(), ticketRevenue, expensesTotal,
                 withdrawalsTotal, advancesTotal, shiftCloseCount, inventoryMovementCount, payrollPeriodCount);
+    }
+
+    @Transactional(readOnly = true)
+    public HistoricalRangeResponse getHistorical(LocalDate from, LocalDate to) {
+        validateRange(from, to);
+        List<HistoricalDailySnapshot> snapshots =
+                historicalSnapshots.findBySnapshotDateBetweenOrderBySnapshotDateAsc(from, to);
+        long totalCars = snapshots.stream()
+                .filter(s -> s.getTotalCars() != null)
+                .mapToLong(HistoricalDailySnapshot::getTotalCars)
+                .sum();
+        BigDecimal totalRevenue = sum(snapshots.stream().map(HistoricalDailySnapshot::getRevenueMxn).toList());
+        BigDecimal totalExpenses = sum(snapshots.stream().map(HistoricalDailySnapshot::getExpensesMxn).toList());
+        BigDecimal totalResultado = sum(snapshots.stream().map(HistoricalDailySnapshot::getResultadoMxn).toList());
+        List<HistoricalSnapshotRow> days = snapshots.stream()
+                .map(s -> new HistoricalSnapshotRow(s.getSnapshotDate(), s.getTotalCars(),
+                        s.getRevenueMxn(), s.getExpensesMxn(), s.getResultadoMxn(), s.getSource()))
+                .toList();
+        return new HistoricalRangeResponse(from, to, snapshots.size(), totalCars,
+                totalRevenue, totalExpenses, totalResultado, days);
     }
 
     public List<Ticket> ticketsInRange(LocalDate from, LocalDate to) {
