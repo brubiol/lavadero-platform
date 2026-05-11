@@ -329,6 +329,49 @@ type ExportPreview = {
   payrollPeriodCount: number
 }
 
+type HistoricalSnapshotRow = {
+  date: string
+  totalCars: number | null
+  revenueMxn: number
+  expensesMxn: number
+  resultadoMxn: number
+  source: string
+}
+type HistoricalRangeResponse = {
+  from: string
+  to: string
+  totalDays: number
+  totalCars: number
+  totalRevenue: number
+  totalExpenses: number
+  totalResultado: number
+  days: HistoricalSnapshotRow[]
+}
+
+type MonthAggregate = {
+  month: string
+  cars: number
+  revenue: number
+  expenses: number
+  resultado: number
+  sources: Set<string>
+}
+
+function groupByMonth(days: HistoricalSnapshotRow[]): MonthAggregate[] {
+  const map = new Map<string, MonthAggregate>()
+  for (const d of days) {
+    const key = d.date.slice(0, 7)
+    if (!map.has(key)) map.set(key, { month: key, cars: 0, revenue: 0, expenses: 0, resultado: 0, sources: new Set() })
+    const agg = map.get(key)!
+    agg.cars += d.totalCars ?? 0
+    agg.revenue += d.revenueMxn
+    agg.expenses += d.expensesMxn
+    agg.resultado += d.resultadoMxn
+    agg.sources.add(d.source)
+  }
+  return Array.from(map.values())
+}
+
 const expenseCategories: ExpenseCategory[] = [
   'CFE',
   'TELMEX',
@@ -1071,6 +1114,11 @@ function Dashboard() {
     queryKey: ['daily-summary', date],
     queryFn: () => api<DailySummary>(`/api/v1/reports/daily-summary?date=${date}`),
   })
+  const monthStart = today.slice(0, 7) + '-01'
+  const monthHist = useQuery({
+    queryKey: ['historical-month', monthStart],
+    queryFn: () => api<HistoricalRangeResponse>(`/api/v1/reports/historical?from=${monthStart}&to=${today}`),
+  })
 
   const data = summary.data
 
@@ -1088,6 +1136,20 @@ function Dashboard() {
       </div>
 
       <DayStatusCard />
+
+      {monthHist.data && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <span className="font-semibold text-slate-800">Historico del mes:</span>
+          {' '}{monthHist.data.totalCars} carros
+          {' · '}${Number(monthHist.data.totalRevenue).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ingresos
+          {' · '}
+          <span className={monthHist.data.totalResultado >= 0 ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+            ${Number(monthHist.data.totalResultado).toLocaleString('es-MX', { maximumFractionDigits: 0 })} resultado
+          </span>
+          {' '}
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-500">Excel</span>
+        </div>
+      )}
 
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
@@ -2103,6 +2165,8 @@ function ReportsScreen() {
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
   const [exportType, setExportType] = useState('full')
+  const [histFrom, setHistFrom] = useState('2025-01-01')
+  const [histTo, setHistTo] = useState(today)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
   const daily = useQuery({
@@ -2127,6 +2191,11 @@ function ReportsScreen() {
   const preview = useQuery({
     queryKey: ['reports-export-preview', exportType, from, to],
     queryFn: () => api<ExportPreview>(`/api/v1/reports/export/preview?type=${exportType}&from=${from}&to=${to}`),
+  })
+
+  const historical = useQuery({
+    queryKey: ['reports-historical', histFrom, histTo],
+    queryFn: () => api<HistoricalRangeResponse>(`/api/v1/reports/historical?from=${histFrom}&to=${histTo}`),
   })
 
   const range = daily.data
@@ -2334,6 +2403,64 @@ function ReportsScreen() {
           </Panel>
         </aside>
       </div>
+
+      <Panel title="Historico (Excel 2025 + 2026)">
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[180px_180px]">
+            <TextField label="Desde">
+              <input type="date" value={histFrom} onChange={(e) => setHistFrom(e.target.value)} />
+            </TextField>
+            <TextField label="Hasta">
+              <input type="date" value={histTo} onChange={(e) => setHistTo(e.target.value)} />
+            </TextField>
+          </div>
+
+          {historical.error && <ErrorMessage message={historical.error.message} />}
+
+          <div className="grid gap-4 md:grid-cols-4">
+            <Metric label="Dias" value={String(historical.data?.totalDays ?? '...')} />
+            <Metric label="Carros" value={String(historical.data?.totalCars ?? '...')} />
+            <Metric label="Ingresos" value={historical.data ? money(historical.data.totalRevenue, 'MXN') : '...'} variant="success" />
+            <Metric label="Resultado" value={historical.data ? money(historical.data.totalResultado, 'MXN') : '...'} variant="info" />
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-gray-100">
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
+              <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <tr>
+                  <th className="px-4 py-3">Mes</th>
+                  <th className="px-4 py-3 text-right">Carros</th>
+                  <th className="px-4 py-3 text-right">Ingresos</th>
+                  <th className="px-4 py-3 text-right">Gastos</th>
+                  <th className="px-4 py-3 text-right">Resultado</th>
+                  <th className="px-4 py-3">Fuente</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {groupByMonth(historical.data?.days ?? []).map((row) => (
+                  <tr key={row.month} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium">{row.month}</td>
+                    <td className="px-4 py-3 text-right">{row.cars}</td>
+                    <td className="px-4 py-3 text-right">{money(row.revenue, 'MXN')}</td>
+                    <td className="px-4 py-3 text-right">{money(row.expenses, 'MXN')}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${row.resultado >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{money(row.resultado, 'MXN')}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                        {Array.from(row.sources).join(', ')}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {!historical.isLoading && (historical.data?.days.length ?? 0) === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin datos historicos en este rango.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Panel>
     </section>
   )
 }
