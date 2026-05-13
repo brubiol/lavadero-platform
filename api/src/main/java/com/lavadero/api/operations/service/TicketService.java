@@ -8,6 +8,8 @@ import com.lavadero.api.catalog.repository.EmployeeRepository;
 import com.lavadero.api.catalog.repository.ServicePriceRepository;
 import com.lavadero.api.catalog.service.ServiceTypeService;
 import com.lavadero.api.catalog.service.VehicleSizeService;
+import com.lavadero.api.customers.domain.Customer;
+import com.lavadero.api.customers.repository.CustomerRepository;
 import com.lavadero.api.operations.domain.BusinessDay;
 import com.lavadero.api.operations.domain.BusinessDayStatus;
 import com.lavadero.api.operations.domain.PaymentMethod;
@@ -48,10 +50,11 @@ public class TicketService {
     private final VehicleSizeService vehicleSizes;
     private final BusinessDayService businessDays;
     private final ServicePriceRepository servicePrices;
+    private final CustomerRepository customers;
 
     public TicketService(TicketRepository tickets, ShiftRepository shifts, EmployeeRepository employees,
             ServiceTypeService serviceTypes, VehicleSizeService vehicleSizes, BusinessDayService businessDays,
-            ServicePriceRepository servicePrices) {
+            ServicePriceRepository servicePrices, CustomerRepository customers) {
         this.tickets = tickets;
         this.shifts = shifts;
         this.employees = employees;
@@ -59,6 +62,7 @@ public class TicketService {
         this.vehicleSizes = vehicleSizes;
         this.businessDays = businessDays;
         this.servicePrices = servicePrices;
+        this.customers = customers;
     }
 
     @Transactional
@@ -150,6 +154,18 @@ public class TicketService {
             throw new IllegalArgumentException("Ticket is already voided");
         }
         ticket.voidTicket(reason);
+        return ticket;
+    }
+
+    @Transactional
+    public Ticket attachCustomer(Long ticketId, Long customerId) {
+        Ticket ticket = get(ticketId);
+        if (ticket.getStatus() == TicketStatus.VOIDED) {
+            throw new IllegalArgumentException("Cannot attach customer to voided ticket");
+        }
+        Customer customer = customers.findByIdAndActiveTrue(customerId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Customer not found"));
+        ticket.attachCustomer(customer);
         return ticket;
     }
 

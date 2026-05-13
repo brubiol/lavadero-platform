@@ -25,8 +25,8 @@ DB_NAME="lavadero"
 DB_USER="lavadero"
 DB_PASS="${DB_PASS:-CHANGE_ME_$(openssl rand -hex 8)}"  # override via env var
 KEY_PAIR_NAME="lavadero-key"          # will be created if it doesn't exist
-EC2_INSTANCE_TYPE="t3.micro"
-RDS_INSTANCE_CLASS="db.t3.micro"
+EC2_INSTANCE_TYPE="t2.micro"          # free tier eligible (750 hrs/mo for 12 months)
+RDS_INSTANCE_CLASS="db.t2.micro"      # free tier eligible (750 hrs/mo for 12 months)
 PROJECT_TAG="lavadero-platform"
 # ───────────────────────────────────────────────────────────────────────────
 

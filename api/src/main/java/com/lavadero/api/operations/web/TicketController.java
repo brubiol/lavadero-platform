@@ -2,6 +2,7 @@ package com.lavadero.api.operations.web;
 
 import com.lavadero.api.operations.domain.TicketStatus;
 import com.lavadero.api.operations.service.TicketService;
+import com.lavadero.api.operations.web.TicketDtos.AttachCustomerRequest;
 import com.lavadero.api.operations.web.TicketDtos.CreateTicketRequest;
 import com.lavadero.api.operations.web.TicketDtos.TicketResponse;
 import com.lavadero.api.operations.web.TicketDtos.UpdateTicketRequest;
@@ -55,5 +56,10 @@ public class TicketController {
     @PostMapping("/{id}/void")
     public TicketResponse voidTicket(@PathVariable Long id, @Valid @RequestBody VoidTicketRequest request) {
         return TicketResponse.from(tickets.voidTicket(id, request.reason()));
+    }
+
+    @PostMapping("/{id}/attach-customer")
+    public TicketResponse attachCustomer(@PathVariable Long id, @Valid @RequestBody AttachCustomerRequest request) {
+        return TicketResponse.from(tickets.attachCustomer(id, request.customerId()));
     }
 }

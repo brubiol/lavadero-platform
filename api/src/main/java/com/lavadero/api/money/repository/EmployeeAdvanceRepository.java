@@ -18,4 +18,7 @@ public interface EmployeeAdvanceRepository extends JpaRepository<EmployeeAdvance
 
     @Query("select coalesce(sum(a.amount), 0) from EmployeeAdvance a where a.advanceDate = :date")
     BigDecimal sumForDate(@Param("date") LocalDate date);
+
+    @Query("select coalesce(sum(a.amount), 0) from EmployeeAdvance a where a.shift.id = :shiftId")
+    BigDecimal sumForShift(@Param("shiftId") Long shiftId);
 }

@@ -3,6 +3,7 @@ package com.lavadero.api.operations.domain;
 import com.lavadero.api.catalog.domain.ServiceType;
 import com.lavadero.api.catalog.domain.VehicleSize;
 import com.lavadero.api.common.domain.AuditedEntity;
+import com.lavadero.api.customers.domain.Customer;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -79,6 +80,10 @@ public class Ticket extends AuditedEntity {
 
     @Column(name = "voided_at")
     private Instant voidedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private Customer customer;
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TicketAssignment> assignments = new ArrayList<>();
@@ -169,6 +174,14 @@ public class Ticket extends AuditedEntity {
 
     public List<TicketAssignment> getAssignments() {
         return assignments;
+    }
+
+    public Customer getCustomer() {
+        return customer;
+    }
+
+    public void attachCustomer(Customer customer) {
+        this.customer = customer;
     }
 
     public void update(ServiceType serviceType, VehicleSize vehicleSize, String vehicleDescription,

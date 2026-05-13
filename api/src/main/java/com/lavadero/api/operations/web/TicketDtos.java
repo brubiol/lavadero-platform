@@ -43,6 +43,9 @@ public final class TicketDtos {
     public record VoidTicketRequest(@NotNull @Size(min = 1, max = 500) String reason) {
     }
 
+    public record AttachCustomerRequest(@NotNull Long customerId) {
+    }
+
     public record TicketAssignmentResponse(Long employeeId, String employeeName, BigDecimal sharePct) {
         public static TicketAssignmentResponse from(TicketAssignment assignment) {
             return new TicketAssignmentResponse(assignment.getEmployee().getId(), assignment.getEmployee().getFullName(),
@@ -54,7 +57,8 @@ public final class TicketDtos {
             Long vehicleSizeId, String vehicleSizeName, Integer dailySeq, String notaNumber,
             String vehicleDescription, BigDecimal priceAmount, TicketCurrency currency, PaymentMethod paymentMethod,
             boolean courtesy, String courtesyReason, TicketStatus status, String voidReason, Instant voidedAt,
-            List<TicketAssignmentResponse> assignments, Instant createdAt, Instant updatedAt) {
+            List<TicketAssignmentResponse> assignments, Instant createdAt, Instant updatedAt,
+            Long customerId, String customerName) {
         public static TicketResponse from(Ticket ticket) {
             return new TicketResponse(ticket.getId(), ticket.getBusinessDay().getId(), ticket.getShift().getId(),
                     ticket.getServiceType().getId(), ticket.getServiceType().getName(), ticket.getVehicleSize().getId(),
@@ -63,7 +67,9 @@ public final class TicketDtos {
                     ticket.getPaymentMethod(), ticket.isCourtesy(), ticket.getCourtesyReason(), ticket.getStatus(),
                     ticket.getVoidReason(), ticket.getVoidedAt(),
                     ticket.getAssignments().stream().map(TicketAssignmentResponse::from).toList(),
-                    ticket.getCreatedAt(), ticket.getUpdatedAt());
+                    ticket.getCreatedAt(), ticket.getUpdatedAt(),
+                    ticket.getCustomer() != null ? ticket.getCustomer().getId() : null,
+                    ticket.getCustomer() != null ? ticket.getCustomer().getName() : null);
         }
     }
 }
