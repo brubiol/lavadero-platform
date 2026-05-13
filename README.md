@@ -1,301 +1,226 @@
-# Lavadero — Sistema de Operacion Diaria
+# Turbo Lavado — Operations Platform
 
-Sistema para gestionar la operacion diaria de un lavadero de autos. Reemplaza el flujo de Excel con tickets digitales, control de turnos, nomina semanal, inventario y reportes con exportacion a Excel.
+A full-stack business operations system built for a family-owned car wash in Reynosa, Mexico. Replaces a legacy paper + Excel workflow with a production-deployed web application covering daily ticketing, shift cash management, weekly payroll, inventory, reporting, and an AI command center for the owner.
 
----
-
-## Requisitos para correrlo localmente
-
-| Herramienta | Version minima |
-|-------------|---------------|
-| Java | 21 |
-| Maven | incluido (`./mvnw`) |
-| Node.js | 18+ |
-| Docker Desktop | cualquier version reciente |
+**Live on AWS** — EC2 + RDS PostgreSQL, deployed via GitHub Actions CI/CD.
 
 ---
 
-## Como iniciar la aplicacion
+## The Problem
 
-Abre **3 terminales** y corre lo siguiente:
+The business tracked everything manually: handwritten tickets, daily Excel sheets per shift, a separate payroll spreadsheet, and no visibility unless the owner drove to the location. Errors in cash counts had no audit trail. Employee advances were tracked informally and often missed in payroll.
 
-**Terminal 1 — Base de datos**
-```bash
-docker compose up -d
+This platform replaces all of it with a role-gated web app the owner can check from his phone.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────┐     HTTPS      ┌──────────────────────┐
+│  React 19 / TS  │ ─────────────► │  Spring Boot 3.4     │
+│  Vite + Tailwind│                │  Java 21 REST API    │
+│  TanStack Query │ ◄───────────── │  Spring Security 6   │
+└─────────────────┘    JSON / JWT  └──────────┬───────────┘
+                                              │ JPA
+                                   ┌──────────▼───────────┐
+                                   │  PostgreSQL 16 (RDS)  │
+                                   │  Flyway migrations    │
+                                   └───────────────────────┘
 ```
 
-**Terminal 2 — Backend**
+**Backend:** Package-by-feature monolith. No Lombok, no MapStruct. DTOs are Java records. `@Transactional` on service methods only. Controllers return DTOs, never entities.
+
+**Frontend:** Single `App.tsx` + route-gated screens. TanStack Query for server state, React Hook Form + Zod for validation. No UI component library — raw Tailwind.
+
+**Auth:** Symmetric HMAC-SHA256 JWT with opaque refresh token rotation. Role hierarchy enforced in Spring Security: `OPERADOR → GERENTE → DUENO`.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Java 21 |
+| Framework | Spring Boot 3.4.5 |
+| Security | Spring Security 6 + OAuth2 Resource Server (JWT) |
+| Persistence | Spring Data JPA + PostgreSQL 16 |
+| Migrations | Flyway (17 forward-only migrations) |
+| Frontend | React 19 + TypeScript + Vite + Tailwind CSS |
+| State | TanStack Query v5 + React Hook Form + Zod |
+| Testing | JUnit 5 + Testcontainers + MockMvc (53 integration tests) |
+| Excel Export | Apache POI 5.3 |
+| AI | OpenAI-compatible provider + deterministic local fallback |
+| Containers | Docker multi-stage builds (api + web) |
+| Infra | AWS EC2 t3.micro + RDS db.t3.micro |
+| CI/CD | GitHub Actions → GHCR → SSH deploy |
+
+---
+
+## Key Features
+
+### Ticketing & Shift Management
+- Tickets capture service type, vehicle size, employee assignments, payment method (cash/card), and optional courtesy flag
+- Price is **server-resolved** from an effective-dated service price catalog — client never supplies a price
+- Sequential nota number auto-generated per business day (e.g., `20260504-0001`)
+- Tickets linked to business days and shifts; edits blocked once a shift is closed
+- Void workflow with mandatory reason; voided tickets excluded from all revenue calculations
+
+### Shift Close (Corte)
+- Denomination-level cash count (bills + coins + morralla)
+- Expected cash formula: `cash revenue − expenses − withdrawals − employee advances`
+- Variance (sobrante/faltante) calculated against physical count
+- Closing reason required when cash is short; stored permanently in the audit record
+
+### Weekly Payroll
+- Sunday–Saturday period with OPEN → COMPUTED → LOCKED lifecycle
+- Per-employee breakdown: base salary + cars-washed bonus + advances deducted = net pay
+- Employee advances tracked via an append-only **debt ledger** with four entry types: `ADVANCE`, `PAYMENT`, `PAYROLL_DEDUCTION`, `WRITEOFF`
+- Recompute is safe and idempotent — debt entries deduplicated by unique index
+- Payroll periods can be recomputed until locked
+
+### Inventory
+- **No `current_stock` column** — stock is derived from an append-only `product_movements` ledger
+- Movement types: purchase, sale, fiado (sold on credit), adjustment (requires reason)
+- Full audit trail; adjustments can't be edited, only added
+
+### Customer CRM + Loyalty
+- Customer profiles with name, phone, and notes (no vehicle tracking by design)
+- Tickets can be attached to customers after creation
+- Loyalty passport: every non-courtesy, non-voided wash counts; milestone rewards every 10 washes
+- Customer profile endpoint computes total visits, total MXN spend, last visit date, and reward progress live from the ticket ledger
+
+### Reporting
+- Daily summary: cars washed, revenue, expenses, cash variance
+- Monthly rollup and date-range views
+- Employee performance: cars washed and revenue share per employee over any period
+- Cash variance report: expected vs counted per shift with reasons
+- Historical snapshots: seeded from 2025 + Jan–May 2026 Excel data for trend comparison
+- **Excel export** (Apache POI): 8-sheet workbook — Summary, Tickets, Expenses, Withdrawals, Advances, Cortes, Inventory, Payroll
+
+### AI Command Center (owner-only)
+- Daily brief in Spanish: sales, cash position, employee highlights, inventory alerts, and action items
+- Watchdog alerts: cash variance spikes, unusual expenses, revenue drops, high courtesy/void rates, low inventory
+- Analyst chat: free-form business questions over real operational data
+- Agent investigations: multi-step reasoning with evidence trail and confidence level
+- All AI output stored in `ai_insights` with PENDING → REVIEWED / DISMISSED lifecycle
+- **AI is advisory only** — it reads data but never writes to financial or operational tables
+
+---
+
+## Data Model Highlights
+
+```
+business_days ──< shifts ──< tickets ──< ticket_assignments >── employees
+                                │
+                                ├──< expenses
+                                ├──< withdrawals
+                                └──< employee_advances ──> debt_ledger
+
+payroll_periods ──< payroll_entries >── employees
+                ──< payroll_days    >── employees
+
+products ──< product_movements
+
+customers ──< tickets (optional FK, nullable)
+```
+
+Every table carries `tenant_id` (default 1) so multi-location is a schema refactor, not a rewrite.
+
+---
+
+## Testing
+
+53 integration tests across 12 test classes, organized by feature phase. All tests use a **single shared Testcontainers PostgreSQL 16 container** — no H2, no mocks at the database layer.
+
 ```bash
 cd api
-SPRING_PROFILES_ACTIVE=local ../mvnw spring-boot:run
+./mvnw verify
 ```
 
-**Terminal 3 — Frontend**
+Test phases cover: domain setup, tickets, shift close, payroll, inventory, auth, reports, AI insights, CRM, and a full Excel operation flow simulation.
+
+---
+
+## Running Locally
+
+**Prerequisites:** Java 21, Docker Desktop, Node 18+
+
 ```bash
+# 1. Start Postgres
+docker compose up postgres -d
+
+# 2. Backend (runs on :8080)
+cd api
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+
+# 3. Frontend (runs on :5173, proxies /api/ to :8080)
 cd web
-npm install
-npm run dev
+npm install && npm run dev
 ```
 
-Abre el navegador en: **http://localhost:5173**
+Default login: `dueno` / `cambia-esto-123`
+
+API docs at `http://localhost:8080/swagger-ui.html`
 
 ---
 
-## Primer inicio de sesion
+## Production Deployment
 
-| Campo | Valor por defecto |
-|-------|------------------|
-| Usuario | `dueno` |
-| Contrasena | `cambia-esto-123` |
+```bash
+# One-time infra provisioning
+./scripts/provision-aws.sh
 
-> Cambia estos valores antes de usar en produccion con las variables de entorno `LAVADERO_JWT_SECRET`, `LAVADERO_BOOTSTRAP_USERNAME`, `LAVADERO_BOOTSTRAP_PASSWORD`.
+# Subsequent deploys happen automatically on push to main via GitHub Actions
+# Images published to GHCR, pulled and restarted on EC2
+```
 
----
+Required GitHub secrets: `EC2_HOST`, `EC2_SSH_KEY`
 
-## Roles de usuario
+Production env vars (stored in `/opt/lavadero/.env` on EC2, mode 600):
 
-| Rol | Que puede hacer |
-|-----|----------------|
-| **DUENO** | Todo — incluyendo reportes, exportacion Excel y AI Command Center |
-| **GERENTE** | Tickets, gastos, corte, nomina, inventario, catalogos |
-| **OPERADOR** | Crear tickets y ver operacion del dia |
-
----
-
-## Flujo diario — paso a paso
-
-### 1. Abrir el dia (cada manana)
-
-Al entrar al **Dashboard** veras una barra de estado en la parte superior.
-
-- Si el dia no esta abierto → aparece boton **"Abrir dia de hoy"** (naranja)
-- Si el dia esta abierto pero sin turno → aparece boton **"Turno Matutino"** o **"Turno Vespertino"** (azul)
-- Si el turno esta activo → barra verde con el nombre del turno
-
-Solo el GERENTE o DUENO puede abrir el dia y los turnos.
+```bash
+LAVADERO_JWT_SECRET=<32+ byte hex secret>
+LAVADERO_BOOTSTRAP_USERNAME=<admin username>
+LAVADERO_BOOTSTRAP_PASSWORD=<strong password>
+LAVADERO_AI_ENABLED=true
+LAVADERO_AI_API_KEY=<OpenAI key>
+LAVADERO_AI_MODEL=gpt-4.1-mini
+```
 
 ---
 
-### 2. Crear tickets
-
-Ve a **Nuevo ticket** en el menu lateral.
-
-1. Selecciona el turno activo
-2. Selecciona el servicio (Lavado Basico, Completo, Encerado, etc.)
-3. Selecciona el tamano del vehiculo (Chico, Mediano, Grande, Camioneta)
-4. Escribe una descripcion del vehiculo (opcional, ej. "Tsuru rojo")
-5. Selecciona uno o mas lavadores que hicieron el trabajo
-6. El precio se calcula automaticamente
-7. Si es cortesia, marca la casilla y escribe el motivo
-
-El ticket queda guardado con numero de nota automatico (ej. `20260504-0001`).
-
-**Reglas importantes:**
-- Solo se pueden crear tickets si hay un turno ABIERTO
-- Una vez cerrado el turno, no se pueden editar los tickets de ese turno
-- Las cortesias guardan $0 de ingreso pero si cuentan como carro lavado
-
----
-
-### 3. Registrar gastos del dia
-
-Ve a **Gastos** en el menu.
-
-Hay 3 tipos de salidas de dinero:
-
-| Tipo | Cuando usarlo |
-|------|--------------|
-| **Nuevo gasto** | Gastos del negocio (jabon, CFE, agua, etc.) |
-| **Nuevo retiro** | El dueno saca dinero de la caja |
-| **Nuevo prestamo** | Adelanto de sueldo a un lavador |
-
-Los prestamos se descuentan automaticamente en la nomina de la semana.
-
----
-
-### 4. Cerrar el turno (Corte)
-
-Ve a **Corte** al final del turno.
-
-El corte tiene 4 pasos:
-
-**Paso 1 — Contar el efectivo**
-Escribe cuantos billetes y monedas hay en la caja. El sistema calcula el total contado en tiempo real.
-
-**Paso 2 — Ver gastos y retiros**
-El sistema muestra los ingresos de tickets, gastos registrados y retiros del turno.
-
-**Paso 3 — Revision**
-| Campo | Que significa |
-|-------|--------------|
-| Esperado | Lo que deberia haber (ingresos - gastos - retiros) |
-| Contado | Lo que contaste fisicamente |
-| Diferencia | Sobrante (+) o Faltante (-) |
-
-- Si hay **sobrante**: puedes cerrar sin problema
-- Si hay **faltante**: el sistema exige que escribas el motivo antes de cerrar
-
-**Paso 4 — Cerrar turno**
-Haz clic en "Cerrar turno". El turno queda CERRADO y no se pueden crear mas tickets en el.
-
-> Si corres turno matutino y vespertino por separado, cada uno tiene su propio corte. Si prefieres un solo corte al dia, usa un solo turno.
-
----
-
-### 5. Nomina semanal
-
-Ve a **Nomina** (requiere GERENTE o DUENO).
-
-La nomina es **semanal de domingo a sabado**.
-
-1. Crea un periodo nuevo — el sistema calcula el sabado automaticamente
-2. Haz clic en **Recalcular** para calcular los pagos
-3. Revisa cada lavador:
-   - **Sueldo base**: configurado en Catalogos
-   - **Bono por carros**: $10 MXN por cada carro lavado (proporcional si fue con otro lavador)
-   - **Adelantos descontados**: prestamos del periodo
-   - **Neto a pagar**: lo que se le entrega al lavador
-4. Haz clic en **Bloquear** cuando el pago este listo — despues no se puede modificar
-
----
-
-### 6. Inventario
-
-Ve a **Inventario** (requiere GERENTE o DUENO).
-
-El inventario es por movimientos — el stock se calcula sumando entradas y restando salidas.
-
-| Tipo de movimiento | Efecto |
-|-------------------|--------|
-| Compra | Aumenta el stock |
-| Venta | Reduce el stock |
-| Fiado | Reduce el stock (sin cobro inmediato) |
-| Ajuste | Correccion manual (requiere motivo) |
-
----
-
-### 7. Reportes y exportacion Excel
-
-Ve a **Reportes** (requiere DUENO).
-
-Selecciona un rango de fechas y puedes ver:
-- Resumen diario (ingresos, gastos, resultado por dia)
-- Resumen mensual
-- Cortes de turno (sobrantes y faltantes)
-- Desempeno de lavadores (carros y tickets por empleado)
-
-Haz clic en **Descargar Excel** para exportar todo en un archivo `.xlsx` con 8 hojas: Resumen, Tickets, Gastos, Retiros, Prestamos, Cortes, Inventario y Nomina.
-
----
-
-### 8. AI Command Center
-
-Ve a **AI** (requiere DUENO).
-
-El modulo de AI es solo asesor. Puede crear y actualizar registros de `ai_insights`, pero nunca crea ni modifica tickets, gastos, nomina, movimientos de inventario, precios, usuarios ni otros registros financieros fuente.
-
-Incluye cuatro flujos:
-
-| Flujo | Para que sirve |
-|-------|----------------|
-| **Brief del dia** | Resumen practico en espanol de ventas, caja, lavadores, inventario, riesgos y acciones del dueno. |
-| **Watchdog de alertas** | Detecta diferencias de caja, gastos atipicos, bajas de ingresos, cortesias/voids altos e inventario bajo. |
-| **Analista AI** | Chat de negocio para preguntar por rangos, comparativos, lavadores, cortes y dias sospechosos. |
-| **Investigacion con agente** | Ejecuta una investigacion trazable con evidencia, pasos realizados y nivel de confianza. |
-
-El historial de insights permite marcar cada resultado como **Revisado** o **Descartado**.
-
----
-
-## Configuracion inicial (primera vez)
-
-La base ya se entrega con datos importados de Excel:
-
-- Historico diario 2025 y enero-mayo 2026 para reportes.
-- Tickets operativos enero-mayo 2026 con lavadores y gastos del dia.
-- Catalogo real de servicios, tamanos, precios MXN/USD y lavadores activos.
-- Inventario inicial con productos frecuentes para empezar a capturar compras, ventas, fiados y ajustes.
-
-### Catalogo precargado
-
-Servicios:
-
-| Servicio | Chico | Sedan / 1 cabina | Mediano | Grande |
-|----------|-------|------------------|---------|--------|
-| Lavado y Aspirado | $73 MXN / $5 USD | $108 MXN / $6 USD | $168 MXN / $7 USD | $208 MXN / $8 USD |
-| Lavado Exterior | $54 MXN / $4 USD | $73 MXN / $5 USD | $133 MXN / $6 USD | $168 MXN / $7 USD |
-| Solo Aspirado | $62 MXN / $3 USD | $62 MXN / $3 USD | $72 MXN / $4 USD | $72 MXN / $4 USD |
-| Solo Presion | $50 MXN / $5 USD | $50 MXN / $5 USD | $50 MXN / $5 USD | $50 MXN / $5 USD |
-| Lavado de Motor | $72 MXN / $4 USD | $72 MXN / $4 USD | $90 MXN / $5 USD | $90 MXN / $5 USD |
-
-El servicio y tamano `Historico` quedan ocultos para la operacion diaria; solo existen para conservar tickets importados de Excel.
-
-### Checklist antes de entregarlo al dueno
-
-1. En **Catalogos**, revisar lavadores activos y capturar telefono si hace falta.
-2. Confirmar **sueldo base semanal**. La importacion deja sueldos en `0.00` cuando Excel no trae una base fija confiable.
-3. Revisar precios MXN/USD contra el pizarron actual del negocio.
-4. En **Inventario**, ajustar precios de venta y capturar conteo inicial con un movimiento de **Ajuste**.
-5. Cambiar usuario/contrasena inicial antes de produccion.
-6. Probar el flujo completo: abrir dia, abrir turno, crear ticket, registrar gasto, cerrar corte, crear nomina y exportar reporte.
-
----
-
-## Estructura del proyecto
+## Project Structure
 
 ```
 lavadero-api/
-├── api/                  Backend Spring Boot (Java 21)
-│   ├── src/main/java/    Codigo fuente
-│   └── src/main/resources/db/migration/   Migraciones de base de datos
-├── web/                  Frontend React + TypeScript
-│   └── src/App.tsx       Toda la interfaz de usuario
-├── docker-compose.yml    Postgres para desarrollo local
-└── scripts/              Scripts utilitarios
+├── api/                          Spring Boot backend
+│   ├── src/main/java/com/lavadero/api/
+│   │   ├── ai/                   AI insights, provider abstraction, alert/chat/investigation
+│   │   ├── auth/                 Login, refresh, logout, bootstrap user
+│   │   ├── cash/                 Cash counts, shift close summaries
+│   │   ├── catalog/              Employees, service types, vehicle sizes, service prices
+│   │   ├── customers/            CRM, loyalty passport
+│   │   ├── inventory/            Products, append-only product movements
+│   │   ├── money/                Expenses, withdrawals, employee advances
+│   │   ├── operations/           Business days, shifts, tickets, ticket assignments
+│   │   ├── payroll/              Periods, entries, days, debt ledger
+│   │   ├── reports/              Daily/monthly/historical summaries, Excel export
+│   │   └── security/             SecurityConfig, JwtService
+│   └── src/main/resources/db/migration/   V1–V17 Flyway migrations
+├── web/
+│   └── src/App.tsx               Full frontend — all 10 routes, all screens
+├── scripts/                      AWS provisioning + EC2 setup
+├── docker-compose.yml            Local dev stack
+└── docker-compose.prod.yml       Production (RDS-backed)
 ```
-
-## Stack tecnologico
-
-| Capa | Tecnologia |
-|------|-----------|
-| Backend | Spring Boot 3.4, Java 21 |
-| Base de datos | PostgreSQL 16, Flyway |
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS |
-| Auth | JWT + refresh tokens opacos, BCrypt |
-| AI | Proveedor OpenAI-compatible + fallback local deterministico |
-| Testing | Testcontainers + MockMvc |
-| Exportacion | Apache POI (Excel) |
 
 ---
 
-## Correr los tests
+## Design Decisions Worth Noting
 
-```bash
-cd api
-../mvnw test
-```
-
-Los tests levantan una base de datos temporal con Docker y prueban todos los flujos de negocio.
-
----
-
-## Variables de entorno para produccion
-
-```bash
-LAVADERO_JWT_SECRET=<cadena larga y aleatoria, minimo 32 caracteres>
-LAVADERO_BOOTSTRAP_USERNAME=<tu usuario>
-LAVADERO_BOOTSTRAP_PASSWORD=<tu contrasena segura>
-LAVADERO_BOOTSTRAP_FULL_NAME=<tu nombre>
-SPRING_PROFILES_ACTIVE=local
-
-# AI opcional para produccion
-LAVADERO_AI_ENABLED=true
-LAVADERO_AI_PROVIDER=openai-compatible
-LAVADERO_AI_BASE_URL=https://api.openai.com/v1
-LAVADERO_AI_API_KEY=<tu OpenAI API key>
-LAVADERO_AI_MODEL=gpt-4.1-mini
-LAVADERO_AI_TIMEOUT_SECONDS=20
-LAVADERO_AI_SCHEDULER_ENABLED=false
-```
-
-Si no configuras `LAVADERO_AI_API_KEY`, el sistema usa el proveedor local deterministico para que la pantalla siga funcionando sin romper el dashboard. Nunca subas una API key real al repo ni la pegues en codigo frontend.
+- **Package-by-feature, not package-by-layer** — bounded contexts are immediately obvious from the directory structure
+- **Append-only ledgers for money and inventory** — no UPDATE or DELETE on financial rows; correctness through new entries
+- **Effective-dated prices** — service prices have an `effective_from` date; the API picks the most recent price valid on the ticket's business date
+- **No denormalized totals** — all aggregates computed live from source ledger tables, keeping historical data consistent even when older records are corrected
+- **AI firewall** — AI services are wired to read-only report services and cannot inject writes to any financial table; enforced at the service dependency level, not just in prompt instructions
