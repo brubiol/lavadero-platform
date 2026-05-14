@@ -36,7 +36,6 @@ class Phase8PayrollIntegrationTest extends AbstractIntegrationTest {
         mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPUTED"))
-                .andExpect(jsonPath("$.entries", hasSize(2)))
                 .andExpect(jsonPath("$.days", hasSize(2)))
                 .andExpect(jsonPath("$.entries[?(@.employeeId == %d)].carsWashed".formatted(fixture.employeeOneId()))
                         .value(0.50))

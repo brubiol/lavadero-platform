@@ -27,7 +27,7 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
 
     @Test
     void should_apply_manual_payroll_adjustments_and_block_changes_when_locked() throws Exception {
-        LocalDate sunday = LocalDate.of(2027, 1, 3);
+        LocalDate sunday = LocalDate.of(2031, 1, 5);
         Fixture fixture = fixture("P13A", sunday.plusDays(1));
         setBaseSalary(fixture.employeeId(), "1000.00");
         createTicket(fixture);
@@ -70,7 +70,7 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
 
     @Test
     void should_export_unlock_reopen_and_record_audit_events() throws Exception {
-        LocalDate sunday = LocalDate.of(2027, 1, 10);
+        LocalDate sunday = LocalDate.of(2031, 1, 12);
         Fixture fixture = fixture("P13B", sunday.plusDays(1));
         setBaseSalary(fixture.employeeId(), "900.00");
         createTicket(fixture);
