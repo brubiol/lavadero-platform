@@ -26,8 +26,10 @@ public class AuditService {
 
     @Transactional(readOnly = true)
     public List<AuditEvent> search(LocalDate from, LocalDate to, String entityType, Long entityId) {
-        Instant start = from == null ? null : from.atStartOfDay().toInstant(ZoneOffset.UTC);
-        Instant end = to == null ? null : to.plusDays(1).atStartOfDay().minusNanos(1).toInstant(ZoneOffset.UTC);
+        Instant start = from == null ? Instant.EPOCH : from.atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant end = to == null
+                ? Instant.parse("9999-12-31T23:59:59Z")
+                : to.plusDays(1).atStartOfDay().minusNanos(1).toInstant(ZoneOffset.UTC);
         return events.search(start, end, normalize(entityType), entityId);
     }
 
