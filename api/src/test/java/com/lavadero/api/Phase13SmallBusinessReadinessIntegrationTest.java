@@ -75,7 +75,7 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
         setBaseSalary(fixture.employeeId(), "900.00");
         createTicket(fixture);
         Long periodId = createPeriod(sunday);
-        createPayrollAdjustment(periodId, fixture.employeeId(), "EARNING", "50.00", "extra", "Extra lavado");
+        Long adjustmentId = createPayrollAdjustment(periodId, fixture.employeeId(), "EARNING", "50.00", "extra", "Extra lavado");
         mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId)).andExpect(status().isOk());
         mvc.perform(post("/api/v1/payroll/periods/{id}/lock", periodId)).andExpect(status().isOk());
 
@@ -108,7 +108,7 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"));
 
-        mvc.perform(get("/api/v1/audit-events?entityType=PAYROLL_ADJUSTMENT"))
+        mvc.perform(get("/api/v1/audit-events?entityType=PAYROLL_ADJUSTMENT&entityId={id}", adjustmentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.action == 'PAYROLL_ADJUSTMENT_CREATED')]", hasSize(1)));
 
