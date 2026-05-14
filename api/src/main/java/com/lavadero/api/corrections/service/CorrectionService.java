@@ -28,15 +28,16 @@ public class CorrectionService {
     }
 
     @Transactional
-    public void reopenShift(Long shiftId, String reason) {
+    public Shift reopenShift(Long shiftId, String reason) {
         Shift shift = shifts.findById(shiftId).orElseThrow(() -> new EntityNotFoundException("Shift not found"));
         if (shift.getStatus() != ShiftStatus.CLOSED) {
             throw new IllegalArgumentException("Only CLOSED shifts can be reopened");
         }
         closeSummaries.deleteByShiftId(shiftId);
         shift.reopenForCorrection();
-        shifts.save(shift);
+        Shift saved = shifts.save(shift);
         audit.record("SHIFT_REOPENED", "SHIFT", shiftId, reason, shift.getBusinessDay().getBusinessDate().toString());
+        return saved;
     }
 
     @Transactional
