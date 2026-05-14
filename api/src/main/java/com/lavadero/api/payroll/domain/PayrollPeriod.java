@@ -76,4 +76,9 @@ public class PayrollPeriod extends AuditedEntity {
         status = PayrollPeriodStatus.LOCKED;
         lockedAt = Instant.now();
     }
+
+    public void unlockForCorrection() {
+        status = PayrollPeriodStatus.COMPUTED;
+        lockedAt = null;
+    }
 }

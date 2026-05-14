@@ -49,6 +49,15 @@ public class PayrollEntry extends AuditedEntity {
     @Column(name = "advances_deducted", nullable = false, precision = 10, scale = 2)
     private BigDecimal advancesDeducted;
 
+    @Column(name = "manual_earnings", nullable = false, precision = 10, scale = 2)
+    private BigDecimal manualEarnings = BigDecimal.ZERO;
+
+    @Column(name = "manual_deductions", nullable = false, precision = 10, scale = 2)
+    private BigDecimal manualDeductions = BigDecimal.ZERO;
+
+    @Column(name = "gross_pay", nullable = false, precision = 10, scale = 2)
+    private BigDecimal grossPay = BigDecimal.ZERO;
+
     @Column(name = "net_pay", nullable = false, precision = 10, scale = 2)
     private BigDecimal netPay;
 
@@ -58,6 +67,15 @@ public class PayrollEntry extends AuditedEntity {
     public PayrollEntry(PayrollPeriod payrollPeriod, Employee employee, BigDecimal carsWashed, BigDecimal baseSalary,
             BigDecimal carsBonusRate, BigDecimal carsBonus, BigDecimal commissions, BigDecimal tipsPoolShare,
             BigDecimal advancesDeducted, BigDecimal netPay) {
+        this(payrollPeriod, employee, carsWashed, baseSalary, carsBonusRate, carsBonus, commissions, tipsPoolShare,
+                BigDecimal.ZERO, BigDecimal.ZERO, advancesDeducted,
+                baseSalary.add(carsBonus).add(commissions).add(tipsPoolShare), netPay);
+    }
+
+    public PayrollEntry(PayrollPeriod payrollPeriod, Employee employee, BigDecimal carsWashed, BigDecimal baseSalary,
+            BigDecimal carsBonusRate, BigDecimal carsBonus, BigDecimal commissions, BigDecimal tipsPoolShare,
+            BigDecimal manualEarnings, BigDecimal manualDeductions, BigDecimal advancesDeducted, BigDecimal grossPay,
+            BigDecimal netPay) {
         this.payrollPeriod = payrollPeriod;
         this.employee = employee;
         this.carsWashed = carsWashed;
@@ -66,7 +84,10 @@ public class PayrollEntry extends AuditedEntity {
         this.carsBonus = carsBonus;
         this.commissions = commissions;
         this.tipsPoolShare = tipsPoolShare;
+        this.manualEarnings = manualEarnings;
+        this.manualDeductions = manualDeductions;
         this.advancesDeducted = advancesDeducted;
+        this.grossPay = grossPay;
         this.netPay = netPay;
     }
 
@@ -108,6 +129,18 @@ public class PayrollEntry extends AuditedEntity {
 
     public BigDecimal getAdvancesDeducted() {
         return advancesDeducted;
+    }
+
+    public BigDecimal getManualEarnings() {
+        return manualEarnings;
+    }
+
+    public BigDecimal getManualDeductions() {
+        return manualDeductions;
+    }
+
+    public BigDecimal getGrossPay() {
+        return grossPay;
     }
 
     public BigDecimal getNetPay() {

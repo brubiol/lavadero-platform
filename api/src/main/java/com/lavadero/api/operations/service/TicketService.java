@@ -1,5 +1,6 @@
 package com.lavadero.api.operations.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.catalog.domain.ServicePrice;
 import com.lavadero.api.catalog.domain.ServiceType;
@@ -51,10 +52,11 @@ public class TicketService {
     private final BusinessDayService businessDays;
     private final ServicePriceRepository servicePrices;
     private final CustomerRepository customers;
+    private final AuditService audit;
 
     public TicketService(TicketRepository tickets, ShiftRepository shifts, EmployeeRepository employees,
             ServiceTypeService serviceTypes, VehicleSizeService vehicleSizes, BusinessDayService businessDays,
-            ServicePriceRepository servicePrices, CustomerRepository customers) {
+            ServicePriceRepository servicePrices, CustomerRepository customers, AuditService audit) {
         this.tickets = tickets;
         this.shifts = shifts;
         this.employees = employees;
@@ -63,6 +65,7 @@ public class TicketService {
         this.businessDays = businessDays;
         this.servicePrices = servicePrices;
         this.customers = customers;
+        this.audit = audit;
     }
 
     @Transactional
@@ -84,7 +87,9 @@ public class TicketService {
         Ticket ticket = new Ticket(businessDay, shift, serviceType, vehicleSize, dailySeq, notaNumber,
                 request.vehicleDescription(), priceAmount, request.currency(), paymentMethod, courtesy, request.courtesyReason());
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
-        return tickets.save(ticket);
+        Ticket saved = tickets.save(ticket);
+        audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -144,6 +149,7 @@ public class TicketService {
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }
+        audit.record("TICKET_EDITED", "TICKET", ticket.getId(), null, ticket.getNotaNumber());
         return ticket;
     }
 
@@ -154,6 +160,7 @@ public class TicketService {
             throw new IllegalArgumentException("Ticket is already voided");
         }
         ticket.voidTicket(reason);
+        audit.record("TICKET_VOIDED", "TICKET", ticket.getId(), reason, ticket.getNotaNumber());
         return ticket;
     }
 

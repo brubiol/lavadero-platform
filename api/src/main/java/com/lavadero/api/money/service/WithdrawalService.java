@@ -1,5 +1,6 @@
 package com.lavadero.api.money.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.money.domain.Withdrawal;
 import com.lavadero.api.money.repository.WithdrawalRepository;
 import com.lavadero.api.money.service.BusinessContextResolver.Context;
@@ -13,10 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class WithdrawalService {
     private final WithdrawalRepository withdrawals;
     private final BusinessContextResolver contextResolver;
+    private final AuditService audit;
 
-    public WithdrawalService(WithdrawalRepository withdrawals, BusinessContextResolver contextResolver) {
+    public WithdrawalService(WithdrawalRepository withdrawals, BusinessContextResolver contextResolver, AuditService audit) {
         this.withdrawals = withdrawals;
         this.contextResolver = contextResolver;
+        this.audit = audit;
     }
 
     @Transactional
@@ -24,7 +27,10 @@ public class WithdrawalService {
         Context context = contextResolver.resolve(request.businessDayId(), request.shiftId(), request.withdrawalDate());
         Withdrawal withdrawal = new Withdrawal(context.businessDay(), context.shift(), context.recordDate(),
                 request.amount(), request.reason());
-        return withdrawals.save(withdrawal);
+        Withdrawal saved = withdrawals.save(withdrawal);
+        audit.record("WITHDRAWAL_CREATED", "WITHDRAWAL", saved.getId(), saved.getReason(),
+                saved.getAmount().toString());
+        return saved;
     }
 
     @Transactional(readOnly = true)

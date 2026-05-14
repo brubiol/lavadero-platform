@@ -1,21 +1,28 @@
 package com.lavadero.api.payroll.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.catalog.domain.Employee;
+import com.lavadero.api.catalog.domain.PayrollType;
 import com.lavadero.api.catalog.repository.EmployeeRepository;
 import com.lavadero.api.money.domain.EmployeeAdvance;
 import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
 import com.lavadero.api.operations.domain.TicketAssignment;
 import com.lavadero.api.operations.repository.TicketAssignmentRepository;
 import com.lavadero.api.payroll.domain.DebtLedgerType;
+import com.lavadero.api.payroll.domain.PayrollAdjustment;
+import com.lavadero.api.payroll.domain.PayrollAdjustmentType;
 import com.lavadero.api.payroll.domain.PayrollDay;
 import com.lavadero.api.payroll.domain.PayrollEntry;
 import com.lavadero.api.payroll.domain.PayrollPeriod;
 import com.lavadero.api.payroll.domain.PayrollPeriodStatus;
 import com.lavadero.api.payroll.repository.DebtLedgerRepository;
+import com.lavadero.api.payroll.repository.PayrollAdjustmentRepository;
 import com.lavadero.api.payroll.repository.PayrollDayRepository;
 import com.lavadero.api.payroll.repository.PayrollEntryRepository;
 import com.lavadero.api.payroll.repository.PayrollPeriodRepository;
+import com.lavadero.api.payroll.web.PayrollDtos.CreatePayrollAdjustmentRequest;
 import com.lavadero.api.payroll.web.PayrollDtos.CreatePayrollPeriodRequest;
+import com.lavadero.api.payroll.web.PayrollDtos.PayrollAdjustmentResponse;
 import com.lavadero.api.payroll.web.PayrollDtos.PayrollPeriodResponse;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
@@ -25,7 +32,6 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,26 +43,28 @@ public class PayrollService {
     private final PayrollPeriodRepository periods;
     private final PayrollEntryRepository entries;
     private final PayrollDayRepository days;
+    private final PayrollAdjustmentRepository adjustments;
     private final DebtLedgerRepository debtLedger;
     private final EmployeeRepository employees;
     private final EmployeeAdvanceRepository advances;
     private final TicketAssignmentRepository ticketAssignments;
     private final DebtLedgerService debtLedgerService;
-    private final BigDecimal carsBonusRate;
+    private final AuditService audit;
 
     public PayrollService(PayrollPeriodRepository periods, PayrollEntryRepository entries, PayrollDayRepository days,
-            DebtLedgerRepository debtLedger, EmployeeRepository employees, EmployeeAdvanceRepository advances,
-            TicketAssignmentRepository ticketAssignments, DebtLedgerService debtLedgerService,
-            @Value("${lavadero.payroll.cars-bonus-rate:10.00}") BigDecimal carsBonusRate) {
+            PayrollAdjustmentRepository adjustments, DebtLedgerRepository debtLedger, EmployeeRepository employees,
+            EmployeeAdvanceRepository advances, TicketAssignmentRepository ticketAssignments,
+            DebtLedgerService debtLedgerService, AuditService audit) {
         this.periods = periods;
         this.entries = entries;
         this.days = days;
+        this.adjustments = adjustments;
         this.debtLedger = debtLedger;
         this.employees = employees;
         this.advances = advances;
         this.ticketAssignments = ticketAssignments;
         this.debtLedgerService = debtLedgerService;
-        this.carsBonusRate = money(carsBonusRate);
+        this.audit = audit;
     }
 
     @Transactional
@@ -65,6 +73,8 @@ public class PayrollService {
             throw new IllegalArgumentException("Payroll period must start on Sunday");
         }
         PayrollPeriod period = periods.save(new PayrollPeriod(request.startDate(), request.startDate().plusDays(6)));
+        audit.record("PAYROLL_PERIOD_CREATED", "PAYROLL_PERIOD", period.getId(), null,
+                period.getStartDate() + " al " + period.getEndDate());
         return response(period);
     }
 
@@ -99,6 +109,7 @@ public class PayrollService {
 
         Map<Long, EmployeeAccumulator> byEmployee = new HashMap<>();
         Map<DayKey, DayAccumulator> byDay = new HashMap<>();
+        Map<Long, AdjustmentTotals> adjustmentsByEmployee = adjustmentTotals(period);
         for (TicketAssignment assignment : assignments) {
             Employee employee = assignment.getEmployee();
             BigDecimal share = assignment.getSharePct().divide(ONE_HUNDRED, 4, RoundingMode.HALF_UP);
@@ -115,6 +126,14 @@ public class PayrollService {
         for (EmployeeAdvance advance : periodAdvances) {
             byEmployee.computeIfAbsent(advance.getEmployee().getId(), ignored -> new EmployeeAccumulator(advance.getEmployee()));
         }
+        for (PayrollAdjustment adjustment : adjustments.findByPayrollPeriodId(period.getId())) {
+            byEmployee.computeIfAbsent(adjustment.getEmployee().getId(), ignored -> new EmployeeAccumulator(adjustment.getEmployee()));
+        }
+        for (Employee employee : employees.findByActiveTrueOrderByFullNameAsc()) {
+            if (employee.getBaseWeeklySalary().signum() > 0) {
+                byEmployee.computeIfAbsent(employee.getId(), ignored -> new EmployeeAccumulator(employee));
+            }
+        }
 
         for (DayAccumulator day : byDay.values()) {
             days.save(new PayrollDay(period, day.employee, day.workDate, money(day.carsWashed), money(day.ticketRevenue)));
@@ -122,20 +141,37 @@ public class PayrollService {
 
         for (EmployeeAccumulator accumulator : byEmployee.values()) {
             Employee employee = accumulator.employee;
-            BigDecimal baseSalary = money(employee.getBaseWeeklySalary());
             BigDecimal carsWashed = money(accumulator.carsWashed);
-            BigDecimal carsBonus = money(carsWashed.multiply(carsBonusRate));
+            BigDecimal baseSalary = employee.getPayrollType() == PayrollType.SALARY
+                    ? money(employee.getBaseWeeklySalary())
+                    : ZERO;
+            BigDecimal carsBonusRate = employee.getPayrollType() == PayrollType.SALARY
+                    ? money(employee.getProductivityBonusRate())
+                    : ZERO;
+            BigDecimal carsBonus = employee.getPayrollType() == PayrollType.SALARY
+                    ? money(carsWashed.multiply(carsBonusRate))
+                    : ZERO;
+            BigDecimal commissionRate = employee.getPayrollType() == PayrollType.COMMISSION
+                    ? money(employee.getCommissionRate())
+                    : ZERO;
+            BigDecimal commissions = employee.getPayrollType() == PayrollType.COMMISSION
+                    ? money(carsWashed.multiply(commissionRate))
+                    : ZERO;
+            AdjustmentTotals manual = adjustmentsByEmployee.getOrDefault(employee.getId(), AdjustmentTotals.ZERO);
             BigDecimal debtBalance = debtLedgerService.balance(employee);
-            BigDecimal grossPay = baseSalary.add(carsBonus);
-            BigDecimal advancesDeducted = money(debtBalance.min(grossPay).max(ZERO));
-            BigDecimal netPay = money(grossPay.subtract(advancesDeducted));
+            BigDecimal grossPay = money(baseSalary.add(carsBonus).add(commissions).add(manual.earnings));
+            BigDecimal maxDeductions = grossPay.subtract(manual.deductions).max(ZERO);
+            BigDecimal advancesDeducted = money(debtBalance.min(maxDeductions).max(ZERO));
+            BigDecimal netPay = money(grossPay.subtract(manual.deductions).subtract(advancesDeducted).max(ZERO));
             entries.save(new PayrollEntry(period, employee, carsWashed, baseSalary, carsBonusRate, carsBonus,
-                    ZERO, ZERO, advancesDeducted, netPay));
+                    commissions, ZERO, manual.earnings, manual.deductions, advancesDeducted, grossPay, netPay));
             debtLedgerService.recordPayrollDeduction(employee, period, advancesDeducted);
         }
 
         period.markComputed();
         periods.save(period);
+        audit.record("PAYROLL_COMPUTED", "PAYROLL_PERIOD", period.getId(), null,
+                period.getStartDate() + " al " + period.getEndDate());
         return response(period);
     }
 
@@ -150,23 +186,95 @@ public class PayrollService {
         }
         period.lock();
         periods.save(period);
+        audit.record("PAYROLL_LOCKED", "PAYROLL_PERIOD", period.getId(), null,
+                period.getStartDate() + " al " + period.getEndDate());
         return response(period);
     }
 
-    private PayrollPeriod getPeriod(Long id) {
+    @Transactional(readOnly = true)
+    public List<PayrollAdjustmentResponse> listAdjustments(Long periodId) {
+        getPeriod(periodId);
+        return adjustments.findByPayrollPeriodIdOrderByEmployeeFullNameAscCreatedAtAsc(periodId).stream()
+                .map(PayrollAdjustmentResponse::from)
+                .toList();
+    }
+
+    @Transactional
+    public PayrollAdjustmentResponse createAdjustment(Long periodId, CreatePayrollAdjustmentRequest request) {
+        PayrollPeriod period = getPeriod(periodId);
+        requireUnlocked(period);
+        Employee employee = employees.findById(request.employeeId())
+                .orElseThrow(() -> new EntityNotFoundException("Employee not found"));
+        PayrollAdjustment adjustment = adjustments.save(new PayrollAdjustment(period, employee, request.type(),
+                money(request.amount()), request.concept().trim(), normalize(request.note())));
+        audit.record("PAYROLL_ADJUSTMENT_CREATED", "PAYROLL_ADJUSTMENT", adjustment.getId(), request.concept(),
+                "Period " + period.getId() + ": " + employee.getFullName() + " " + request.type() + " " + money(request.amount()));
+        return PayrollAdjustmentResponse.from(adjustment);
+    }
+
+    @Transactional
+    public void deleteAdjustment(Long adjustmentId) {
+        PayrollAdjustment adjustment = adjustments.findById(adjustmentId)
+                .orElseThrow(() -> new EntityNotFoundException("Payroll adjustment not found"));
+        requireUnlocked(adjustment.getPayrollPeriod());
+        adjustments.delete(adjustment);
+        audit.record("PAYROLL_ADJUSTMENT_DELETED", "PAYROLL_ADJUSTMENT", adjustment.getId(),
+                adjustment.getConcept(), "Period " + adjustment.getPayrollPeriod().getId() + ": "
+                        + adjustment.getEmployee().getFullName() + " " + adjustment.getAmount());
+    }
+
+    public PayrollPeriod getPeriod(Long id) {
         return periods.findById(id).orElseThrow(() -> new EntityNotFoundException("Payroll period not found"));
     }
 
     private PayrollPeriodResponse response(PayrollPeriod period) {
         return PayrollPeriodResponse.from(period, entries.findByPayrollPeriodIdOrderByEmployeeFullNameAsc(period.getId()),
-                days.findByPayrollPeriodIdOrderByWorkDateAscEmployeeFullNameAsc(period.getId()));
+                days.findByPayrollPeriodIdOrderByWorkDateAscEmployeeFullNameAsc(period.getId()),
+                adjustments.findByPayrollPeriodIdOrderByEmployeeFullNameAscCreatedAtAsc(period.getId()));
     }
 
     private BigDecimal money(BigDecimal value) {
         return (value == null ? ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private void requireUnlocked(PayrollPeriod period) {
+        if (period.getStatus() == PayrollPeriodStatus.LOCKED) {
+            throw new IllegalArgumentException("Locked payroll periods cannot be changed");
+        }
+    }
+
+    private Map<Long, AdjustmentTotals> adjustmentTotals(PayrollPeriod period) {
+        Map<Long, AdjustmentTotals> result = new HashMap<>();
+        for (PayrollAdjustment adjustment : adjustments.findByPayrollPeriodId(period.getId())) {
+            result.computeIfAbsent(adjustment.getEmployee().getId(), ignored -> new AdjustmentTotals())
+                    .add(adjustment);
+        }
+        return result;
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
     private record DayKey(Long employeeId, LocalDate workDate) {
+    }
+
+    private static final class AdjustmentTotals {
+        private static final AdjustmentTotals ZERO = new AdjustmentTotals();
+
+        private BigDecimal earnings = PayrollService.ZERO;
+        private BigDecimal deductions = PayrollService.ZERO;
+
+        private void add(PayrollAdjustment adjustment) {
+            if (adjustment.getType() == PayrollAdjustmentType.EARNING) {
+                earnings = earnings.add(adjustment.getAmount());
+            } else {
+                deductions = deductions.add(adjustment.getAmount());
+            }
+        }
     }
 
     private static final class EmployeeAccumulator {

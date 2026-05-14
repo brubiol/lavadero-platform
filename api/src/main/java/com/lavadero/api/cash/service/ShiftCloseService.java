@@ -1,5 +1,6 @@
 package com.lavadero.api.cash.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.cash.domain.CashCount;
 import com.lavadero.api.cash.domain.ShiftCloseSummary;
 import com.lavadero.api.cash.repository.CashCountRepository;
@@ -29,10 +30,11 @@ public class ShiftCloseService {
     private final EmployeeAdvanceRepository advances;
     private final CashCountRepository cashCounts;
     private final ShiftCloseSummaryRepository closeSummaries;
+    private final AuditService audit;
 
     public ShiftCloseService(ShiftRepository shifts, TicketRepository tickets, ExpenseRepository expenses,
             WithdrawalRepository withdrawals, EmployeeAdvanceRepository advances, CashCountRepository cashCounts,
-            ShiftCloseSummaryRepository closeSummaries) {
+            ShiftCloseSummaryRepository closeSummaries, AuditService audit) {
         this.shifts = shifts;
         this.tickets = tickets;
         this.expenses = expenses;
@@ -40,6 +42,7 @@ public class ShiftCloseService {
         this.advances = advances;
         this.cashCounts = cashCounts;
         this.closeSummaries = closeSummaries;
+        this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +102,8 @@ public class ShiftCloseService {
         ShiftCloseSummary saved = closeSummaries.save(new ShiftCloseSummary(shift, cashCount, ticketRevenue,
                 expensesTotal, withdrawalsTotal, advancesTotal, expectedCash, cashCount.getTotalCounted(), variance,
                 closingReason));
+        audit.record("SHIFT_CLOSED", "SHIFT", shiftId, closingReason,
+                "expected " + expectedCash + " counted " + cashCount.getTotalCounted() + " variance " + variance);
         return ShiftCloseSummaryResponse.closed(saved, cashRevenue, cardRevenue);
     }
 

@@ -1,5 +1,6 @@
 package com.lavadero.api.money.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.money.domain.Expense;
 import com.lavadero.api.money.domain.ExpenseCategory;
 import com.lavadero.api.money.repository.ExpenseRepository;
@@ -14,10 +15,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExpenseService {
     private final ExpenseRepository expenses;
     private final BusinessContextResolver contextResolver;
+    private final AuditService audit;
 
-    public ExpenseService(ExpenseRepository expenses, BusinessContextResolver contextResolver) {
+    public ExpenseService(ExpenseRepository expenses, BusinessContextResolver contextResolver, AuditService audit) {
         this.expenses = expenses;
         this.contextResolver = contextResolver;
+        this.audit = audit;
     }
 
     @Transactional
@@ -25,7 +28,10 @@ public class ExpenseService {
         Context context = contextResolver.resolve(request.businessDayId(), request.shiftId(), request.expenseDate());
         Expense expense = new Expense(context.businessDay(), context.shift(), context.recordDate(), request.category(),
                 request.amount(), request.description());
-        return expenses.save(expense);
+        Expense saved = expenses.save(expense);
+        audit.record("EXPENSE_CREATED", "EXPENSE", saved.getId(), saved.getDescription(),
+                saved.getCategory() + " " + saved.getAmount());
+        return saved;
     }
 
     @Transactional(readOnly = true)

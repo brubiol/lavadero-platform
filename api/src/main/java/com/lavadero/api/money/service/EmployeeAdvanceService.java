@@ -1,5 +1,6 @@
 package com.lavadero.api.money.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.catalog.repository.EmployeeRepository;
 import com.lavadero.api.money.domain.EmployeeAdvance;
@@ -19,13 +20,15 @@ public class EmployeeAdvanceService {
     private final EmployeeRepository employees;
     private final BusinessContextResolver contextResolver;
     private final DebtLedgerService debtLedger;
+    private final AuditService audit;
 
     public EmployeeAdvanceService(EmployeeAdvanceRepository advances, EmployeeRepository employees,
-            BusinessContextResolver contextResolver, DebtLedgerService debtLedger) {
+            BusinessContextResolver contextResolver, DebtLedgerService debtLedger, AuditService audit) {
         this.advances = advances;
         this.employees = employees;
         this.contextResolver = contextResolver;
         this.debtLedger = debtLedger;
+        this.audit = audit;
     }
 
     @Transactional
@@ -40,6 +43,8 @@ public class EmployeeAdvanceService {
                 context.recordDate(), request.amount(), request.reason());
         EmployeeAdvance saved = advances.save(advance);
         debtLedger.recordAdvance(saved);
+        audit.record("ADVANCE_CREATED", "EMPLOYEE_ADVANCE", saved.getId(), saved.getReason(),
+                employee.getFullName() + " " + saved.getAmount());
         return saved;
     }
 

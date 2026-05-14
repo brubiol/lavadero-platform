@@ -75,4 +75,9 @@ public class Shift extends AuditedEntity {
         status = ShiftStatus.CLOSED;
         closedAt = Instant.now();
     }
+
+    public void reopenForCorrection() {
+        status = ShiftStatus.OPEN;
+        closedAt = null;
+    }
 }

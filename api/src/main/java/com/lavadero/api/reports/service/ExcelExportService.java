@@ -202,7 +202,8 @@ public class ExcelExportService {
 
     private void writePayroll(Workbook workbook, Styles styles, List<PayrollPeriod> periods) {
         Sheet sheet = workbook.createSheet("Payroll");
-        header(sheet, styles, "Periodo", "Estado", "Lavador", "Carros", "Base", "Bono", "Prestamos", "Neto");
+        header(sheet, styles, "Periodo", "Estado", "Lavador", "Carros", "Base", "Bono", "Comision", "Extras",
+                "Deducciones", "Prestamos", "Bruto", "Neto");
         int rowIndex = 1;
         for (PayrollPeriod period : periods) {
             for (PayrollEntry entry : payrollEntries.findByPayrollPeriodIdOrderByEmployeeFullNameAsc(period.getId())) {
@@ -213,11 +214,15 @@ public class ExcelExportService {
                 money(row, 3, entry.getCarsWashed(), styles.number);
                 money(row, 4, entry.getBaseSalary(), styles.money);
                 money(row, 5, entry.getCarsBonus(), styles.money);
-                money(row, 6, entry.getAdvancesDeducted(), styles.money);
-                money(row, 7, entry.getNetPay(), styles.money);
+                money(row, 6, entry.getCommissions(), styles.money);
+                money(row, 7, entry.getManualEarnings(), styles.money);
+                money(row, 8, entry.getManualDeductions(), styles.money);
+                money(row, 9, entry.getAdvancesDeducted(), styles.money);
+                money(row, 10, entry.getGrossPay(), styles.money);
+                money(row, 11, entry.getNetPay(), styles.money);
             }
         }
-        autosize(sheet, 8);
+        autosize(sheet, 12);
     }
 
     private void header(Sheet sheet, Styles styles, String... labels) {

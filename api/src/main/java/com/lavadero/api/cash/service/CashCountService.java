@@ -1,5 +1,6 @@
 package com.lavadero.api.cash.service;
 
+import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.cash.domain.CashCount;
 import com.lavadero.api.cash.repository.CashCountRepository;
 import com.lavadero.api.cash.web.CashCountDtos.CreateCashCountRequest;
@@ -17,10 +18,12 @@ public class CashCountService {
 
     private final CashCountRepository cashCounts;
     private final ShiftRepository shifts;
+    private final AuditService audit;
 
-    public CashCountService(CashCountRepository cashCounts, ShiftRepository shifts) {
+    public CashCountService(CashCountRepository cashCounts, ShiftRepository shifts, AuditService audit) {
         this.cashCounts = cashCounts;
         this.shifts = shifts;
+        this.audit = audit;
     }
 
     @Transactional
@@ -41,8 +44,11 @@ public class CashCountService {
         int coins05 = count(request.coins05());
         BigDecimal total = total(bills1000, bills500, bills200, bills100, bills50, bills20, coins10, coins5, coins2,
                 coins1, coins05, morralla);
-        return cashCounts.save(new CashCount(shift, request.currency(), bills1000, bills500, bills200, bills100,
+        CashCount saved = cashCounts.save(new CashCount(shift, request.currency(), bills1000, bills500, bills200, bills100,
                 bills50, bills20, coins10, coins5, coins2, coins1, coins05, morralla, total));
+        audit.record("CASH_COUNT_CREATED", "CASH_COUNT", saved.getId(), null,
+                "shift " + shift.getId() + " total " + saved.getTotalCounted());
+        return saved;
     }
 
     @Transactional(readOnly = true)

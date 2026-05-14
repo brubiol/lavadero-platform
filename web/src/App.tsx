@@ -9,6 +9,7 @@ type Currency = 'MXN' | 'USD'
 type PaymentMethod = 'CASH' | 'CARD'
 type TicketStatus = 'ACTIVE' | 'VOIDED'
 type AuthRole = 'OPERADOR' | 'GERENTE' | 'DUENO'
+type PayrollType = 'SALARY' | 'COMMISSION'
 
 type AuthUser = {
   id: number
@@ -30,6 +31,9 @@ type Employee = {
   phone?: string
   active: boolean
   baseWeeklySalary: number
+  payrollType: PayrollType
+  commissionRate: number
+  productivityBonusRate: number
 }
 
 type ServiceType = {
@@ -186,6 +190,7 @@ type EmployeeAdvance = {
 }
 
 type PayrollPeriodStatus = 'OPEN' | 'COMPUTED' | 'LOCKED'
+type PayrollAdjustmentType = 'EARNING' | 'DEDUCTION'
 
 type PayrollEntry = {
   id: number
@@ -197,8 +202,24 @@ type PayrollEntry = {
   carsBonus: number
   commissions: number
   tipsPoolShare: number
+  manualEarnings: number
+  manualDeductions: number
   advancesDeducted: number
+  grossPay: number
   netPay: number
+}
+
+type PayrollAdjustment = {
+  id: number
+  payrollPeriodId: number
+  employeeId: number
+  employeeName: string
+  type: PayrollAdjustmentType
+  amount: number
+  concept: string
+  note?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 type PayrollDay = {
@@ -219,11 +240,23 @@ type PayrollPeriod = {
   lockedAt?: string | null
   entries: PayrollEntry[]
   days: PayrollDay[]
+  adjustments: PayrollAdjustment[]
 }
 
 type DebtBalance = {
   employeeId: number
   balance: number
+}
+
+type AuditEvent = {
+  id: number
+  occurredAt: string
+  actorUsername: string
+  action: string
+  entityType: string
+  entityId?: number | null
+  reason?: string | null
+  details?: string | null
 }
 
 type MovementType = 'SALE' | 'FIADO' | 'PURCHASE' | 'ADJUSTMENT' | 'OPENING_COUNT' | 'CLOSING_COUNT'
@@ -463,6 +496,9 @@ const employeeSchema = z.object({
   fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
   phone: z.string().max(40, 'Maximo 40 caracteres').optional(),
   baseWeeklySalary: z.coerce.number().min(0, 'Minimo 0'),
+  payrollType: z.enum(['SALARY', 'COMMISSION']),
+  commissionRate: z.coerce.number().min(0, 'Minimo 0'),
+  productivityBonusRate: z.coerce.number().min(0, 'Minimo 0'),
 })
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>
@@ -562,6 +598,16 @@ const payrollPeriodSchema = z.object({
 })
 
 type PayrollPeriodFormValues = z.infer<typeof payrollPeriodSchema>
+
+const payrollAdjustmentSchema = z.object({
+  employeeId: z.coerce.number().positive('Selecciona lavador'),
+  type: z.enum(['EARNING', 'DEDUCTION']),
+  amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
+  concept: z.string().min(1, 'Selecciona concepto').max(80, 'Maximo 80 caracteres'),
+  note: z.string().max(500, 'Maximo 500 caracteres').optional(),
+})
+
+type PayrollAdjustmentFormValues = z.infer<typeof payrollAdjustmentSchema>
 
 const productSchema = z.object({
   name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
@@ -679,6 +725,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 function money(value: number, currency: Currency) {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(value)
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value))
 }
 
 type AuthContextValue = {
@@ -842,6 +895,7 @@ function AppShell() {
             <SideLink to="/tickets/nuevo" label="Nuevo ticket" icon={<IconPlus />} />
             <SideLink to="/tickets" label="Tickets" icon={<IconList />} />
             <SideLink to="/gastos" label="Gastos" icon={<IconWallet />} />
+            <SideLink to="/cierre-dia" label="Cierre del dia" icon={<IconCalc />} />
             <SideLink to="/corte" label="Corte" icon={<IconCalc />} />
           </div>
 
@@ -859,6 +913,7 @@ function AppShell() {
               <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dueno</p>
               <SideLink to="/ai" label="AI" icon={<IconAi />} />
               <SideLink to="/reportes" label="Reportes" icon={<IconChart />} />
+              <SideLink to="/auditoria" label="Auditoria" icon={<IconList />} />
             </div>
           )}
         </nav>
@@ -898,11 +953,13 @@ function AppShell() {
             <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
             <Route path="/tickets" element={<TicketsBrowser />} />
             <Route path="/gastos" element={<ExpenseLedgerScreen />} />
+            <Route path="/cierre-dia" element={<EndOfDayScreen />} />
             <Route path="/corte" element={<ShiftCloseScreen />} />
             <Route path="/nomina" element={<RequireRole role="GERENTE"><PayrollScreen /></RequireRole>} />
             <Route path="/inventario" element={<RequireRole role="GERENTE"><InventoryScreen /></RequireRole>} />
             <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
             <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
+            <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
             <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
           </Routes>
         </main>
@@ -913,7 +970,7 @@ function AppShell() {
           <MobileLink to="/tickets/nuevo" label="Nuevo" icon={<IconPlus />} />
           <MobileLink to="/tickets" label="Tickets" icon={<IconList />} />
           <MobileLink to="/gastos" label="Gastos" icon={<IconWallet />} />
-          <MobileLink to="/corte" label="Corte" icon={<IconCalc />} />
+          <MobileLink to="/cierre-dia" label="Cierre" icon={<IconCalc />} />
           {hasRole('DUENO') && <MobileLink to="/ai" label="AI" icon={<IconAi />} />}
         </nav>
       </div>
@@ -1270,6 +1327,104 @@ function Dashboard() {
           </table>
         </div>
       </Panel>
+    </section>
+  )
+}
+
+function EndOfDayScreen() {
+  const navigate = useNavigate()
+  const data = usePhaseData()
+  const summary = useQuery({
+    queryKey: ['daily-summary', today],
+    queryFn: () => api<DailySummary>(`/api/v1/reports/daily-summary?date=${today}`),
+  })
+  const shifts = data.shifts.data ?? []
+  const openShifts = shifts.filter((shift) => shift.status === 'OPEN')
+  const closedShifts = shifts.filter((shift) => shift.status === 'CLOSED')
+  const daily = summary.data
+
+  return (
+    <section className="space-y-5">
+      <div>
+        <h2 className="text-2xl font-bold">Cierre del dia</h2>
+        <p className="text-sm text-gray-500">Ruta rapida para terminar el dia sin brincar entre pantallas.</p>
+      </div>
+
+      <DayStatusCard />
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-5">
+          <Panel title="Trabajo de hoy">
+            <div className="grid gap-4 md:grid-cols-4">
+              <Metric label="Tickets" value={String(daily?.recentTickets.length ?? 0)} />
+              <Metric label="Carros" value={String(daily?.carsWashed ?? 0)} />
+              <Metric label="Efectivo + tarjeta" value={daily ? money(daily.ticketRevenue, 'MXN') : '...'} />
+              <Metric label="Gastos" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/tickets/nuevo')}
+                className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]"
+              >
+                Agregar ticket
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/gastos')}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
+              >
+                Revisar salidas
+              </button>
+            </div>
+          </Panel>
+
+          <Panel title="Turnos">
+            <div className="grid gap-3 md:grid-cols-2">
+              {shifts.map((shift) => (
+                <div key={shift.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <strong>{shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}</strong>
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${shift.status === 'OPEN' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {shift.status === 'OPEN' ? 'Abierto' : 'Cerrado'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/corte')}
+                    className="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                  >
+                    {shift.status === 'OPEN' ? 'Hacer corte' : 'Ver corte'}
+                  </button>
+                </div>
+              ))}
+              {!data.currentBusinessDay && (
+                <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Abre el dia para comenzar.</p>
+              )}
+              {data.currentBusinessDay && shifts.length === 0 && (
+                <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-800">Abre un turno para capturar tickets.</p>
+              )}
+            </div>
+          </Panel>
+        </div>
+
+        <aside>
+          <Panel title="Resumen final">
+            <SummaryRow label="Turnos abiertos" value={String(openShifts.length)} />
+            <SummaryRow label="Turnos cerrados" value={String(closedShifts.length)} />
+            <SummaryRow label="Resultado" value={daily ? money(daily.result, 'MXN') : '...'} />
+            <SummaryRow label="Diferencia caja" value={daily?.cashVariance == null ? 'Pendiente' : money(daily.cashVariance, 'MXN')} />
+            <button
+              type="button"
+              onClick={() => navigate('/corte')}
+              disabled={openShifts.length === 0}
+              className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-slate-800 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+            >
+              Cerrar turno abierto
+            </button>
+          </Panel>
+        </aside>
+      </div>
     </section>
   )
 }
@@ -1647,7 +1802,14 @@ function CatalogsScreen() {
 
   const employeeForm = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
-    defaultValues: { fullName: '', phone: '', baseWeeklySalary: 0 },
+    defaultValues: {
+      fullName: '',
+      phone: '',
+      baseWeeklySalary: 0,
+      payrollType: 'COMMISSION',
+      commissionRate: 30,
+      productivityBonusRate: 0,
+    },
   })
   const serviceForm = useForm<ServiceTypeFormValues>({
     resolver: zodResolver(serviceTypeSchema),
@@ -1678,10 +1840,20 @@ function CatalogsScreen() {
         fullName: values.fullName.trim(),
         phone: values.phone?.trim() || undefined,
         baseWeeklySalary: Number(values.baseWeeklySalary),
+        payrollType: values.payrollType,
+        commissionRate: Number(values.commissionRate),
+        productivityBonusRate: Number(values.productivityBonusRate),
       }),
     }),
     onSuccess: async () => {
-      employeeForm.reset({ fullName: '', phone: '', baseWeeklySalary: 0 })
+      employeeForm.reset({
+        fullName: '',
+        phone: '',
+        baseWeeklySalary: 0,
+        payrollType: 'COMMISSION',
+        commissionRate: 30,
+        productivityBonusRate: 0,
+      })
       await queryClient.invalidateQueries({ queryKey: ['employees'] })
       showToast('Lavador guardado')
     },
@@ -1778,15 +1950,27 @@ function CatalogsScreen() {
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           <Panel title="Lavadores">
-            <form className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
+            <form className="grid gap-3 md:grid-cols-[1fr_160px_140px_140px_140px_auto]" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
               <TextField label="Nombre" error={employeeForm.formState.errors.fullName?.message}>
                 <input placeholder="Ej. Juan Perez" {...employeeForm.register('fullName')} />
               </TextField>
               <TextField label="Telefono" error={employeeForm.formState.errors.phone?.message}>
                 <input placeholder="Opcional" {...employeeForm.register('phone')} />
               </TextField>
+              <SelectField label="Regla" error={employeeForm.formState.errors.payrollType?.message}>
+                <select {...employeeForm.register('payrollType')}>
+                  <option value="COMMISSION">Comision</option>
+                  <option value="SALARY">Sueldo</option>
+                </select>
+              </SelectField>
               <TextField label="Sueldo base" error={employeeForm.formState.errors.baseWeeklySalary?.message}>
                 <input type="number" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
+              </TextField>
+              <TextField label="$ por carro" error={employeeForm.formState.errors.commissionRate?.message}>
+                <input type="number" min={0} step="0.01" {...employeeForm.register('commissionRate')} />
+              </TextField>
+              <TextField label="Bono/carro" error={employeeForm.formState.errors.productivityBonusRate?.message}>
+                <input type="number" min={0} step="0.01" {...employeeForm.register('productivityBonusRate')} />
               </TextField>
               <FormButton label="Agregar" loading={createEmployee.isPending} />
             </form>
@@ -1796,7 +1980,9 @@ function CatalogsScreen() {
               rows={employees.map((employee) => ({
                 id: employee.id,
                 title: employee.fullName,
-                detail: `${employee.phone || 'Sin telefono'} / ${money(employee.baseWeeklySalary, 'MXN')}`,
+                detail: employee.payrollType === 'COMMISSION'
+                  ? `${employee.phone || 'Sin telefono'} / Comision ${money(employee.commissionRate, 'MXN')} por carro`
+                  : `${employee.phone || 'Sin telefono'} / Sueldo ${money(employee.baseWeeklySalary, 'MXN')} + ${money(employee.productivityBonusRate, 'MXN')} por carro`,
               }))}
             />
           </Panel>
@@ -2078,6 +2264,7 @@ function ExpenseLedgerScreen() {
 }
 
 function ShiftCloseScreen() {
+  const { hasRole } = useAuth()
   const queryClient = useQueryClient()
   const data = usePhaseData()
   const shifts = data.shifts.data ?? []
@@ -2150,6 +2337,21 @@ function ShiftCloseScreen() {
         queryClient.invalidateQueries({ queryKey: ['close-summary'] }),
         queryClient.invalidateQueries({ queryKey: ['shifts'] }),
         queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily-summary'] }),
+      ])
+    },
+  })
+  const reopenMutation = useMutation({
+    mutationFn: (reason: string) => api<Shift>(`/api/v1/corrections/shifts/${effectiveShiftId}/reopen`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+    onSuccess: async () => {
+      setToast('Turno reabierto')
+      setCashCount(null)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['close-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['shifts'] }),
         queryClient.invalidateQueries({ queryKey: ['daily-summary'] }),
       ])
     },
@@ -2286,6 +2488,7 @@ function ShiftCloseScreen() {
                 </TextField>
               )}
               {closeMutation.error && <ErrorMessage message={closeMutation.error.message} />}
+              {reopenMutation.error && <ErrorMessage message={reopenMutation.error.message} />}
               <button
                 type="submit"
                 disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
@@ -2293,10 +2496,112 @@ function ShiftCloseScreen() {
               >
                 {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? 'Turno cerrado' : 'Cerrar turno'}
               </button>
+              {hasRole('DUENO') && summary?.closed && (
+                <button
+                  type="button"
+                  disabled={reopenMutation.isPending}
+                  onClick={() => {
+                    const reason = window.prompt('Motivo para reabrir el turno cerrado')
+                    if (reason?.trim()) reopenMutation.mutate(reason.trim())
+                  }}
+                  className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-[0.98] disabled:text-amber-300"
+                >
+                  {reopenMutation.isPending ? 'Reabriendo...' : 'Reabrir turno'}
+                </button>
+              )}
             </form>
           </Panel>
         </aside>
       </div>
+    </section>
+  )
+}
+
+function AuditScreen() {
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const [entityType, setEntityType] = useState('')
+  const [entityId, setEntityId] = useState('')
+
+  const query = new URLSearchParams()
+  if (from) query.set('from', from)
+  if (to) query.set('to', to)
+  if (entityType) query.set('entityType', entityType)
+  if (entityId) query.set('entityId', entityId)
+
+  const events = useQuery({
+    queryKey: ['audit-events', from, to, entityType, entityId],
+    queryFn: () => api<AuditEvent[]>(`/api/v1/audit-events?${query.toString()}`),
+  })
+
+  return (
+    <section className="space-y-5">
+      <div>
+        <h2 className="text-2xl font-bold">Auditoria</h2>
+        <p className="text-sm text-gray-500">Cambios importantes de caja, tickets, gastos, nomina y correcciones.</p>
+      </div>
+
+      <Panel title="Filtros">
+        <div className="grid gap-3 md:grid-cols-[180px_180px_220px_160px]">
+          <TextField label="Desde">
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          </TextField>
+          <TextField label="Hasta">
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          </TextField>
+          <SelectField label="Entidad">
+            <select value={entityType} onChange={(event) => setEntityType(event.target.value)}>
+              <option value="">Todas</option>
+              <option value="TICKET">Ticket</option>
+              <option value="EXPENSE">Gasto</option>
+              <option value="WITHDRAWAL">Retiro</option>
+              <option value="ADVANCE">Vale</option>
+              <option value="SHIFT">Turno</option>
+              <option value="PAYROLL_PERIOD">Nomina</option>
+              <option value="PAYROLL_ADJUSTMENT">Ajuste nomina</option>
+              <option value="CASH_COUNT">Conteo caja</option>
+            </select>
+          </SelectField>
+          <TextField label="ID entidad">
+            <input type="number" min={1} value={entityId} onChange={(event) => setEntityId(event.target.value)} />
+          </TextField>
+        </div>
+      </Panel>
+
+      <Panel title="Eventos recientes">
+        {events.error && <ErrorMessage message={events.error.message} />}
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <tr>
+                <th className="px-4 py-3">Fecha</th>
+                <th className="px-4 py-3">Usuario</th>
+                <th className="px-4 py-3">Accion</th>
+                <th className="px-4 py-3">Entidad</th>
+                <th className="px-4 py-3">Motivo</th>
+                <th className="px-4 py-3">Detalle</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(events.data ?? []).map((event) => (
+                <tr key={event.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 whitespace-nowrap">{formatDateTime(event.occurredAt)}</td>
+                  <td className="px-4 py-3">{event.actorUsername}</td>
+                  <td className="px-4 py-3 font-semibold">{event.action}</td>
+                  <td className="px-4 py-3">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
+                  <td className="px-4 py-3">{event.reason || '-'}</td>
+                  <td className="px-4 py-3 text-gray-500">{event.details || '-'}</td>
+                </tr>
+              ))}
+              {!events.isLoading && (events.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin eventos para estos filtros.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
     </section>
   )
 }
@@ -2966,19 +3271,29 @@ function InventoryStatusPill({ lowStock, tracked }: { lowStock: boolean; tracked
 }
 
 function PayrollScreen() {
+  const { hasRole } = useAuth()
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<PayrollPeriodStatus | ''>('')
   const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null)
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const form = useForm<PayrollPeriodFormValues>({
     resolver: zodResolver(payrollPeriodSchema),
     defaultValues: { startDate: previousSunday(today) },
+  })
+  const adjustmentForm = useForm<PayrollAdjustmentFormValues>({
+    resolver: zodResolver(payrollAdjustmentSchema),
+    defaultValues: { employeeId: 0, type: 'EARNING', amount: 0, concept: 'extra', note: '' },
   })
 
   const periods = useQuery({
     queryKey: ['payroll-periods', status],
     queryFn: () => api<PayrollPeriod[]>(`/api/v1/payroll/periods${status ? `?status=${status}` : ''}`),
+  })
+  const employees = useQuery({
+    queryKey: ['payroll-employees'],
+    queryFn: () => api<Employee[]>('/api/v1/employees?active=true'),
   })
   const selectedId = selectedPeriodId ?? periods.data?.[0]?.id ?? null
   const period = useQuery({
@@ -3021,11 +3336,77 @@ function PayrollScreen() {
       setToast('Nomina bloqueada')
     },
   })
+  const addAdjustment = useMutation({
+    mutationFn: (values: PayrollAdjustmentFormValues) => api<PayrollAdjustment>(`/api/v1/payroll/periods/${selectedId}/adjustments`, {
+      method: 'POST',
+      body: JSON.stringify({ ...values, note: values.note || undefined }),
+    }),
+    onSuccess: async () => {
+      adjustmentForm.reset({ employeeId: 0, type: 'EARNING', amount: 0, concept: 'extra', note: '' })
+      await invalidatePayroll(queryClient)
+      setToast('Ajuste guardado. Recalcula antes de bloquear.')
+    },
+  })
+  const deleteAdjustment = useMutation({
+    mutationFn: (id: number) => api<void>(`/api/v1/payroll/adjustments/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      await invalidatePayroll(queryClient)
+      setToast('Ajuste eliminado. Recalcula antes de bloquear.')
+    },
+  })
+  const unlock = useMutation({
+    mutationFn: (reason: string) => api<PayrollPeriod>(`/api/v1/corrections/payroll-periods/${selectedId}/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+    onSuccess: async () => {
+      await invalidatePayroll(queryClient)
+      setToast('Nomina desbloqueada')
+    },
+  })
 
   const totals = {
     cars: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.carsWashed, 0),
     net: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.netPay, 0),
     advances: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.advancesDeducted, 0),
+    commissions: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.commissions, 0),
+    manualEarnings: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.manualEarnings, 0),
+    manualDeductions: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.manualDeductions, 0),
+  }
+  const employeeOptions = (selectedPeriod?.entries.length ? selectedPeriod.entries.map((entry) => ({
+    id: entry.employeeId,
+    fullName: entry.employeeName,
+  })) : employees.data ?? [])
+  const locked = selectedPeriod?.status === 'LOCKED'
+  const adjustmentType = adjustmentForm.watch('type')
+  const conceptOptions = adjustmentType === 'EARNING'
+    ? ['extra', 'puntualidad', 'bono manual', 'other']
+    : ['vales', 'deduccion', 'falta', 'permiso', 'clima', 'other']
+
+  const downloadPayrollExport = async () => {
+    if (!selectedId) return
+    setDownloadError(null)
+    try {
+      const auth = readStoredAuth()
+      const response = await fetch(`/api/v1/payroll/periods/${selectedId}/export?format=xlsx`, {
+        headers: auth?.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {},
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.error || `Error ${response.status}`)
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `nomina-${selectedPeriod?.startDate ?? selectedId}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'No se pudo descargar la nomina')
+    }
   }
 
   return (
@@ -3034,7 +3415,7 @@ function PayrollScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold">Nomina</h2>
-          <p className="text-sm text-gray-500">Calculo semanal de lavadores, bonos por carros y prestamos.</p>
+          <p className="text-sm text-gray-500">Calculo semanal por sueldo, comision, bonos por carro y prestamos.</p>
         </div>
         <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))}>
           <TextField label="Domingo" error={form.formState.errors.startDate?.message}>
@@ -3091,11 +3472,18 @@ function PayrollScreen() {
               </div>
               <div className="flex gap-2">
                 <button
-                  disabled={!selectedId || selectedPeriod?.status === 'LOCKED' || compute.isPending}
+                  disabled={!selectedId || locked || compute.isPending}
                   className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
                   onClick={() => compute.mutate()}
                 >
                   Recalcular
+                </button>
+                <button
+                  disabled={!selectedId}
+                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:text-gray-400"
+                  onClick={() => void downloadPayrollExport()}
+                >
+                  Exportar nomina
                 </button>
                 <button
                   disabled={!selectedId || selectedPeriod?.status !== 'COMPUTED' || lock.isPending}
@@ -3108,13 +3496,29 @@ function PayrollScreen() {
                 >
                   Bloquear
                 </button>
+                {hasRole('DUENO') && locked && (
+                  <button
+                    disabled={unlock.isPending}
+                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-[0.98] disabled:text-amber-300"
+                    onClick={() => {
+                      const reason = window.prompt('Motivo para desbloquear la nomina')
+                      if (reason?.trim()) unlock.mutate(reason.trim())
+                    }}
+                  >
+                    Desbloquear
+                  </button>
+                )}
               </div>
             </div>
-            {(compute.error || lock.error) && <ErrorMessage message={(compute.error || lock.error)!.message} />}
-            <div className="grid gap-4 md:grid-cols-4">
+            {(compute.error || lock.error || unlock.error || downloadError) && (
+              <ErrorMessage message={(compute.error || lock.error || unlock.error)?.message ?? downloadError!} />
+            )}
+            <div className="grid gap-4 md:grid-cols-5">
               <Metric label="Lavadores" value={String(selectedPeriod?.entries.length ?? 0)} />
               <Metric label="Carros" value={totals.cars.toFixed(2)} />
-              <Metric label="Prestamos descontados" value={money(totals.advances, 'MXN')} />
+              <Metric label="Comisiones" value={money(totals.commissions, 'MXN')} />
+              <Metric label="Extras" value={money(totals.manualEarnings, 'MXN')} />
+              <Metric label="Descuentos" value={money(totals.manualDeductions + totals.advances, 'MXN')} />
               <Metric label="Neto a pagar" value={money(totals.net, 'MXN')} />
             </div>
           </Panel>
@@ -3128,6 +3532,9 @@ function PayrollScreen() {
                     <th className="px-4 py-3 text-right">Carros</th>
                     <th className="px-4 py-3 text-right">Base</th>
                     <th className="px-4 py-3 text-right">Bono carros</th>
+                    <th className="px-4 py-3 text-right">Comision</th>
+                    <th className="px-4 py-3 text-right">Extras</th>
+                    <th className="px-4 py-3 text-right">Deducciones</th>
                     <th className="px-4 py-3 text-right">Prestamos</th>
                     <th className="px-4 py-3 text-right">Neto</th>
                   </tr>
@@ -3143,14 +3550,99 @@ function PayrollScreen() {
                       <td className="px-4 py-3 text-right">{entry.carsWashed.toFixed(2)}</td>
                       <td className="px-4 py-3 text-right">{money(entry.baseSalary, 'MXN')}</td>
                       <td className="px-4 py-3 text-right">{money(entry.carsBonus, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(entry.commissions, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(entry.manualEarnings, 'MXN')}</td>
+                      <td className="px-4 py-3 text-right">{money(entry.manualDeductions, 'MXN')}</td>
                       <td className="px-4 py-3 text-right">{money(entry.advancesDeducted, 'MXN')}</td>
                       <td className="px-4 py-3 text-right font-semibold">{money(entry.netPay, 'MXN')}</td>
                     </tr>
                   ))}
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
                         Crea o selecciona un periodo y presiona Recalcular.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          <Panel title="Ajustes manuales">
+            <form className="grid gap-3 lg:grid-cols-[1fr_150px_170px_140px_1fr_auto] lg:items-end" onSubmit={adjustmentForm.handleSubmit((values) => addAdjustment.mutate(values))}>
+              <SelectField label="Lavador" error={adjustmentForm.formState.errors.employeeId?.message}>
+                <select {...adjustmentForm.register('employeeId')} disabled={locked}>
+                  <option value={0}>Selecciona</option>
+                  {employeeOptions.map((employee) => (
+                    <option key={employee.id} value={employee.id}>{employee.fullName}</option>
+                  ))}
+                </select>
+              </SelectField>
+              <SelectField label="Tipo" error={adjustmentForm.formState.errors.type?.message}>
+                <select {...adjustmentForm.register('type')} disabled={locked}>
+                  <option value="EARNING">Extra</option>
+                  <option value="DEDUCTION">Deduccion</option>
+                </select>
+              </SelectField>
+              <SelectField label="Concepto" error={adjustmentForm.formState.errors.concept?.message}>
+                <select {...adjustmentForm.register('concept')} disabled={locked}>
+                  {conceptOptions.map((concept) => (
+                    <option key={concept} value={concept}>{concept}</option>
+                  ))}
+                </select>
+              </SelectField>
+              <TextField label="Monto" error={adjustmentForm.formState.errors.amount?.message}>
+                <input type="number" min={0.01} step="0.01" {...adjustmentForm.register('amount')} disabled={locked} />
+              </TextField>
+              <TextField label="Nota" error={adjustmentForm.formState.errors.note?.message}>
+                <input placeholder="clima, permiso, enfermo..." {...adjustmentForm.register('note')} disabled={locked} />
+              </TextField>
+              <button
+                type="submit"
+                disabled={!selectedId || locked || addAdjustment.isPending}
+                className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+              >
+                Agregar
+              </button>
+            </form>
+            {(addAdjustment.error || deleteAdjustment.error) && <ErrorMessage message={(addAdjustment.error || deleteAdjustment.error)!.message} />}
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Lavador</th>
+                    <th className="px-4 py-3">Concepto</th>
+                    <th className="px-4 py-3">Nota</th>
+                    <th className="px-4 py-3 text-right">Extra</th>
+                    <th className="px-4 py-3 text-right">Deduccion</th>
+                    <th className="px-4 py-3 text-right">Accion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(selectedPeriod?.adjustments ?? []).map((adjustment) => (
+                    <tr key={adjustment.id}>
+                      <td className="px-4 py-3 font-semibold">{adjustment.employeeName}</td>
+                      <td className="px-4 py-3">{adjustment.concept}</td>
+                      <td className="px-4 py-3 text-gray-500">{adjustment.note || '-'}</td>
+                      <td className="px-4 py-3 text-right">{adjustment.type === 'EARNING' ? money(adjustment.amount, 'MXN') : '-'}</td>
+                      <td className="px-4 py-3 text-right">{adjustment.type === 'DEDUCTION' ? money(adjustment.amount, 'MXN') : '-'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={locked || deleteAdjustment.isPending}
+                          onClick={() => deleteAdjustment.mutate(adjustment.id)}
+                          className="rounded-lg border border-red-100 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.98] disabled:text-gray-300"
+                        >
+                          Quitar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {(selectedPeriod?.adjustments.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                        Sin extras, vales, faltas o permisos capturados.
                       </td>
                     </tr>
                   )}
@@ -3166,6 +3658,11 @@ function PayrollScreen() {
                   <SummaryRow label="Lavador" value={selectedEntry.employeeName} />
                   <SummaryRow label="Carros" value={selectedEntry.carsWashed.toFixed(2)} />
                   <SummaryRow label="Bono por carro" value={money(selectedEntry.carsBonusRate, 'MXN')} />
+                  <SummaryRow label="Comision" value={money(selectedEntry.commissions, 'MXN')} />
+                  <SummaryRow label="Extras" value={money(selectedEntry.manualEarnings, 'MXN')} />
+                  <SummaryRow label="Deducciones" value={money(selectedEntry.manualDeductions, 'MXN')} />
+                  <SummaryRow label="Prestamos" value={money(selectedEntry.advancesDeducted, 'MXN')} />
+                  <SummaryRow label="Bruto" value={money(selectedEntry.grossPay, 'MXN')} />
                   <SummaryRow label="Neto" value={money(selectedEntry.netPay, 'MXN')} />
                   <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
                 </div>

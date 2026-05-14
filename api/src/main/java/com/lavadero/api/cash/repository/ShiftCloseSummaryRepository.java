@@ -13,6 +13,8 @@ public interface ShiftCloseSummaryRepository extends JpaRepository<ShiftCloseSum
 
     boolean existsByShiftId(Long shiftId);
 
+    void deleteByShiftId(Long shiftId);
+
     @EntityGraph(attributePaths = {"shift", "shift.businessDay", "cashCount"})
     List<ShiftCloseSummary> findByShiftBusinessDayBusinessDate(LocalDate businessDate);
 
