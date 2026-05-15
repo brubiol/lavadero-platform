@@ -25,7 +25,7 @@ test('DUENO can navigate to AI screen', async ({ page }) => {
 test('DUENO can navigate to Reports screen', async ({ page }) => {
   await loginAsDueno(page)
   await page.getByRole('link', { name: 'Reportes' }).click()
-  await expect(page.getByText('Reportes')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Reportes' })).toBeVisible({ timeout: 8_000 })
 })
 
 test('new ticket form renders for DUENO', async ({ page }) => {
@@ -38,6 +38,6 @@ test('new ticket form renders for DUENO', async ({ page }) => {
 test('auditoria screen renders audit filter for DUENO', async ({ page }) => {
   await loginAsDueno(page)
   await page.getByRole('link', { name: 'Auditoria' }).click()
-  await expect(page.getByText('Auditoria')).toBeVisible({ timeout: 8_000 })
-  await expect(page.getByText('Filtros')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Auditoria' })).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Filtros' })).toBeVisible()
 })
