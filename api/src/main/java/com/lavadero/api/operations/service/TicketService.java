@@ -42,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TicketService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
+    private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final DateTimeFormatter NOTA_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final TicketRepository tickets;
@@ -77,15 +78,20 @@ public class TicketService {
         ServiceType serviceType = serviceTypes.get(request.serviceTypeId());
         VehicleSize vehicleSize = vehicleSizes.get(request.vehicleSizeId());
         boolean courtesy = Boolean.TRUE.equals(request.courtesy());
-        BigDecimal priceAmount = resolvePrice(serviceType.getId(), vehicleSize.getId(), request.currency(), businessDay,
-                courtesy, request.courtesyReason());
+        BigDecimal discount = courtesy ? ZERO
+                : (request.discountPercent() != null ? request.discountPercent() : ZERO);
+        BigDecimal[] resolved = resolvePrice(serviceType.getId(), vehicleSize.getId(), request.currency(), businessDay,
+                courtesy, request.courtesyReason(), discount);
+        BigDecimal priceAmount = resolved[0];
+        BigDecimal originalPriceAmount = resolved[1];
 
         PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
                 : (request.paymentMethod() != null ? request.paymentMethod() : PaymentMethod.CASH);
         int dailySeq = tickets.maxDailySeq(businessDay.getId()) + 1;
         String notaNumber = businessDay.getBusinessDate().format(NOTA_DATE) + "-" + String.format("%04d", dailySeq);
         Ticket ticket = new Ticket(businessDay, shift, serviceType, vehicleSize, dailySeq, notaNumber,
-                request.vehicleDescription(), priceAmount, request.currency(), paymentMethod, courtesy, request.courtesyReason());
+                request.vehicleDescription(), priceAmount, discount, originalPriceAmount,
+                request.currency(), paymentMethod, courtesy, request.courtesyReason());
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         Ticket saved = tickets.save(ticket);
         audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
@@ -142,10 +148,14 @@ public class TicketService {
                 : request.vehicleDescription();
         PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
                 : (request.paymentMethod() != null ? request.paymentMethod() : ticket.getPaymentMethod());
-
-        BigDecimal priceAmount = resolvePrice(serviceType.getId(), vehicleSize.getId(), currency, ticket.getBusinessDay(),
-                courtesy, courtesyReason);
-        ticket.update(serviceType, vehicleSize, vehicleDescription, priceAmount, currency, paymentMethod, courtesy, courtesyReason);
+        BigDecimal discount = courtesy ? ZERO
+                : (request.discountPercent() != null ? request.discountPercent() : ticket.getDiscountPercent());
+        BigDecimal[] resolved = resolvePrice(serviceType.getId(), vehicleSize.getId(), currency, ticket.getBusinessDay(),
+                courtesy, courtesyReason, discount);
+        BigDecimal priceAmount = resolved[0];
+        BigDecimal originalPriceAmount = resolved[1];
+        ticket.update(serviceType, vehicleSize, vehicleDescription, priceAmount, discount, originalPriceAmount,
+                currency, paymentMethod, courtesy, courtesyReason);
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }
@@ -192,20 +202,27 @@ public class TicketService {
         }
     }
 
-    private BigDecimal resolvePrice(Long serviceTypeId, Long vehicleSizeId, TicketCurrency currency,
-            BusinessDay businessDay, boolean courtesy, String courtesyReason) {
+    // Returns [finalPrice, originalPrice]. For courtesy tickets both are ZERO.
+    private BigDecimal[] resolvePrice(Long serviceTypeId, Long vehicleSizeId, TicketCurrency currency,
+            BusinessDay businessDay, boolean courtesy, String courtesyReason, BigDecimal discountPercent) {
         if (courtesy) {
             if (courtesyReason == null || courtesyReason.isBlank()) {
                 throw new IllegalArgumentException("courtesyReason is required for courtesy tickets");
             }
-            return ZERO;
+            return new BigDecimal[]{ZERO, ZERO};
         }
-        return servicePrices.findCurrentPrices(serviceTypeId, vehicleSizeId, currency.name(), businessDay.getBusinessDate(),
-                        PageRequest.of(0, 1))
+        BigDecimal base = servicePrices.findCurrentPrices(serviceTypeId, vehicleSizeId, currency.name(),
+                        businessDay.getBusinessDate(), PageRequest.of(0, 1))
                 .stream()
                 .findFirst()
                 .map(ServicePrice::getAmount)
                 .orElseThrow(() -> new IllegalArgumentException("No active service price found for ticket"));
+        if (discountPercent == null || discountPercent.compareTo(ZERO) == 0) {
+            return new BigDecimal[]{base, base};
+        }
+        BigDecimal factor = BigDecimal.ONE.subtract(discountPercent.divide(HUNDRED, 4, RoundingMode.HALF_UP));
+        BigDecimal finalPrice = base.multiply(factor).setScale(2, RoundingMode.HALF_UP);
+        return new BigDecimal[]{finalPrice, base};
     }
 
     private List<TicketAssignment> assignmentsFor(List<Long> employeeIds) {

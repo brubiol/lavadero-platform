@@ -5,6 +5,8 @@ import com.lavadero.api.operations.domain.Ticket;
 import com.lavadero.api.operations.domain.TicketAssignment;
 import com.lavadero.api.operations.domain.TicketCurrency;
 import com.lavadero.api.operations.domain.TicketStatus;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,6 +28,7 @@ public final class TicketDtos {
             @Size(max = 160) String vehicleDescription,
             Boolean courtesy,
             @Size(max = 500) String courtesyReason,
+            @DecimalMin("0") @DecimalMax("100") BigDecimal discountPercent,
             @NotEmpty List<@NotNull Long> employeeIds) {
     }
 
@@ -37,6 +40,7 @@ public final class TicketDtos {
             @Size(max = 160) String vehicleDescription,
             Boolean courtesy,
             @Size(max = 500) String courtesyReason,
+            @DecimalMin("0") @DecimalMax("100") BigDecimal discountPercent,
             List<@NotNull Long> employeeIds) {
     }
 
@@ -55,7 +59,8 @@ public final class TicketDtos {
 
     public record TicketResponse(Long id, Long businessDayId, Long shiftId, Long serviceTypeId, String serviceTypeName,
             Long vehicleSizeId, String vehicleSizeName, Integer dailySeq, String notaNumber,
-            String vehicleDescription, BigDecimal priceAmount, TicketCurrency currency, PaymentMethod paymentMethod,
+            String vehicleDescription, BigDecimal priceAmount, BigDecimal discountPercent,
+            BigDecimal originalPriceAmount, TicketCurrency currency, PaymentMethod paymentMethod,
             boolean courtesy, String courtesyReason, TicketStatus status, String voidReason, Instant voidedAt,
             List<TicketAssignmentResponse> assignments, Instant createdAt, Instant updatedAt,
             Long customerId, String customerName) {
@@ -63,7 +68,8 @@ public final class TicketDtos {
             return new TicketResponse(ticket.getId(), ticket.getBusinessDay().getId(), ticket.getShift().getId(),
                     ticket.getServiceType().getId(), ticket.getServiceType().getName(), ticket.getVehicleSize().getId(),
                     ticket.getVehicleSize().getName(), ticket.getDailySeq(), ticket.getNotaNumber(),
-                    ticket.getVehicleDescription(), ticket.getPriceAmount(), ticket.getCurrency(),
+                    ticket.getVehicleDescription(), ticket.getPriceAmount(), ticket.getDiscountPercent(),
+                    ticket.getOriginalPriceAmount(), ticket.getCurrency(),
                     ticket.getPaymentMethod(), ticket.isCourtesy(), ticket.getCourtesyReason(), ticket.getStatus(),
                     ticket.getVoidReason(), ticket.getVoidedAt(),
                     ticket.getAssignments().stream().map(TicketAssignmentResponse::from).toList(),

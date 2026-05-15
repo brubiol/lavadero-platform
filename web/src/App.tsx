@@ -133,6 +133,8 @@ type Ticket = {
   notaNumber: string
   vehicleDescription?: string | null
   priceAmount: number
+  discountPercent: number
+  originalPriceAmount?: number | null
   currency: Currency
   paymentMethod: PaymentMethod
   courtesy: boolean
@@ -468,6 +470,7 @@ const ticketSchema = z.object({
   notes: z.string().max(500, 'Maximo 500 caracteres').optional(),
   courtesy: z.boolean().default(false),
   courtesyReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  discountPercent: z.coerce.number().min(0, 'Minimo 0').max(100, 'Maximo 100').default(0),
   employeeIds: z.array(z.coerce.number()).min(1, 'Selecciona al menos un lavador'),
 }).superRefine((value, ctx) => {
   if (value.courtesy && !value.courtesyReason?.trim()) {
@@ -1615,6 +1618,7 @@ function TicketWorkspace({
       notes: '',
       courtesy: ticket?.courtesy ?? false,
       courtesyReason: ticket?.courtesyReason ?? '',
+      discountPercent: ticket?.discountPercent ?? 0,
       employeeIds: ticket?.assignments.map((assignment) => assignment.employeeId) ?? [],
     },
   })
@@ -1622,12 +1626,15 @@ function TicketWorkspace({
   const watched = form.watch()
   const livePrice = useMemo(() => {
     if (watched.courtesy) return 0
-    return (data.prices.data ?? []).find((price) =>
+    const base = (data.prices.data ?? []).find((price) =>
       price.serviceTypeId === Number(watched.serviceTypeId) &&
       price.vehicleSizeId === Number(watched.vehicleSizeId) &&
       price.currency === watched.currency
     )?.amount
-  }, [data.prices.data, watched.courtesy, watched.currency, watched.serviceTypeId, watched.vehicleSizeId])
+    if (base === undefined) return undefined
+    const pct = watched.discountPercent ?? 0
+    return pct > 0 ? Math.round(base * (1 - pct / 100) * 100) / 100 : base
+  }, [data.prices.data, watched.courtesy, watched.currency, watched.serviceTypeId, watched.vehicleSizeId, watched.discountPercent])
 
   const save = useMutation({
     mutationFn: (values: TicketFormValues) => {
@@ -1641,6 +1648,7 @@ function TicketWorkspace({
         vehicleDescription: values.vehicleDescription || undefined,
         courtesy: values.courtesy,
         courtesyReason: values.courtesyReason || undefined,
+        discountPercent: values.courtesy ? 0 : (values.discountPercent ?? 0),
         employeeIds: values.employeeIds.map(Number),
       }
       if (mode === 'edit' && ticket) {
@@ -1753,6 +1761,23 @@ function TicketWorkspace({
             {form.formState.errors.employeeIds?.message && <p className="mt-2 text-sm text-red-600">{form.formState.errors.employeeIds.message}</p>}
           </Panel>
 
+          <Panel title="Descuento">
+            <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                placeholder="0"
+                disabled={watched.courtesy}
+                {...form.register('discountPercent')}
+              />
+            </TextField>
+            {watched.discountPercent > 0 && !watched.courtesy && (
+              <p className="mt-1 text-xs text-amber-700">Precio final reducido {watched.discountPercent}%</p>
+            )}
+          </Panel>
+
           <Panel title="Cortesia">
             <label className="flex items-center gap-3 text-sm font-medium">
               <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
@@ -1769,7 +1794,16 @@ function TicketWorkspace({
         <aside className="space-y-4">
           <Panel title="Resumen">
             <div className="space-y-3 text-sm">
-              <SummaryRow label="Precio preview" value={livePrice === undefined ? 'Sin precio' : money(livePrice, watched.currency)} />
+              <SummaryRow
+                label="Precio preview"
+                value={
+                  livePrice === undefined ? 'Sin precio' : (
+                    watched.discountPercent > 0 && !watched.courtesy
+                      ? `${money(livePrice, watched.currency)} (-${watched.discountPercent}%)`
+                      : money(livePrice, watched.currency)
+                  )
+                }
+              />
               <SummaryRow label="Lavadores" value={String(watched.employeeIds?.length ?? 0)} />
               <SummaryRow label="Tipo" value={watched.courtesy ? 'Cortesia' : 'Venta'} />
               <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'} />

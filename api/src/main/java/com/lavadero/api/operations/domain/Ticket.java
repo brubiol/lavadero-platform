@@ -57,6 +57,12 @@ public class Ticket extends AuditedEntity {
     @Column(name = "price_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal priceAmount;
 
+    @Column(name = "discount_percent", nullable = false, precision = 5, scale = 2)
+    private BigDecimal discountPercent = BigDecimal.ZERO;
+
+    @Column(name = "original_price_amount", precision = 12, scale = 2)
+    private BigDecimal originalPriceAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 3)
     private TicketCurrency currency;
@@ -93,6 +99,7 @@ public class Ticket extends AuditedEntity {
 
     public Ticket(BusinessDay businessDay, Shift shift, ServiceType serviceType, VehicleSize vehicleSize,
             Integer dailySeq, String notaNumber, String vehicleDescription, BigDecimal priceAmount,
+            BigDecimal discountPercent, BigDecimal originalPriceAmount,
             TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason) {
         this.businessDay = businessDay;
         this.shift = shift;
@@ -102,6 +109,8 @@ public class Ticket extends AuditedEntity {
         this.notaNumber = notaNumber;
         this.vehicleDescription = vehicleDescription;
         this.priceAmount = priceAmount;
+        this.discountPercent = discountPercent != null ? discountPercent : BigDecimal.ZERO;
+        this.originalPriceAmount = originalPriceAmount;
         this.currency = currency;
         this.paymentMethod = paymentMethod != null ? paymentMethod : PaymentMethod.CASH;
         this.courtesy = courtesy;
@@ -142,6 +151,14 @@ public class Ticket extends AuditedEntity {
 
     public BigDecimal getPriceAmount() {
         return priceAmount;
+    }
+
+    public BigDecimal getDiscountPercent() {
+        return discountPercent;
+    }
+
+    public BigDecimal getOriginalPriceAmount() {
+        return originalPriceAmount;
     }
 
     public TicketCurrency getCurrency() {
@@ -185,11 +202,14 @@ public class Ticket extends AuditedEntity {
     }
 
     public void update(ServiceType serviceType, VehicleSize vehicleSize, String vehicleDescription,
-            BigDecimal priceAmount, TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason) {
+            BigDecimal priceAmount, BigDecimal discountPercent, BigDecimal originalPriceAmount,
+            TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason) {
         this.serviceType = serviceType;
         this.vehicleSize = vehicleSize;
         this.vehicleDescription = vehicleDescription;
         this.priceAmount = priceAmount;
+        this.discountPercent = discountPercent != null ? discountPercent : BigDecimal.ZERO;
+        this.originalPriceAmount = originalPriceAmount;
         this.currency = currency;
         this.paymentMethod = paymentMethod != null ? paymentMethod : this.paymentMethod;
         this.courtesy = courtesy;
