@@ -106,3 +106,23 @@ jobs:
 
             # Prune old images to keep disk clean
             docker image prune -f
+
+      - name: Smoke test — verify API is healthy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "Waiting for API to become healthy..."
+            for i in $(seq 1 12); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "API healthy after $((i * 5))s"
+                exit 0
+              fi
+              echo "Attempt $i: status=$STATUS, retrying in 5s..."
+              sleep 5
+            done
+            echo "API did not become healthy within 60s — deploy failed"
+            exit 1
