@@ -24,7 +24,7 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_apply_discount_percent_and_store_original_price() throws Exception {
-        Fixture f = fixture("D14A", LocalDate.of(2027, 1, 1), "200.00");
+        Fixture f = fixture("D14A", LocalDate.of(2027, 6, 1), "200.00");
 
         MvcResult result = mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -42,7 +42,7 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_leave_price_unchanged_when_discount_is_zero() throws Exception {
-        Fixture f = fixture("D14B", LocalDate.of(2027, 1, 2), "180.00");
+        Fixture f = fixture("D14B", LocalDate.of(2027, 6, 2), "180.00");
 
         MvcResult result = mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -60,7 +60,7 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_reject_discount_above_100() throws Exception {
-        Fixture f = fixture("D14C", LocalDate.of(2027, 1, 3), "150.00");
+        Fixture f = fixture("D14C", LocalDate.of(2027, 6, 3), "150.00");
 
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -70,7 +70,7 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_reject_discount_below_0() throws Exception {
-        Fixture f = fixture("D14D", LocalDate.of(2027, 1, 4), "150.00");
+        Fixture f = fixture("D14D", LocalDate.of(2027, 6, 4), "150.00");
 
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -80,7 +80,7 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_ignore_discount_on_courtesy_ticket() throws Exception {
-        Fixture f = fixture("D14E", LocalDate.of(2027, 1, 5), "200.00");
+        Fixture f = fixture("D14E", LocalDate.of(2027, 6, 5), "200.00");
 
         MvcResult result = mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -98,14 +98,14 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_reflect_discounted_revenue_in_daily_summary() throws Exception {
-        Fixture f = fixture("D14F", LocalDate.of(2027, 1, 6), "200.00");
+        Fixture f = fixture("D14F", LocalDate.of(2027, 6, 6), "200.00");
 
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ticketJson(f, false, null, "25", f.employeeId())))
                 .andExpect(status().isCreated());
 
-        mvc.perform(get("/api/v1/reports/daily-summary?date=2027-01-06"))
+        mvc.perform(get("/api/v1/reports/daily-summary?date=2027-06-06"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.carsWashed").value(1))
                 .andExpect(jsonPath("$.ticketRevenue").value(150.00)); // discounted price, not base
