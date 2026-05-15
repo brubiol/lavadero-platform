@@ -295,6 +295,35 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
         return node.get("id").asLong();
     }
 
+    @Test
+    void should_reject_reopen_when_shift_is_already_open() throws Exception {
+        LocalDate date = LocalDate.of(2031, 2, 1);
+        Fixture fixture = fixture("P13C", date);
+        // Shift is currently OPEN — trying to reopen must be rejected
+        mvc.perform(post("/api/v1/corrections/shifts/{id}/reopen", fixture.shiftId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": "Prueba de precondicion"}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_reject_unlock_when_payroll_period_is_not_locked() throws Exception {
+        LocalDate sunday = LocalDate.of(2031, 2, 8);
+        Fixture fixture = fixture("P13D", sunday.plusDays(1));
+        setBaseSalary(fixture.employeeId(), "800.00");
+        createTicket(fixture);
+        Long periodId = createPeriod(sunday);
+        // Period is OPEN (not LOCKED) — trying to unlock must be rejected
+        mvc.perform(post("/api/v1/corrections/payroll-periods/{id}/unlock", periodId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": "Prueba de precondicion"}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
     private record Fixture(LocalDate businessDate, Long businessDayId, Long shiftId, Long employeeId,
             Long serviceTypeId, Long vehicleSizeId) {
     }
