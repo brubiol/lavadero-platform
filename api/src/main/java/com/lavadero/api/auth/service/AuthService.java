@@ -85,6 +85,14 @@ public class AuthService {
         return UserResponse.from(saved);
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<UserResponse> listUsers() {
+        return users.findAll().stream()
+                .filter(AppUser::isActive)
+                .map(UserResponse::from)
+                .toList();
+    }
+
     private AuthResponse issueTokens(AppUser user) {
         String refreshToken = UUID.randomUUID() + "." + UUID.randomUUID();
         refreshTokens.save(new RefreshToken(user, hash(refreshToken),
