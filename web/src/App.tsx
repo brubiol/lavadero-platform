@@ -1,9 +1,11 @@
 import { createContext, useContext, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { useForm, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Frame, MobileNav, MobileTopbar, Sidebar, Topbar, type NavRole } from './components/layout'
+import { EcoBadge } from './components/ui'
 
 type Currency = 'MXN' | 'USD'
 type PaymentMethod = 'CASH' | 'CARD'
@@ -793,240 +795,72 @@ function useAuth() {
   return context
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────
-function IconHome() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-    </svg>
-  )
+const ROUTE_META: Record<string, { title: string; section: string }> = {
+  '/':              { title: 'Dashboard',     section: 'Operación' },
+  '/tickets/nuevo': { title: 'Nuevo ticket',  section: 'Operación' },
+  '/tickets':       { title: 'Tickets',       section: 'Operación' },
+  '/gastos':        { title: 'Gastos',        section: 'Operación' },
+  '/cierre-dia':    { title: 'Cierre del día',section: 'Operación' },
+  '/corte':         { title: 'Corte',         section: 'Operación' },
+  '/nomina':        { title: 'Nómina',        section: 'Gestión'   },
+  '/inventario':    { title: 'Inventario',    section: 'Gestión'   },
+  '/catalogos':     { title: 'Catálogos',     section: 'Gestión'   },
+  '/reportes':      { title: 'Reportes',      section: 'Dueño'     },
+  '/ai':            { title: 'AI',            section: 'Dueño'     },
+  '/auditoria':     { title: 'Auditoría',     section: 'Dueño'     },
 }
-function IconPlus() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-  )
-}
-function IconList() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
-    </svg>
-  )
-}
-function IconWallet() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
-    </svg>
-  )
-}
-function IconCalc() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.616 4.5 4.709v.791a23.935 23.935 0 0 1 3-.26M12 2.25c1.892 0 3.758.11 5.593.322C18.693 2.7 19.5 3.616 19.5 4.709v.791a23.933 23.933 0 0 0-3-.26M12 2.25v2M4.5 6h15" />
-    </svg>
-  )
-}
-function IconUsers() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-    </svg>
-  )
-}
-function IconBox() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
-    </svg>
-  )
-}
-function IconChart() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-    </svg>
-  )
-}
-function IconAi() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 0 0 2.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-    </svg>
-  )
-}
-function IconSettings() {
-  return (
-    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-    </svg>
-  )
-}
-function IconLogout() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25" />
-    </svg>
-  )
+
+function routeMeta(pathname: string) {
+  return ROUTE_META[pathname] ?? { title: 'Turbo Lavado', section: 'Operación' }
 }
 
 function AppShell() {
-  const { auth, logout, hasRole } = useAuth()
+  const { auth, logout } = useAuth()
+  const location = useLocation()
   if (!auth) {
     return <LoginScreen />
   }
 
-  const initials = auth.user.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+  const role = auth.user.role as NavRole
+  const meta = routeMeta(location.pathname)
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      {/* ── Desktop sidebar ── */}
-      <aside
-        className="fixed inset-y-0 left-0 hidden w-72 flex-col lg:flex"
-        style={{ background: 'linear-gradient(180deg, #1a0f2e 0%, #2d2557 45%, #143924 100%)' }}
-      >
-        {/* Brand header */}
-        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/[0.06] px-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-md">
-            <img src="/logo.png" alt="Turbo Lavado" className="h-8 w-8 rounded-lg object-contain" />
-          </div>
-          <div>
-            <p className="text-sm font-bold tracking-wide text-white">Turbo Lavado</p>
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
-              <p className="text-[11px] text-emerald-400">Ecologico · Operacion diaria</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <div className="space-y-0.5">
-            <SideLink to="/" label="Dashboard" icon={<IconHome />} />
-            <SideLink to="/tickets/nuevo" label="Nuevo ticket" icon={<IconPlus />} />
-            <SideLink to="/tickets" label="Tickets" icon={<IconList />} />
-            <SideLink to="/gastos" label="Gastos" icon={<IconWallet />} />
-            <SideLink to="/cierre-dia" label="Cierre del dia" icon={<IconCalc />} />
-            <SideLink to="/corte" label="Corte" icon={<IconCalc />} />
-          </div>
-
-          {hasRole('GERENTE') && (
-            <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-0.5">
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-emerald-500/70">Gestion</p>
-              <SideLink to="/nomina" label="Nomina" icon={<IconUsers />} />
-              <SideLink to="/inventario" label="Inventario" icon={<IconBox />} />
-              <SideLink to="/catalogos" label="Catalogos" icon={<IconSettings />} />
-            </div>
-          )}
-
-          {hasRole('DUENO') && (
-            <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-0.5">
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-violet-400/70">Dueno</p>
-              <SideLink to="/ai" label="AI" icon={<IconAi />} />
-              <SideLink to="/reportes" label="Reportes" icon={<IconChart />} />
-              <SideLink to="/auditoria" label="Auditoria" icon={<IconList />} />
-            </div>
-          )}
-        </nav>
-
-        {/* Footer */}
-        <div className="shrink-0 border-t border-white/[0.06] p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-emerald-600 text-xs font-bold text-white shadow">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">{auth.user.fullName}</p>
-              <p className="text-xs text-white/40">{roleLabel(auth.user.role)}</p>
-            </div>
-            <button
-              onClick={() => void logout()}
-              title="Cerrar sesion"
-              className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <IconLogout />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <div className="lg:pl-72">
-        {/* ── Mobile top bar ── */}
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-100 bg-white/95 px-4 backdrop-blur lg:hidden">
-          <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="" className="h-7 w-7 rounded-lg object-contain" />
-            <span className="text-sm font-bold">Turbo Lavado</span>
-          </div>
-          <span className="text-xs text-gray-400">{auth.user.fullName}</span>
-        </header>
-
-        <main className="px-4 py-6 pb-24 lg:px-8 lg:pb-8">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
-            <Route path="/tickets" element={<TicketsBrowser />} />
-            <Route path="/gastos" element={<ExpenseLedgerScreen />} />
-            <Route path="/cierre-dia" element={<EndOfDayScreen />} />
-            <Route path="/corte" element={<ShiftCloseScreen />} />
-            <Route path="/nomina" element={<RequireRole role="GERENTE"><PayrollScreen /></RequireRole>} />
-            <Route path="/inventario" element={<RequireRole role="GERENTE"><InventoryScreen /></RequireRole>} />
-            <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
-            <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
-            <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
-            <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
-          </Routes>
-        </main>
-
-        {/* ── Mobile bottom nav ── */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-gray-200 bg-white lg:hidden">
-          <MobileLink to="/" label="Inicio" icon={<IconHome />} />
-          <MobileLink to="/tickets/nuevo" label="Nuevo" icon={<IconPlus />} />
-          <MobileLink to="/tickets" label="Tickets" icon={<IconList />} />
-          <MobileLink to="/gastos" label="Gastos" icon={<IconWallet />} />
-          <MobileLink to="/cierre-dia" label="Cierre" icon={<IconCalc />} />
-          {hasRole('DUENO') && <MobileLink to="/ai" label="AI" icon={<IconAi />} />}
-        </nav>
-      </div>
-    </div>
-  )
-}
-
-function SideLink({ to, label, icon }: { to: string; label: string; icon: React.ReactNode }) {
-  return (
-    <NavLink
-      to={to}
-      data-testid={`nav-${testidSlug(label)}`}
-      className={({ isActive }) =>
-        `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-          isActive
-            ? 'border-l-[3px] border-emerald-400 bg-violet-500/15 pl-[9px] text-violet-300'
-            : 'border-l-[3px] border-transparent pl-[9px] text-slate-400 hover:bg-white/5 hover:text-white'
-        }`
+    <Frame
+      sidebar={
+        <Sidebar
+          role={role}
+          userName={auth.user.fullName}
+          onLogout={() => void logout()}
+        />
       }
     >
-      {icon}
-      {label}
-    </NavLink>
-  )
-}
+      <Topbar
+        crumbs={[meta.section]}
+        title={meta.title}
+        userName={auth.user.fullName}
+        role={role}
+      />
+      <MobileTopbar userName={auth.user.fullName} />
 
-function MobileLink({ to, label, icon }: { to: string; label: string; icon: React.ReactNode }) {
-  return (
-    <NavLink
-      to={to}
-      data-testid={`mobile-nav-${testidSlug(label)}`}
-      className={({ isActive }) =>
-        `flex flex-1 flex-col items-center gap-1 py-2.5 text-center transition-colors ${
-          isActive ? 'text-violet-600' : 'text-gray-400 hover:text-gray-700'
-        }`
-      }
-    >
-      {icon}
-      <span className="text-[10px] font-medium leading-none">{label}</span>
-    </NavLink>
+      <main className="tl-page px-4 pb-24 lg:px-6 lg:pb-8">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
+          <Route path="/tickets" element={<TicketsBrowser />} />
+          <Route path="/gastos" element={<ExpenseLedgerScreen />} />
+          <Route path="/cierre-dia" element={<EndOfDayScreen />} />
+          <Route path="/corte" element={<ShiftCloseScreen />} />
+          <Route path="/nomina" element={<RequireRole role="GERENTE"><PayrollScreen /></RequireRole>} />
+          <Route path="/inventario" element={<RequireRole role="GERENTE"><InventoryScreen /></RequireRole>} />
+          <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
+          <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
+          <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
+          <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
+        </Routes>
+      </main>
+
+      <MobileNav role={role} />
+    </Frame>
   )
 }
 
@@ -1233,10 +1067,10 @@ function DayStatusCard() {
     return (
       <>
         {toast && <Toast message={toast} />}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border-l-4 border-sky-400 bg-sky-50 px-5 py-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border-l-4 border-violet-400 bg-violet-50 px-5 py-4 shadow-sm">
           <div>
-            <p className="font-bold text-sky-900">Dia abierto — sin turno activo</p>
-            <p className="text-sm text-sky-700 mt-0.5">
+            <p className="font-bold text-violet-900">Dia abierto — sin turno activo</p>
+            <p className="text-sm text-violet-700 mt-0.5">
               {allShifts.length === 0
                 ? 'Abre el turno para empezar a capturar tickets.'
                 : 'Todos los turnos de hoy estan cerrados.'}
@@ -1477,7 +1311,7 @@ function EndOfDayScreen() {
                 <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Abre el dia para comenzar.</p>
               )}
               {data.currentBusinessDay && shifts.length === 0 && (
-                <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-800">Abre un turno para capturar tickets.</p>
+                <p className="rounded-lg bg-violet-50 p-3 text-sm text-violet-800">Abre un turno para capturar tickets.</p>
               )}
             </div>
           </Panel>
@@ -1518,7 +1352,7 @@ function Metric({ label, value, variant = 'default', sub }: { label: string; val
     default: 'bg-white border border-gray-100',
     success: 'bg-emerald-50 border border-emerald-100',
     danger:  'bg-red-50 border border-red-100',
-    info:    'bg-sky-50 border border-sky-100',
+    info:    'bg-violet-50 border border-violet-100',
     feature: '',
     warn:    'bg-amber-50 border border-amber-100',
   }
@@ -1526,7 +1360,7 @@ function Metric({ label, value, variant = 'default', sub }: { label: string; val
     default: 'text-gray-900',
     success: 'text-emerald-700',
     danger:  'text-red-700',
-    info:    'text-sky-700',
+    info:    'text-violet-700',
     feature: 'text-white',
     warn:    'text-amber-700',
   }
@@ -1534,7 +1368,7 @@ function Metric({ label, value, variant = 'default', sub }: { label: string; val
     default: 'text-gray-500',
     success: 'text-emerald-600',
     danger:  'text-red-500',
-    info:    'text-sky-600',
+    info:    'text-violet-600',
     feature: 'text-emerald-400',
     warn:    'text-amber-600',
   }
@@ -2664,7 +2498,7 @@ function AuditActionPill({ action }: { action: string }) {
     TICKET_CREATE:      { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket' },
     TICKET_UPDATE:      { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket edit' },
     SHIFT_OPEN:         { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Turno abierto' },
-    SHIFT_CLOSE:        { bg: 'bg-sky-50',     text: 'text-sky-700',    label: 'Turno cerrado' },
+    SHIFT_CLOSE:        { bg: 'bg-violet-50',     text: 'text-violet-700',    label: 'Turno cerrado' },
     DAY_OPEN:           { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Dia abierto' },
     DAY_CLOSE:          { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Dia cerrado' },
     EXPENSE_CREATE:     { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Gasto' },
@@ -2674,8 +2508,8 @@ function AuditActionPill({ action }: { action: string }) {
     INVENTORY_IN:       { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Entrada inv.' },
     INVENTORY_OUT:      { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Salida inv.' },
     INVENTORY_ADJ:      { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Ajuste inv.' },
-    PAYROLL_PERIOD:     { bg: 'bg-sky-50',     text: 'text-sky-700',    label: 'Nomina' },
-    PAYROLL_ADJUSTMENT: { bg: 'bg-sky-50',     text: 'text-sky-700',    label: 'Ajuste nomina' },
+    PAYROLL_PERIOD:     { bg: 'bg-violet-50',     text: 'text-violet-700',    label: 'Nomina' },
+    PAYROLL_ADJUSTMENT: { bg: 'bg-violet-50',     text: 'text-violet-700',    label: 'Ajuste nomina' },
   }
   const style = cfg[action] ?? { bg: 'bg-gray-100', text: 'text-gray-600', label: action.replace(/_/g, ' ') }
   return (
@@ -4247,7 +4081,7 @@ function AiStatusCard({
   tone: 'sky' | 'amber' | 'emerald' | 'slate'
 }) {
   const toneClass = {
-    sky: 'border-sky-100 bg-sky-50/70 text-sky-700',
+    sky: 'border-violet-100 bg-violet-50/70 text-violet-700',
     amber: 'border-amber-100 bg-amber-50/80 text-amber-700',
     emerald: 'border-emerald-100 bg-emerald-50/80 text-emerald-700',
     slate: 'border-slate-200 bg-white text-slate-700',
@@ -4279,7 +4113,7 @@ function AiWorkflowSection({
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">{eyebrow}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">{eyebrow}</p>
           <h3 className="mt-1 text-lg font-bold text-slate-950">{title}</h3>
           <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
@@ -4298,7 +4132,7 @@ function AiDateInput({ label, value, onChange }: { label: string; value: string;
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
       />
     </label>
   )
@@ -4467,7 +4301,7 @@ function AiAnalystSection({
       </form>
 
       {chat.data && (
-        <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-4">
+        <div className="rounded-xl border border-violet-100 bg-violet-50/70 p-4">
           <AiLabeledText label="Conclusion" text={chat.data.answer} />
           <AiEvidenceList title="Numeros usados" rows={chat.data.supportingNumbers} />
           {chat.data.suggestedFollowUps.length > 0 && (
@@ -4479,7 +4313,7 @@ function AiAnalystSection({
                     key={question}
                     type="button"
                     onClick={() => chatForm.setValue('message', question)}
-                    className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 ring-1 ring-sky-100 hover:bg-sky-50"
+                    className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 ring-1 ring-violet-100 hover:bg-violet-50"
                   >
                     {question}
                   </button>
@@ -4928,7 +4762,7 @@ function confidenceLabel(confidence: InvestigationConfidence) {
 
 function aiSeverityClass(severity: AiSeverity) {
   const classes: Record<AiSeverity, string> = {
-    INFO: 'border-sky-100 bg-sky-50',
+    INFO: 'border-violet-100 bg-violet-50',
     WARNING: 'border-amber-100 bg-amber-50',
     CRITICAL: 'border-red-100 bg-red-50',
   }
@@ -4951,7 +4785,7 @@ function Pill({ tone, children }: { tone: PillTone; children: React.ReactNode })
     good:   'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60',
     bad:    'bg-red-50 text-red-700 ring-1 ring-red-200/60',
     warn:   'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
-    info:   'bg-sky-50 text-sky-700 ring-1 ring-sky-200/60',
+    info:   'bg-violet-50 text-violet-700 ring-1 ring-violet-200/60',
     gray:   'bg-gray-100 text-gray-600 ring-1 ring-gray-200/60',
     purple: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200/60',
   }
@@ -4959,7 +4793,7 @@ function Pill({ tone, children }: { tone: PillTone; children: React.ReactNode })
     good:   'bg-emerald-500',
     bad:    'bg-red-500',
     warn:   'bg-amber-500',
-    info:   'bg-sky-500',
+    info:   'bg-violet-500',
     gray:   'bg-gray-400',
     purple: 'bg-purple-500',
   }
