@@ -1,28 +1,23 @@
 import { test, expect } from '@playwright/test'
+import { loginAsDueno } from './helpers/auth'
 
 test('login with valid DUENO credentials lands on dashboard', async ({ page }) => {
-  await page.goto('/')
-  await page.getByLabel('Usuario').fill('dueno')
-  await page.getByLabel('Contrasena').fill('cambia-esto-123')
-  await page.getByRole('button', { name: 'Iniciar sesion' }).click()
-  await expect(page.getByText('Carros lavados')).toBeVisible({ timeout: 10_000 })
+  await loginAsDueno(page)
+  await expect(page.getByTestId('metric-carros-lavados')).toBeVisible()
 })
 
 test('login with wrong password shows error and stays on login', async ({ page }) => {
   await page.goto('/')
-  await page.getByLabel('Usuario').fill('dueno')
-  await page.getByLabel('Contrasena').fill('wrong-password')
-  await page.getByRole('button', { name: 'Iniciar sesion' }).click()
-  await expect(page.getByRole('button', { name: 'Iniciar sesion' })).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByText('Carros lavados')).not.toBeVisible()
+  await page.getByTestId('login-username').fill('dueno')
+  await page.getByTestId('login-password').fill('wrong-password')
+  await page.getByTestId('login-submit').click()
+
+  await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByTestId('metric-carros-lavados')).not.toBeVisible()
 })
 
 test('logout redirects to login screen', async ({ page }) => {
-  await page.goto('/')
-  await page.getByLabel('Usuario').fill('dueno')
-  await page.getByLabel('Contrasena').fill('cambia-esto-123')
-  await page.getByRole('button', { name: 'Iniciar sesion' }).click()
-  await expect(page.getByText('Carros lavados')).toBeVisible({ timeout: 10_000 })
+  await loginAsDueno(page)
   await page.getByTitle('Cerrar sesion').click()
-  await expect(page.getByRole('button', { name: 'Iniciar sesion' })).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 5_000 })
 })

@@ -76,6 +76,15 @@ public class AuthService {
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
     }
 
+    @Transactional
+    public UserResponse createUser(String username, String password, String fullName, AuthRole role) {
+        if (users.existsByUsernameIgnoreCase(username)) {
+            throw new IllegalArgumentException("Username already exists");
+        }
+        AppUser saved = users.save(new AppUser(username, passwordEncoder.encode(password), fullName, role));
+        return UserResponse.from(saved);
+    }
+
     private AuthResponse issueTokens(AppUser user) {
         String refreshToken = UUID.randomUUID() + "." + UUID.randomUUID();
         refreshTokens.save(new RefreshToken(user, hash(refreshToken),

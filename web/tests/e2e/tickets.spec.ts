@@ -1,142 +1,97 @@
-import { test, expect, request as playwrightRequest } from '@playwright/test'
+import { test, expect, APIRequestContext, Page } from '@playwright/test'
+import { loginAsDueno, loginAsDuenoApi } from './helpers/auth'
+import {
+  Catalog,
+  createTicket,
+  openDayAndShift,
+  seedPricedCatalog,
+  todayIso,
+  uniqueFutureDate,
+} from './helpers/setup'
 
-// Use today's date so the frontend (which only loads today's business day) can find it
-const TEST_DATE = new Date().toISOString().split('T')[0]
-
-// Unique suffix per run so re-running locally doesn't hit uniqueness constraints
-const RUN_ID = Date.now().toString().slice(-6)
-const EMPLOYEE_NAME = `E2E Lavador ${RUN_ID}`
-const SERVICE_CODE = `E2E_SVC_${RUN_ID}`
-const SERVICE_NAME = `E2E Servicio ${RUN_ID}`
-const SIZE_CODE = `E2E_SIZE_${RUN_ID}`
-const SIZE_NAME = `E2E Tamano ${RUN_ID}`
-
-let createdNotaNumber = ''
-
-test.beforeAll(async () => {
-  const ctx = await playwrightRequest.newContext({ baseURL: 'http://localhost:5173' })
-
-  // Authenticate
-  const loginRes = await ctx.post('/api/v1/auth/login', {
-    data: { username: 'dueno', password: 'cambia-esto-123' },
-  })
-  const loginBody = await loginRes.json()
-  const headers = { Authorization: `Bearer ${loginBody.accessToken}` }
-
-  // Create catalog entities
-  const empRes = await ctx.post('/api/v1/employees', {
-    headers,
-    data: { fullName: EMPLOYEE_NAME, phone: '899-555-0199' },
-  })
-  const employee = await empRes.json()
-
-  const svcRes = await ctx.post('/api/v1/service-types', {
-    headers,
-    data: { code: SERVICE_CODE, name: SERVICE_NAME },
-  })
-  const svc = await svcRes.json()
-
-  const sizeRes = await ctx.post('/api/v1/vehicle-sizes', {
-    headers,
-    data: { code: SIZE_CODE, name: SIZE_NAME, sortOrder: 99 },
-  })
-  const size = await sizeRes.json()
-
-  await ctx.post('/api/v1/service-prices', {
-    headers,
-    data: {
-      serviceTypeId: svc.id,
-      vehicleSizeId: size.id,
-      amount: '100.00',
-      currency: 'MXN',
-      effectiveFrom: '2020-01-01',
-    },
-  })
-
-  // Open business day for today (may already exist — ignore conflict)
-  const dayRes = await ctx.post('/api/v1/business-days/open', {
-    headers,
-    data: { businessDate: TEST_DATE },
-  })
-
-  let dayId: number
-  if (dayRes.status() === 201) {
-    dayId = (await dayRes.json()).id
-  } else {
-    // Business day already open for today — fetch it
-    const listRes = await ctx.get(`/api/v1/business-days?from=${TEST_DATE}&to=${TEST_DATE}`, { headers })
-    const days = await listRes.json()
-    dayId = days[0].id
-  }
-
-  // Open a shift (ignore conflict if one is already open)
-  await ctx.post('/api/v1/shifts/open', {
-    headers,
-    data: { businessDayId: dayId, shiftType: 'MATUTINO' },
-  })
-
-  await ctx.dispose()
-})
-
-async function loginAsDueno(page: import('@playwright/test').Page) {
-  await page.goto('/')
-  await page.getByLabel('Usuario').fill('dueno')
-  await page.getByLabel('Contrasena').fill('cambia-esto-123')
-  await page.getByRole('button', { name: 'Iniciar sesion' }).click()
-  await expect(page.getByText('Carros lavados')).toBeVisible({ timeout: 10_000 })
+async function seedTicketFixture(
+  request: APIRequestContext,
+  prefix: string,
+  businessDate = todayIso(),
+  price = '100.00',
+) {
+  const { headers } = await loginAsDuenoApi(request)
+  const catalog = await seedPricedCatalog(request, headers, prefix, price)
+  const dayShift = await openDayAndShift(request, headers, businessDate)
+  return { headers, catalog, businessDate, ...dayShift }
 }
 
-async function fillTicketForm(page: import('@playwright/test').Page) {
-  // Wait for the shift to auto-select — proves usePhaseData() has finished loading
-  // and the form values have stabilized. Without this, a mid-load form reset
-  // wipes out any selections we made before the data arrived.
+async function fillTicketForm(page: Page, catalog: Catalog) {
   await expect(page.getByLabel('Turno')).not.toHaveValue('0', { timeout: 15_000 })
-
-  await page.getByLabel('Servicio').selectOption({ label: SERVICE_NAME })
-  await page.getByLabel('Tamano de vehiculo').selectOption({ label: SIZE_NAME })
+  await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
+  await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
+  await page.locator('label').filter({ hasText: catalog.employeeName }).first().click()
 }
 
-test('new ticket form shows resolved price on service selection', async ({ page }) => {
+test('new ticket form shows resolved price on service selection', async ({ page, request }) => {
+  const fixture = await seedTicketFixture(request, 'E2E_PRICE')
+
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
+  await fillTicketForm(page, fixture.catalog)
 
-  await fillTicketForm(page)
-
-  // "Precio preview" row in the Resumen panel should show a peso amount
-  await expect(page.getByText('Sin precio')).not.toBeVisible({ timeout: 8_000 })
-  await expect(page.locator('text=Precio preview').locator('..').getByText(/\$/)).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByTestId('summary-precio-preview-value')).toContainText('$')
 })
 
-test('can create a ticket and see it in ticket browser', async ({ page }) => {
+test('can create cash and card tickets and see payment labels in ticket browser', async ({ page, request }) => {
+  const fixture = await seedTicketFixture(request, 'E2E_PAY')
+  const cashVehicle = `Cash E2E ${Date.now()}`
+  const cardVehicle = `Card E2E ${Date.now()}`
+
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
-
-  await fillTicketForm(page)
-  await page.getByLabel('Descripcion del vehiculo').fill('Tsuru rojo E2E')
-
-  // Click the label wrapping the employee checkbox
-  await page.locator('label').filter({ hasText: EMPLOYEE_NAME }).first().click()
-
-  await page.getByRole('button', { name: 'Guardar ticket' }).click()
-
-  // Should redirect to /tickets after save
+  await fillTicketForm(page, fixture.catalog)
+  await page.getByLabel('Descripcion del vehiculo').fill(cashVehicle)
+  await page.getByLabel('Forma de pago').selectOption('CASH')
+  await page.getByTestId('ticket-submit').click()
   await page.waitForURL('**/tickets', { timeout: 10_000 })
-  await expect(page.getByText(/Tsuru rojo E2E/).first()).toBeVisible({ timeout: 8_000 })
 
-  // Save nota number for the void test
-  const row = page.locator('tr').filter({ hasText: 'Tsuru rojo E2E' }).first()
-  createdNotaNumber = (await row.locator('td').first().textContent())?.trim() ?? ''
+  await page.goto('/tickets/nuevo')
+  await fillTicketForm(page, fixture.catalog)
+  await page.getByLabel('Descripcion del vehiculo').fill(cardVehicle)
+  await page.getByLabel('Forma de pago').selectOption('CARD')
+  await page.getByTestId('ticket-submit').click()
+  await page.waitForURL('**/tickets', { timeout: 10_000 })
+
+  const cashRow = page.locator('tr').filter({ hasText: cashVehicle }).first()
+  const cardRow = page.locator('tr').filter({ hasText: cardVehicle }).first()
+  await expect(cashRow).toBeVisible({ timeout: 8_000 })
+  await expect(cashRow.getByText('Efectivo')).toBeVisible()
+  await expect(cardRow).toBeVisible({ timeout: 8_000 })
+  await expect(cardRow.getByText('Tarjeta')).toBeVisible()
 })
 
-test('can void a ticket', async ({ page }) => {
-  test.skip(!createdNotaNumber, 'Depends on previous test creating a ticket')
+test('dashboard counters match seeded ticket totals for selected date', async ({ page, request }) => {
+  const businessDate = uniqueFutureDate()
+  const fixture = await seedTicketFixture(request, 'E2E_DASH', businessDate, '125.00')
+  await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard cash', paymentMethod: 'CASH' })
+  await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard card', paymentMethod: 'CARD' })
+
+  await loginAsDueno(page)
+  await page.goto('/')
+  await page.getByLabel('Fecha').fill(businessDate)
+
+  await expect(page.getByTestId('metric-carros-lavados-value')).toHaveText('2')
+  await expect(page.getByTestId('metric-ingresos-autos-value')).toContainText('250')
+})
+
+test('can void a freshly seeded ticket without depending on another test', async ({ page, request }) => {
+  const fixture = await seedTicketFixture(request, 'E2E_VOID')
+  const ticket = await createTicket(request, fixture.headers, fixture, {
+    vehicleDescription: `Void E2E ${Date.now()}`,
+  })
 
   await loginAsDueno(page)
   await page.goto('/tickets')
 
-  const row = page.locator('tr').filter({ hasText: createdNotaNumber })
+  const row = page.locator('tr').filter({ hasText: ticket.notaNumber }).first()
+  await expect(row).toBeVisible({ timeout: 8_000 })
   await row.getByRole('button', { name: 'Cancelar' }).click()
-
   await page.getByLabel('Motivo').fill('Test E2E void reason')
   await page.getByRole('button', { name: 'Confirmar cancelacion' }).click()
 

@@ -48,6 +48,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
                         .requestMatchers("/api/v1/auth/**", "/api/v1/health", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("DUENO")
                         .requestMatchers("/api/v1/ai/**").hasRole("DUENO")
                         .requestMatchers("/api/v1/audit-events/**", "/api/v1/corrections/**").hasRole("DUENO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/reports/**").hasRole("DUENO")

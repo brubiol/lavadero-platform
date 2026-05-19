@@ -65,7 +65,8 @@ class Phase15AuditIntegrationTest extends AbstractIntegrationTest {
         mvc.perform(get("/api/v1/audit-events?entityType=TICKET&entityId={id}", ticketId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.action == 'TICKET_VOIDED')]", hasSize(1)))
-                .andExpect(jsonPath("$[?(@.action == 'TICKET_VOIDED')][0].reason").value("Error de captura"));
+                .andExpect(jsonPath("$[?(@.action == 'TICKET_VOIDED' && @.reason == 'Error de captura')]",
+                        hasSize(1)));
     }
 
     @Test

@@ -884,14 +884,25 @@ function AppShell() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* ── Desktop sidebar ── */}
-      <aside className="fixed inset-y-0 left-0 hidden w-72 flex-col bg-slate-900 lg:flex">
-        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-800 px-5">
-          <img src="/logo.png" alt="Turbo Lavado" className="h-9 w-9 shrink-0 rounded-xl object-contain shadow" />
+      <aside
+        className="fixed inset-y-0 left-0 hidden w-72 flex-col lg:flex"
+        style={{ background: 'linear-gradient(180deg, #1a0f2e 0%, #2d2557 45%, #143924 100%)' }}
+      >
+        {/* Brand header */}
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/[0.06] px-5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-md">
+            <img src="/logo.png" alt="Turbo Lavado" className="h-8 w-8 rounded-lg object-contain" />
+          </div>
           <div>
             <p className="text-sm font-bold tracking-wide text-white">Turbo Lavado</p>
-            <p className="text-xs text-slate-500">Operacion diaria</p>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+              <p className="text-[11px] text-emerald-400">Ecologico · Operacion diaria</p>
+            </div>
           </div>
         </div>
+
+        {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <div className="space-y-0.5">
             <SideLink to="/" label="Dashboard" icon={<IconHome />} />
@@ -903,8 +914,8 @@ function AppShell() {
           </div>
 
           {hasRole('GERENTE') && (
-            <div className="mt-6 space-y-0.5">
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Gestion</p>
+            <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-0.5">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-emerald-500/70">Gestion</p>
               <SideLink to="/nomina" label="Nomina" icon={<IconUsers />} />
               <SideLink to="/inventario" label="Inventario" icon={<IconBox />} />
               <SideLink to="/catalogos" label="Catalogos" icon={<IconSettings />} />
@@ -912,27 +923,29 @@ function AppShell() {
           )}
 
           {hasRole('DUENO') && (
-            <div className="mt-6 space-y-0.5">
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dueno</p>
+            <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-0.5">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-violet-400/70">Dueno</p>
               <SideLink to="/ai" label="AI" icon={<IconAi />} />
               <SideLink to="/reportes" label="Reportes" icon={<IconChart />} />
               <SideLink to="/auditoria" label="Auditoria" icon={<IconList />} />
             </div>
           )}
         </nav>
-        <div className="shrink-0 border-t border-slate-800 p-4">
+
+        {/* Footer */}
+        <div className="shrink-0 border-t border-white/[0.06] p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-emerald-600 text-xs font-bold text-white shadow">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">{auth.user.fullName}</p>
-              <p className="text-xs text-slate-500">{roleLabel(auth.user.role)}</p>
+              <p className="text-xs text-white/40">{roleLabel(auth.user.role)}</p>
             </div>
             <button
               onClick={() => void logout()}
               title="Cerrar sesion"
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
             >
               <IconLogout />
             </button>
@@ -985,11 +998,12 @@ function SideLink({ to, label, icon }: { to: string; label: string; icon: React.
   return (
     <NavLink
       to={to}
+      data-testid={`nav-${testidSlug(label)}`}
       className={({ isActive }) =>
         `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
           isActive
-            ? 'bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/20'
-            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            ? 'border-l-[3px] border-emerald-400 bg-violet-500/15 pl-[9px] text-violet-300'
+            : 'border-l-[3px] border-transparent pl-[9px] text-slate-400 hover:bg-white/5 hover:text-white'
         }`
       }
     >
@@ -1003,9 +1017,10 @@ function MobileLink({ to, label, icon }: { to: string; label: string; icon: Reac
   return (
     <NavLink
       to={to}
+      data-testid={`mobile-nav-${testidSlug(label)}`}
       className={({ isActive }) =>
         `flex flex-1 flex-col items-center gap-1 py-2.5 text-center transition-colors ${
-          isActive ? 'text-sky-600' : 'text-gray-400 hover:text-gray-700'
+          isActive ? 'text-violet-600' : 'text-gray-400 hover:text-gray-700'
         }`
       }
     >
@@ -1036,19 +1051,73 @@ function LoginScreen() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-5 inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-white/10 ring-1 ring-white/20 shadow-2xl">
-            <img src="/logo.png" alt="Turbo Lavado" className="h-16 w-16 rounded-2xl object-contain" />
+    <main className="grid min-h-screen grid-cols-1 md:grid-cols-2">
+      {/* Left hero panel — hidden on mobile */}
+      <div
+        className="relative hidden flex-col justify-between overflow-hidden p-10 md:flex"
+        style={{ background: 'linear-gradient(180deg, #1a0f2e 0%, #3b1d5c 50%, #143924 100%)' }}
+      >
+        {/* Subtle grid mesh overlay */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+        />
+        {/* Brand mark */}
+        <div className="relative flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-lg">
+            <img src="/logo.png" alt="Turbo Lavado" className="h-8 w-8 rounded-lg object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white">Turbo Lavado</h1>
-          <p className="mt-2 text-sm text-slate-400">Sistema de operacion diaria</p>
+          <div>
+            <p className="text-sm font-bold text-white">Turbo Lavado</p>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <p className="text-[11px] text-emerald-400">Ecologico · Reynosa</p>
+            </div>
+          </div>
         </div>
-        <form className="rounded-2xl bg-white p-8 shadow-2xl ring-1 ring-black/5" onSubmit={submit}>
-          <div className="space-y-5">
+        {/* Hero content */}
+        <div className="relative space-y-8">
+          <div>
+            <h2 className="text-4xl font-bold leading-tight text-white">
+              Cada coche cuenta.<br />Cada peso, tambien.
+            </h2>
+            <p className="mt-4 text-base text-slate-400 leading-relaxed">
+              Operaciones del dia a dia en un solo lugar. Tickets, nomina, gastos e inventario — sin Excel, sin papel.
+            </p>
+          </div>
+          {/* Role chips */}
+          <div className="space-y-2">
+            {[
+              { role: 'OPERADOR', desc: 'Crea tickets y registra pagos', color: 'bg-slate-700/60 text-slate-300' },
+              { role: 'GERENTE', desc: 'Nomina, inventario y catalogos', color: 'bg-violet-900/60 text-violet-300' },
+              { role: 'DUENO', desc: 'Reportes, AI y auditoria completa', color: 'bg-emerald-900/60 text-emerald-300' },
+            ].map(({ role, desc, color }) => (
+              <div key={role} className={`flex items-center gap-3 rounded-xl px-4 py-2.5 ${color}`}>
+                <span className="text-xs font-bold tracking-wider opacity-80">{role}</span>
+                <span className="text-xs opacity-70">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Footer */}
+        <p className="relative text-[11px] text-slate-600">
+          &copy; {new Date().getFullYear()} Turbo Lavado · Reynosa, Tamaulipas
+        </p>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex items-center justify-center bg-white p-8">
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-emerald-600 shadow-lg">
+              <img src="/logo.png" alt="Turbo Lavado" className="h-10 w-10 rounded-xl object-contain" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Iniciar sesion</h1>
+            <p className="mt-1 text-sm text-gray-500">Sistema de operacion diaria</p>
+          </div>
+          <form className="space-y-5" onSubmit={submit} data-testid="login-form">
             <TextField label="Usuario">
-              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" data-testid="login-username" />
             </TextField>
             <TextField label="Contrasena">
               <input
@@ -1056,17 +1125,19 @@ function LoginScreen() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="current-password"
+                data-testid="login-password"
               />
             </TextField>
             {error && <ErrorMessage message={error} />}
             <button
               disabled={loading}
-              className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+              data-testid="login-submit"
+              className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
             >
               {loading ? 'Entrando...' : 'Iniciar sesion'}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </main>
   )
@@ -1177,7 +1248,7 @@ function DayStatusCard() {
                 <button
                   onClick={() => openShiftMutation.mutate('MATUTINO')}
                   disabled={openShiftMutation.isPending}
-                  className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-sky-300"
+                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-violet-300"
                 >
                   {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Matutino'}
                 </button>
@@ -1186,7 +1257,7 @@ function DayStatusCard() {
                 <button
                   onClick={() => openShiftMutation.mutate('VESPERTINO')}
                   disabled={openShiftMutation.isPending}
-                  className="rounded-xl border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition-all hover:bg-sky-50 active:scale-[0.98]"
+                  className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition-all hover:bg-violet-50 active:scale-[0.98]"
                 >
                   {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Vespertino'}
                 </button>
@@ -1260,29 +1331,30 @@ function Dashboard() {
       <DayStatusCard />
 
       {monthHist.data && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <span className="font-semibold text-slate-800">Historico del mes:</span>
-          {' '}{monthHist.data.totalCars} carros
-          {' · '}${Number(monthHist.data.totalRevenue).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ingresos
-          {' · '}
-          <span className={monthHist.data.totalResultado >= 0 ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Este mes</span>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-100">
+            {monthHist.data.totalCars} carros
+          </span>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-100">
+            ${Number(monthHist.data.totalRevenue).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ingresos
+          </span>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ${monthHist.data.totalResultado >= 0 ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-red-50 text-red-700 ring-red-100'}`}>
             ${Number(monthHist.data.totalResultado).toLocaleString('es-MX', { maximumFractionDigits: 0 })} resultado
           </span>
-          {' '}
-          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-500">Excel</span>
         </div>
       )}
 
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
       <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="success" />
+        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="feature" sub={data ? `${data.carsWashed} carros lavados` : undefined} />
         <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} variant="danger" />
         <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} variant="info" />
         <Metric label="Carros lavados" value={String(data?.carsWashed ?? '...')} variant="info" />
         <Metric label="Cortesias" value={String(data?.courtesyCount ?? '...')} />
         <Metric label="Anulados" value={String(data?.voidedCount ?? '...')} />
-        <Metric label="Sobrante/Faltante" value={data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN')} />
+        <Metric label="Sobrante/Faltante" value={data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN')} variant={data?.cashVariance == null ? 'default' : data.cashVariance >= 0 ? 'success' : 'warn'} />
       </div>
 
       <Panel title="Tickets recientes">
@@ -1368,7 +1440,7 @@ function EndOfDayScreen() {
               <button
                 type="button"
                 onClick={() => navigate('/tickets/nuevo')}
-                className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]"
+                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]"
               >
                 Agregar ticket
               </button>
@@ -1432,31 +1504,62 @@ function EndOfDayScreen() {
   )
 }
 
-type MetricVariant = 'default' | 'success' | 'danger' | 'info'
+type MetricVariant = 'default' | 'success' | 'danger' | 'info' | 'feature' | 'warn'
 
-function Metric({ label, value, variant = 'default' }: { label: string; value: string; variant?: MetricVariant }) {
+function testidSlug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function Metric({ label, value, variant = 'default', sub }: { label: string; value: string; variant?: MetricVariant; sub?: string }) {
   const bg: Record<MetricVariant, string> = {
     default: 'bg-white border border-gray-100',
     success: 'bg-emerald-50 border border-emerald-100',
     danger:  'bg-red-50 border border-red-100',
     info:    'bg-sky-50 border border-sky-100',
+    feature: '',
+    warn:    'bg-amber-50 border border-amber-100',
   }
   const text: Record<MetricVariant, string> = {
     default: 'text-gray-900',
     success: 'text-emerald-700',
     danger:  'text-red-700',
     info:    'text-sky-700',
+    feature: 'text-white',
+    warn:    'text-amber-700',
   }
   const label_: Record<MetricVariant, string> = {
     default: 'text-gray-500',
     success: 'text-emerald-600',
     danger:  'text-red-500',
     info:    'text-sky-600',
+    feature: 'text-emerald-400',
+    warn:    'text-amber-600',
+  }
+  const slug = testidSlug(label)
+  if (variant === 'feature') {
+    return (
+      <div
+        className="rounded-2xl p-6 shadow-md"
+        style={{ background: 'linear-gradient(135deg, #1a0f2e 0%, #143924 100%)' }}
+        data-testid={`metric-${slug}`}
+      >
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+          <p className={`text-xs font-medium uppercase tracking-wide ${label_[variant]}`}>{label}</p>
+        </div>
+        <p className={`mt-2 text-3xl font-bold ${text[variant]}`} data-testid={`metric-${slug}-value`}>{value}</p>
+        {sub && <p className="mt-1 text-xs text-white/40">{sub}</p>}
+      </div>
+    )
   }
   return (
-    <div className={`rounded-2xl p-6 shadow-md ${bg[variant]}`}>
+    <div className={`rounded-2xl p-6 shadow-md ${bg[variant]}`} data-testid={`metric-${slug}`}>
       <p className={`text-xs font-medium uppercase tracking-wide ${label_[variant]}`}>{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${text[variant]}`}>{value}</p>
+      <p className={`mt-2 text-3xl font-bold ${text[variant]}`} data-testid={`metric-${slug}-value`}>{value}</p>
+      {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
     </div>
   )
 }
@@ -1497,7 +1600,7 @@ function AiScreen() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Dueno</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">Dueno</p>
           <h2 className="mt-1 text-2xl font-bold text-slate-950">AI Command Center</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario.
@@ -1695,7 +1798,7 @@ function TicketWorkspace({
         </div>
       )}
 
-      <form className="grid gap-5 xl:grid-cols-[1fr_360px]" onSubmit={form.handleSubmit((values) => save.mutate(values))}>
+      <form className="grid gap-5 xl:grid-cols-[1fr_360px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
         <div className="space-y-5">
           <Panel title="Datos del servicio">
             <div className="grid gap-4 md:grid-cols-2">
@@ -1752,7 +1855,7 @@ function TicketWorkspace({
                     type="checkbox"
                     value={employee.id}
                     {...form.register('employeeIds')}
-                    className="h-4 w-4 rounded border-gray-200 text-sky-600"
+                    className="h-4 w-4 rounded border-gray-200 text-violet-600"
                   />
                   <span>{employee.fullName}</span>
                 </label>
@@ -1780,7 +1883,7 @@ function TicketWorkspace({
 
           <Panel title="Cortesia">
             <label className="flex items-center gap-3 text-sm font-medium">
-              <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+              <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
               Marcar como cortesia
             </label>
             {watched.courtesy && (
@@ -1812,7 +1915,8 @@ function TicketWorkspace({
             <button
               type="submit"
               disabled={save.isPending || Boolean(disabledReason)}
-              className="mt-5 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+              data-testid="ticket-submit"
+              className="mt-5 w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
             >
               {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
             </button>
@@ -1976,7 +2080,7 @@ function CatalogsScreen() {
           <h2 className="text-2xl font-bold">Catalogos</h2>
           <p className="text-sm text-gray-500">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
         </div>
-        <NavLink to="/tickets/nuevo" className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]">
+        <NavLink to="/tickets/nuevo" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
           Ir a nuevo ticket
         </NavLink>
       </div>
@@ -2145,7 +2249,7 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openBusinessDay.isPending}
-                className="w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {openBusinessDay.isPending ? 'Abriendo...' : 'Abrir dia'}
               </button>
@@ -2168,7 +2272,7 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openShift.isPending || !data.currentBusinessDay}
-                className="w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {openShift.isPending ? 'Abriendo...' : 'Abrir turno'}
               </button>
@@ -2224,9 +2328,9 @@ function ExpenseLedgerScreen() {
           <p className="text-sm text-gray-500">Registro de gastos, retiros y prestamos a lavadores.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]" onClick={() => setModal('expense')}>Nuevo gasto</button>
-          <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
-          <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('advance')}>Nuevo prestamo</button>
+          <button data-testid="gastos-new-expense" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]" onClick={() => setModal('expense')}>Nuevo gasto</button>
+          <button data-testid="gastos-new-withdrawal" className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
+          <button data-testid="gastos-new-advance" className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('advance')}>Nuevo prestamo</button>
         </div>
       </div>
 
@@ -2403,7 +2507,7 @@ function ShiftCloseScreen() {
           <p className="text-sm text-gray-500">Conteo de efectivo, revision de salidas y cierre del turno.</p>
         </div>
         <SelectField label="Turno">
-          <select value={effectiveShiftId} onChange={(event) => {
+          <select data-testid="corte-shift-select" value={effectiveShiftId} onChange={(event) => {
             setSelectedShiftId(Number(event.target.value))
             setCashCount(null)
           }}>
@@ -2463,7 +2567,8 @@ function ShiftCloseScreen() {
               <button
                 type="submit"
                 disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
-                className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                data-testid="corte-save-count"
+                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
               </button>
@@ -2526,7 +2631,8 @@ function ShiftCloseScreen() {
               <button
                 type="submit"
                 disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
-                className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                data-testid="corte-close-shift"
+                className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? 'Turno cerrado' : 'Cerrar turno'}
               </button>
@@ -2549,6 +2655,38 @@ function ShiftCloseScreen() {
       </div>
     </section>
   )
+}
+
+function AuditActionPill({ action }: { action: string }) {
+  const cfg: Record<string, { bg: string; text: string; label: string }> = {
+    TICKET_VOID:        { bg: 'bg-red-50',     text: 'text-red-700',    label: 'Anulado' },
+    TICKET_COURTESY:    { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Cortesia' },
+    TICKET_CREATE:      { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket' },
+    TICKET_UPDATE:      { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket edit' },
+    SHIFT_OPEN:         { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Turno abierto' },
+    SHIFT_CLOSE:        { bg: 'bg-sky-50',     text: 'text-sky-700',    label: 'Turno cerrado' },
+    DAY_OPEN:           { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Dia abierto' },
+    DAY_CLOSE:          { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Dia cerrado' },
+    EXPENSE_CREATE:     { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Gasto' },
+    WITHDRAWAL_CREATE:  { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Retiro' },
+    ADVANCE_CREATE:     { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Prestamo' },
+    CASH_COUNT_SAVE:    { bg: 'bg-purple-50',  text: 'text-purple-700', label: 'Corte caja' },
+    INVENTORY_IN:       { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Entrada inv.' },
+    INVENTORY_OUT:      { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Salida inv.' },
+    INVENTORY_ADJ:      { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Ajuste inv.' },
+    PAYROLL_PERIOD:     { bg: 'bg-sky-50',     text: 'text-sky-700',    label: 'Nomina' },
+    PAYROLL_ADJUSTMENT: { bg: 'bg-sky-50',     text: 'text-sky-700',    label: 'Ajuste nomina' },
+  }
+  const style = cfg[action] ?? { bg: 'bg-gray-100', text: 'text-gray-600', label: action.replace(/_/g, ' ') }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${style.bg} ${style.text}`}>
+      {style.label}
+    </span>
+  )
+}
+
+function actorInitials(username: string): string {
+  return username.slice(0, 2).toUpperCase()
 }
 
 function AuditScreen() {
@@ -2619,10 +2757,17 @@ function AuditScreen() {
             <tbody className="divide-y divide-gray-100">
               {(events.data ?? []).map((event) => (
                 <tr key={event.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap">{formatDateTime(event.occurredAt)}</td>
-                  <td className="px-4 py-3">{event.actorUsername}</td>
-                  <td className="px-4 py-3 font-semibold">{event.action}</td>
-                  <td className="px-4 py-3">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-500">{formatDateTime(event.occurredAt)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">
+                        {actorInitials(event.actorUsername)}
+                      </span>
+                      <span className="text-sm">{event.actorUsername}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3"><AuditActionPill action={event.action} /></td>
+                  <td className="px-4 py-3 text-gray-500">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
                   <td className="px-4 py-3">{event.reason || '-'}</td>
                   <td className="px-4 py-3 text-gray-500">{event.details || '-'}</td>
                 </tr>
@@ -2716,10 +2861,10 @@ function ReportsScreen() {
       <Panel title="Rango">
         <div className="grid gap-3 md:grid-cols-[180px_180px_220px_auto]">
           <TextField label="Desde">
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} data-testid="reports-from" />
           </TextField>
           <TextField label="Hasta">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} data-testid="reports-to" />
           </TextField>
           <SelectField label="Tipo exportacion">
             <select value={exportType} onChange={(event) => setExportType(event.target.value)}>
@@ -2732,7 +2877,8 @@ function ReportsScreen() {
             <button
               type="button"
               onClick={downloadExport}
-              className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+              data-testid="reports-export"
+              className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
             >
               Descargar Excel
             </button>
@@ -2745,7 +2891,7 @@ function ReportsScreen() {
         <ErrorMessage message={(daily.error || monthly.error || cashVariance.error || performance.error || preview.error)!.message} />
       )}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6" data-testid="reports-range-metrics">
         <Metric label="Ingresos" value={range ? money(range.ticketRevenue, 'MXN') : '...'} />
         <Metric label="Salidas" value={range ? money(range.expensesTotal, 'MXN') : '...'} />
         <Metric label="Resultado" value={range ? money(range.result, 'MXN') : '...'} />
@@ -2821,7 +2967,7 @@ function ReportsScreen() {
           </Panel>
 
           <Panel title="Varianza de caja">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-3" data-testid="reports-cash-variance">
               <Metric label="Esperado" value={cashVariance.data ? money(cashVariance.data.expectedCash, 'MXN') : '...'} />
               <Metric label="Contado" value={cashVariance.data ? money(cashVariance.data.totalCounted, 'MXN') : '...'} />
               <Metric label="Diferencia" value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : '...'} />
@@ -2970,7 +3116,7 @@ function InventoryScreen() {
           <p className="text-sm text-gray-500">Productos y movimientos. El stock se calcula desde entradas y salidas.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]" onClick={() => setModal('product')}>Nuevo producto</button>
+          <button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]" onClick={() => setModal('product')}>Nuevo producto</button>
           <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('sale')}>Registrar venta</button>
           <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('purchase')}>Registrar compra</button>
           <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('adjustment')}>Ajuste</button>
@@ -3112,11 +3258,11 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
           <input type="number" min={0} step="0.01" {...form.register('currentUnitPrice')} />
         </TextField>
         <label className="flex items-center gap-3 text-sm font-medium">
-          <input type="checkbox" {...form.register('trackInventory')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+          <input type="checkbox" {...form.register('trackInventory')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
           Controlar inventario
         </label>
         <label className="flex items-center gap-3 text-sm font-medium">
-          <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+          <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
           Activo
         </label>
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
@@ -3160,7 +3306,7 @@ function InventorySaleModal({ products, onClose }: { products: Product[]; onClos
       submitLabel="Guardar venta"
     >
       <label className="flex items-center gap-3 text-sm font-medium">
-        <input type="checkbox" {...form.register('fiado')} className="h-4 w-4 rounded border-gray-200 text-sky-600" />
+        <input type="checkbox" {...form.register('fiado')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
         Venta fiada
       </label>
     </InventoryMovementModal>
@@ -3295,13 +3441,9 @@ function ProductSelect({ products, form }: { products: Product[]; form: UseFormR
 }
 
 function InventoryStatusPill({ lowStock, tracked }: { lowStock: boolean; tracked: boolean }) {
-  if (!tracked) {
-    return <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-500">Sin control</span>
-  }
-  if (lowStock) {
-    return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Stock bajo</span>
-  }
-  return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span>
+  if (!tracked) return <Pill tone="gray">Sin control</Pill>
+  if (lowStock) return <Pill tone="warn">Stock bajo</Pill>
+  return <Pill tone="good">OK</Pill>
 }
 
 function PayrollScreen() {
@@ -3451,11 +3593,11 @@ function PayrollScreen() {
           <h2 className="text-2xl font-bold">Nomina</h2>
           <p className="text-sm text-gray-500">Calculo semanal por sueldo, comision, bonos por carro y prestamos.</p>
         </div>
-        <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))}>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))} data-testid="payroll-period-form">
           <TextField label="Domingo" error={form.formState.errors.startDate?.message}>
-            <input type="date" {...form.register('startDate')} />
+            <input type="date" {...form.register('startDate')} data-testid="payroll-start-date" />
           </TextField>
-          <button className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]">
+          <button data-testid="payroll-create-period" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
             Crear periodo
           </button>
         </form>
@@ -3507,13 +3649,15 @@ function PayrollScreen() {
               <div className="flex gap-2">
                 <button
                   disabled={!selectedId || locked || compute.isPending}
-                  className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                  data-testid="payroll-compute"
+                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
                   onClick={() => compute.mutate()}
                 >
                   Recalcular
                 </button>
                 <button
                   disabled={!selectedId}
+                  data-testid="payroll-export"
                   className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:text-gray-400"
                   onClick={() => void downloadPayrollExport()}
                 >
@@ -3521,6 +3665,7 @@ function PayrollScreen() {
                 </button>
                 <button
                   disabled={!selectedId || selectedPeriod?.status !== 'COMPUTED' || lock.isPending}
+                  data-testid="payroll-lock"
                   className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:text-gray-400"
                   onClick={() => {
                     if (window.confirm('Bloquear nomina? Ya no se podra recalcular en v1.')) {
@@ -3635,7 +3780,8 @@ function PayrollScreen() {
               <button
                 type="submit"
                 disabled={!selectedId || locked || addAdjustment.isPending}
-                className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                data-testid="payroll-add-adjustment"
+                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
               >
                 Agregar
               </button>
@@ -3732,17 +3878,9 @@ function PayrollScreen() {
 }
 
 function PayrollStatusPill({ status }: { status: PayrollPeriodStatus }) {
-  const styles: Record<PayrollPeriodStatus, string> = {
-    OPEN: 'bg-gray-100 text-gray-700',
-    COMPUTED: 'bg-blue-50 text-blue-700',
-    LOCKED: 'bg-emerald-50 text-emerald-700',
-  }
-  const labels: Record<PayrollPeriodStatus, string> = {
-    OPEN: 'Abierto',
-    COMPUTED: 'Calculado',
-    LOCKED: 'Bloqueado',
-  }
-  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${styles[status]}`}>{labels[status]}</span>
+  const tone: Record<PayrollPeriodStatus, PillTone> = { OPEN: 'gray', COMPUTED: 'info', LOCKED: 'good' }
+  const label: Record<PayrollPeriodStatus, string> = { OPEN: 'Abierto', COMPUTED: 'Calculado', LOCKED: 'Bloqueado' }
+  return <Pill tone={tone[status]}>{label[status]}</Pill>
 }
 
 function previousSunday(dateString: string) {
@@ -3771,7 +3909,7 @@ function CashInput({
 }) {
   return (
     <TextField label={label}>
-      <input type="number" min={0} step={1} {...form.register(name)} />
+      <input type="number" min={0} step={1} {...form.register(name)} data-testid={`cash-input-${String(name)}`} />
     </TextField>
   )
 }
@@ -3820,7 +3958,7 @@ function TicketsBrowser() {
           <h2 className="text-2xl font-bold">Tickets</h2>
           <p className="text-sm text-gray-500">Busqueda y revision de tickets capturados.</p>
         </div>
-        <NavLink to="/tickets/nuevo" className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]">
+        <NavLink to="/tickets/nuevo" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
           Nuevo ticket
         </NavLink>
       </div>
@@ -4089,7 +4227,7 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+        className="w-full rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
       >
         {loading ? 'Guardando...' : label}
       </button>
@@ -4181,7 +4319,7 @@ function AiActionButton({
 }) {
   const toneClass = {
     slate: 'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400',
-    sky: 'bg-sky-600 text-white hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400',
+    sky: 'bg-violet-600 text-white hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400',
     emerald: 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400',
     amber: 'bg-amber-500 text-white hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400',
   }[tone]
@@ -4580,9 +4718,10 @@ function MoneyTable({
   rows: { id: number; date: string; concept: string; detail: string; amount: number }[]
   empty: string
 }) {
+  const slug = testidSlug(title)
   return (
     <Panel title={title}>
-      <div className="overflow-hidden rounded-xl border border-gray-100">
+      <div className="overflow-hidden rounded-xl border border-gray-100" data-testid={`money-table-${slug}`}>
         <table className="min-w-full divide-y divide-gray-100 text-sm">
           <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
             <tr>
@@ -4617,7 +4756,7 @@ function ModalActions({ onClose, submitLabel }: { onClose: () => void; submitLab
   return (
     <div className="flex justify-end gap-2">
       <button type="button" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={onClose}>Volver</button>
-      <button type="submit" className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-sky-700 active:scale-[0.98]">
+      <button type="submit" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
         {submitLabel}
       </button>
     </div>
@@ -4689,10 +4828,17 @@ function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail
   )
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: React.ReactNode; children: React.ReactNode }) {
+  const slug = testidSlug(title)
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-gray-100">
-      <h3 className="mb-5 border-b border-gray-100 pb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">{title}</h3>
+    <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-gray-100" data-testid={`panel-${slug}`}>
+      <div className={`mb-5 border-b border-gray-100 pb-3 ${actions ? 'flex items-center justify-between' : ''}`}>
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-400">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>}
+        </div>
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
+      </div>
       <div className="space-y-4">{children}</div>
     </section>
   )
@@ -4719,10 +4865,11 @@ function TextField({ label, error, children }: { label: string; error?: string; 
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
+  const slug = testidSlug(label)
   return (
-    <div className="flex items-center justify-between border-b border-gray-100 py-2">
+    <div className="flex items-center justify-between border-b border-gray-100 py-2" data-testid={`summary-${slug}`}>
       <span className="text-gray-400">{label}</span>
-      <strong>{value}</strong>
+      <strong data-testid={`summary-${slug}-value`}>{value}</strong>
     </div>
   )
 }
@@ -4797,22 +4944,47 @@ function formatAiDetailValue(value: unknown): string {
   return String(value ?? '')
 }
 
+type PillTone = 'good' | 'bad' | 'warn' | 'info' | 'gray' | 'purple'
+
+function Pill({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
+  const styles: Record<PillTone, string> = {
+    good:   'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60',
+    bad:    'bg-red-50 text-red-700 ring-1 ring-red-200/60',
+    warn:   'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
+    info:   'bg-sky-50 text-sky-700 ring-1 ring-sky-200/60',
+    gray:   'bg-gray-100 text-gray-600 ring-1 ring-gray-200/60',
+    purple: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200/60',
+  }
+  const dots: Record<PillTone, string> = {
+    good:   'bg-emerald-500',
+    bad:    'bg-red-500',
+    warn:   'bg-amber-500',
+    info:   'bg-sky-500',
+    gray:   'bg-gray-400',
+    purple: 'bg-purple-500',
+  }
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[tone]}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dots[tone]}`} />
+      {children}
+    </span>
+  )
+}
+
 function TicketStatusPill({ ticket }: { ticket: Ticket }) {
-  if (ticket.status === 'VOIDED') {
-    return <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">Cancelado</span>
-  }
-  if (ticket.courtesy) {
-    return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Cortesia</span>
-  }
-  return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Activo</span>
+  if (ticket.status === 'VOIDED') return <Pill tone="bad">Cancelado</Pill>
+  if (ticket.courtesy) return <Pill tone="warn">Cortesia</Pill>
+  return <Pill tone="good">Activo</Pill>
 }
 
 function Modal({ title, children, onClose, narrow = false }: { title: string; children: React.ReactNode; onClose: () => void; narrow?: boolean }) {
+  const slug = testidSlug(title)
+  const titleId = `modal-${slug}-title`
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid={`modal-${slug}`}>
       <div className={`rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-6xl'}`}>
         <div className="flex items-center justify-between rounded-t-2xl border-b border-gray-100 bg-slate-50 px-6 py-4">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <h3 id={titleId} className="text-base font-semibold text-gray-900">{title}</h3>
           <button className="rounded-lg px-3 py-1.5 text-sm text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" onClick={onClose}>Cerrar</button>
         </div>
         <div className="p-6">{children}</div>

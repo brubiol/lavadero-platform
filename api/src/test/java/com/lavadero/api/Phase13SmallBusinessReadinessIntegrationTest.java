@@ -50,6 +50,16 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
                 .andExpect(jsonPath("$.entries[?(@.employeeId == %d)].netPay".formatted(fixture.employeeId()))
                         .value(1035.00));
 
+        createPayrollAdjustment(periodId, fixture.employeeId(), "EARNING", "10.00", "extra", "Correccion antes de bloquear");
+        mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries[?(@.employeeId == %d)].manualEarnings".formatted(fixture.employeeId()))
+                        .value(110.00))
+                .andExpect(jsonPath("$.entries[?(@.employeeId == %d)].advancesDeducted".formatted(fixture.employeeId()))
+                        .value(50.00))
+                .andExpect(jsonPath("$.entries[?(@.employeeId == %d)].netPay".formatted(fixture.employeeId()))
+                        .value(1045.00));
+
         mvc.perform(post("/api/v1/payroll/periods/{id}/lock", periodId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("LOCKED"));
@@ -310,7 +320,7 @@ class Phase13SmallBusinessReadinessIntegrationTest extends AbstractIntegrationTe
 
     @Test
     void should_reject_unlock_when_payroll_period_is_not_locked() throws Exception {
-        LocalDate sunday = LocalDate.of(2031, 2, 8);
+        LocalDate sunday = LocalDate.of(2031, 2, 9);
         Fixture fixture = fixture("P13D", sunday.plusDays(1));
         setBaseSalary(fixture.employeeId(), "800.00");
         createTicket(fixture);

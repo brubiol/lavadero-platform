@@ -101,6 +101,9 @@ public class PayrollService {
         entries.deleteByPayrollPeriodId(period.getId());
         days.deleteByPayrollPeriodId(period.getId());
         debtLedger.deleteByPayrollPeriodIdAndType(period.getId(), DebtLedgerType.PAYROLL_DEDUCTION);
+        entries.flush();
+        days.flush();
+        debtLedger.flush();
 
         List<TicketAssignment> assignments = ticketAssignments.findActiveInDateRange(period.getStartDate(),
                 period.getEndDate());
