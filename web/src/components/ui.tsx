@@ -10,6 +10,24 @@ export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'gray' | 'purple'
 export type MetricTone = 'default' | 'good' | 'warn' | 'bad' | 'info' | 'feature'
 export type BannerTone = 'good' | 'warn' | 'bad' | 'info'
 
+/** Legacy alias kept so callers using the old `variant` names keep working. */
+export type MetricVariant = 'default' | 'success' | 'danger' | 'info' | 'feature' | 'warn'
+const METRIC_VARIANT_TO_TONE: Record<MetricVariant, MetricTone> = {
+  default: 'default',
+  success: 'good',
+  danger:  'bad',
+  info:    'info',
+  feature: 'feature',
+  warn:    'warn',
+}
+export function variantToTone(v?: MetricVariant): MetricTone {
+  return v ? METRIC_VARIANT_TO_TONE[v] : 'default'
+}
+
+function slugify(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
 // ─── Panel ──────────────────────────────────────────────────────────────
 export function Panel({
   title,
@@ -20,6 +38,7 @@ export function Panel({
   flush = false,
   className = '',
   style,
+  testId,
 }: {
   title?: ReactNode
   subtitle?: ReactNode
@@ -29,9 +48,11 @@ export function Panel({
   flush?: boolean
   className?: string
   style?: CSSProperties
+  testId?: string
 }) {
+  const slug = typeof title === 'string' ? slugify(title) : ''
   return (
-    <div className={`tl-panel ${className}`} style={style}>
+    <div className={`tl-panel ${className}`} style={style} data-testid={testId ?? (slug ? `panel-${slug}` : undefined)}>
       {(title || actions) && (
         <div className="tl-panel-head">
           <div>
@@ -52,7 +73,8 @@ export function Metric({
   label,
   value,
   sub,
-  tone = 'default',
+  tone,
+  variant,
   cur,
   delta,
   dir,
@@ -60,18 +82,26 @@ export function Metric({
   label: string
   value: ReactNode
   sub?: ReactNode
+  /** Modern API. Use one of: default / good / warn / bad / info / feature. */
   tone?: MetricTone
+  /** Legacy API alias — accepts old names like 'success' and 'danger'. */
+  variant?: MetricVariant
   cur?: string
   delta?: string
   dir?: 'up' | 'down'
 }) {
+  const resolvedTone = tone ?? variantToTone(variant)
+  const slug = slugify(label)
   return (
-    <div className={`tl-metric ${tone !== 'default' ? tone : ''}`}>
+    <div
+      className={`tl-metric ${resolvedTone !== 'default' ? resolvedTone : ''}`}
+      data-testid={`metric-${slug}`}
+    >
       <div className="label">
         <span className="dot" />
         {label}
       </div>
-      <div className="value">
+      <div className="value" data-testid={`metric-${slug}-value`}>
         {cur && <span className="cur">{cur}</span>}
         {value}
       </div>
@@ -250,12 +280,26 @@ export function Avatars({ names, max = 3 }: { names: string[]; max?: number }) {
 }
 
 // ─── SummaryRow ─────────────────────────────────────────────────────────
-export function SummaryRow({ k, v, vTone }: { k: ReactNode; v: ReactNode; vTone?: 'good' | 'warn' | 'bad' }) {
-  const color = vTone === 'good' ? 'var(--good-700)' : vTone === 'warn' ? 'var(--warn-700)' : vTone === 'bad' ? 'var(--bad-700)' : undefined
+/**
+ * Two-prop styles supported for ergonomics:
+ *   <SummaryRow k="Total" v="$1,200" />
+ *   <SummaryRow label="Total" value="$1,200" />   (legacy)
+ */
+export function SummaryRow(props: {
+  k?: ReactNode
+  v?: ReactNode
+  label?: ReactNode
+  value?: ReactNode
+  vTone?: 'good' | 'warn' | 'bad'
+}) {
+  const k = props.k ?? props.label
+  const v = props.v ?? props.value
+  const color = props.vTone === 'good' ? 'var(--good-700)' : props.vTone === 'warn' ? 'var(--warn-700)' : props.vTone === 'bad' ? 'var(--bad-700)' : undefined
+  const slug = typeof k === 'string' ? slugify(k) : ''
   return (
-    <div className="tl-srow">
+    <div className="tl-srow" data-testid={slug ? `summary-${slug}` : undefined}>
       <span className="k">{k}</span>
-      <span className="v" style={color ? { color } : undefined}>{v}</span>
+      <span className="v" style={color ? { color } : undefined} data-testid={slug ? `summary-${slug}-value` : undefined}>{v}</span>
     </div>
   )
 }

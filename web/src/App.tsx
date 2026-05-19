@@ -5,7 +5,23 @@ import { useForm, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Frame, MobileNav, MobileTopbar, Sidebar, Topbar, type NavRole } from './components/layout'
-import { EcoBadge } from './components/ui'
+import {
+  Avatars,
+  Banner,
+  Button,
+  EcoBadge,
+  Field,
+  Metric,
+  PageHead,
+  Panel,
+  Pill,
+  Plate,
+  Sparkline,
+  StatusPill,
+  SummaryRow,
+  type MetricVariant,
+  type Tone as PillTone,
+} from './components/ui'
 
 type Currency = 'MXN' | 'USD'
 type PaymentMethod = 'CASH' | 'CARD'
@@ -1338,64 +1354,11 @@ function EndOfDayScreen() {
   )
 }
 
-type MetricVariant = 'default' | 'success' | 'danger' | 'info' | 'feature' | 'warn'
-
 function testidSlug(label: string): string {
   return label
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-}
-
-function Metric({ label, value, variant = 'default', sub }: { label: string; value: string; variant?: MetricVariant; sub?: string }) {
-  const bg: Record<MetricVariant, string> = {
-    default: 'bg-white border border-gray-100',
-    success: 'bg-emerald-50 border border-emerald-100',
-    danger:  'bg-red-50 border border-red-100',
-    info:    'bg-violet-50 border border-violet-100',
-    feature: '',
-    warn:    'bg-amber-50 border border-amber-100',
-  }
-  const text: Record<MetricVariant, string> = {
-    default: 'text-gray-900',
-    success: 'text-emerald-700',
-    danger:  'text-red-700',
-    info:    'text-violet-700',
-    feature: 'text-white',
-    warn:    'text-amber-700',
-  }
-  const label_: Record<MetricVariant, string> = {
-    default: 'text-gray-500',
-    success: 'text-emerald-600',
-    danger:  'text-red-500',
-    info:    'text-violet-600',
-    feature: 'text-emerald-400',
-    warn:    'text-amber-600',
-  }
-  const slug = testidSlug(label)
-  if (variant === 'feature') {
-    return (
-      <div
-        className="rounded-2xl p-6 shadow-md"
-        style={{ background: 'linear-gradient(135deg, #1a0f2e 0%, #143924 100%)' }}
-        data-testid={`metric-${slug}`}
-      >
-        <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
-          <p className={`text-xs font-medium uppercase tracking-wide ${label_[variant]}`}>{label}</p>
-        </div>
-        <p className={`mt-2 text-3xl font-bold ${text[variant]}`} data-testid={`metric-${slug}-value`}>{value}</p>
-        {sub && <p className="mt-1 text-xs text-white/40">{sub}</p>}
-      </div>
-    )
-  }
-  return (
-    <div className={`rounded-2xl p-6 shadow-md ${bg[variant]}`} data-testid={`metric-${slug}`}>
-      <p className={`text-xs font-medium uppercase tracking-wide ${label_[variant]}`}>{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${text[variant]}`} data-testid={`metric-${slug}-value`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
-    </div>
-  )
 }
 
 function AiScreen() {
@@ -4662,22 +4625,6 @@ function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail
   )
 }
 
-function Panel({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: React.ReactNode; children: React.ReactNode }) {
-  const slug = testidSlug(title)
-  return (
-    <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-gray-100" data-testid={`panel-${slug}`}>
-      <div className={`mb-5 border-b border-gray-100 pb-3 ${actions ? 'flex items-center justify-between' : ''}`}>
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-400">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>}
-        </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </section>
-  )
-}
-
 function SelectField({ label, error, children }: { label: string; error?: string; children: React.ReactElement }) {
   return (
     <label className="block">
@@ -4695,16 +4642,6 @@ function TextField({ label, error, children }: { label: string; error?: string; 
       {children}
       {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
     </label>
-  )
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  const slug = testidSlug(label)
-  return (
-    <div className="flex items-center justify-between border-b border-gray-100 py-2" data-testid={`summary-${slug}`}>
-      <span className="text-gray-400">{label}</span>
-      <strong data-testid={`summary-${slug}-value`}>{value}</strong>
-    </div>
   )
 }
 
@@ -4776,33 +4713,6 @@ function formatAiDetailValue(value: unknown): string {
   if (Array.isArray(value)) return value.map(formatAiDetailValue).join(', ')
   if (value && typeof value === 'object') return JSON.stringify(value)
   return String(value ?? '')
-}
-
-type PillTone = 'good' | 'bad' | 'warn' | 'info' | 'gray' | 'purple'
-
-function Pill({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
-  const styles: Record<PillTone, string> = {
-    good:   'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60',
-    bad:    'bg-red-50 text-red-700 ring-1 ring-red-200/60',
-    warn:   'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
-    info:   'bg-violet-50 text-violet-700 ring-1 ring-violet-200/60',
-    gray:   'bg-gray-100 text-gray-600 ring-1 ring-gray-200/60',
-    purple: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200/60',
-  }
-  const dots: Record<PillTone, string> = {
-    good:   'bg-emerald-500',
-    bad:    'bg-red-500',
-    warn:   'bg-amber-500',
-    info:   'bg-violet-500',
-    gray:   'bg-gray-400',
-    purple: 'bg-purple-500',
-  }
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[tone]}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dots[tone]}`} />
-      {children}
-    </span>
-  )
 }
 
 function TicketStatusPill({ ticket }: { ticket: Ticket }) {
