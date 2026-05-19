@@ -901,92 +901,108 @@ function LoginScreen() {
   }
 
   return (
-    <main className="grid min-h-screen grid-cols-1 md:grid-cols-2">
-      {/* Left hero panel — hidden on mobile */}
-      <div
-        className="relative hidden flex-col justify-between overflow-hidden p-10 md:flex"
-        style={{ background: 'linear-gradient(180deg, #1a0f2e 0%, #3b1d5c 50%, #143924 100%)' }}
-      >
-        {/* Subtle grid mesh overlay */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-        />
+    <main className="tl-login-bg">
+      {/* ── Left hero panel ── */}
+      <div className="relative hidden flex-col justify-between p-10 lg:flex">
         {/* Brand mark */}
         <div className="relative flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-lg">
-            <img src="/logo.png" alt="Turbo Lavado" className="h-8 w-8 rounded-lg object-contain" />
+          <div className="tl-sb-logo" style={{ width: 40, height: 40 }}>
+            <img src="/logo.png" alt="Turbo Lavado" />
           </div>
           <div>
-            <p className="text-sm font-bold text-white">Turbo Lavado</p>
+            <p className="text-sm font-bold tracking-tight text-white">Turbo Lavado</p>
             <div className="mt-0.5 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <p className="text-[11px] text-emerald-400">Ecologico · Reynosa</p>
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-green-bright shadow-[0_0_6px_rgba(34,197,94,0.7)]" />
+              <p className="text-[11px] tracking-wide text-brand-green-soft">Ecológico · Reynosa</p>
             </div>
           </div>
         </div>
-        {/* Hero content */}
-        <div className="relative space-y-8">
+
+        {/* Hero */}
+        <div className="relative space-y-10 max-w-xl">
           <div>
-            <h2 className="text-4xl font-bold leading-tight text-white">
-              Cada coche cuenta.<br />Cada peso, tambien.
+            <div className="mb-4">
+              <EcoBadge>Operación 2026</EcoBadge>
+            </div>
+            <h2 className="text-white" style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.05 }}>
+              Cada coche cuenta.<br />Cada peso, también.
             </h2>
-            <p className="mt-4 text-base text-slate-400 leading-relaxed">
-              Operaciones del dia a dia en un solo lugar. Tickets, nomina, gastos e inventario — sin Excel, sin papel.
+            <p className="mt-4 text-[15px] leading-relaxed text-white/60">
+              Operaciones del día a día en un solo lugar. Tickets, nómina, gastos e inventario — sin Excel, sin papel.
             </p>
           </div>
-          {/* Role chips */}
-          <div className="space-y-2">
+
+          {/* Stat blocks */}
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { role: 'OPERADOR', desc: 'Crea tickets y registra pagos', color: 'bg-slate-700/60 text-slate-300' },
-              { role: 'GERENTE', desc: 'Nomina, inventario y catalogos', color: 'bg-violet-900/60 text-violet-300' },
-              { role: 'DUENO', desc: 'Reportes, AI y auditoria completa', color: 'bg-emerald-900/60 text-emerald-300' },
-            ].map(({ role, desc, color }) => (
-              <div key={role} className={`flex items-center gap-3 rounded-xl px-4 py-2.5 ${color}`}>
-                <span className="text-xs font-bold tracking-wider opacity-80">{role}</span>
-                <span className="text-xs opacity-70">{desc}</span>
+              { k: 'Hoy',       v: 'Domingo',     sub: 'cierre 8 pm' },
+              { k: 'Turno',     v: 'Vespertino',  sub: 'activo' },
+              { k: 'Lavadores', v: '16',          sub: 'en piso' },
+            ].map(s => (
+              <div key={s.k} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur">
+                <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/50">{s.k}</div>
+                <div className="mt-1 text-lg font-bold tracking-tight text-white">{s.v}</div>
+                <div className="mt-0.5 text-[11px] text-white/40">{s.sub}</div>
               </div>
             ))}
           </div>
         </div>
-        {/* Footer */}
-        <p className="relative text-[11px] text-slate-600">
+
+        <p className="relative text-[11px] text-white/35">
           &copy; {new Date().getFullYear()} Turbo Lavado · Reynosa, Tamaulipas
         </p>
       </div>
 
-      {/* Right form panel */}
-      <div className="flex items-center justify-center bg-white p-8">
-        <div className="w-full max-w-sm">
-          <div className="mb-8">
-            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-emerald-600 shadow-lg">
-              <img src="/logo.png" alt="Turbo Lavado" className="h-10 w-10 rounded-xl object-contain" />
+      {/* ── Right form panel ── */}
+      <div className="relative flex items-center justify-center p-6 lg:p-10">
+        <div className="w-full max-w-[380px] rounded-[18px] bg-white p-8 shadow-lg">
+          <div className="mb-7">
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 ring-1 ring-primary-100">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-primary-700">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Iniciar sesion</h1>
-            <p className="mt-1 text-sm text-gray-500">Sistema de operacion diaria</p>
+            <h1 className="text-xl font-bold tracking-tight text-ink-900">Iniciar sesión</h1>
+            <p className="mt-1 text-[13px] text-ink-500">Sistema de operación diaria</p>
           </div>
-          <form className="space-y-5" onSubmit={submit} data-testid="login-form">
-            <TextField label="Usuario">
-              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" data-testid="login-username" />
-            </TextField>
-            <TextField label="Contrasena">
+
+          <form className="space-y-4" onSubmit={submit} data-testid="login-form">
+            <Field label="Usuario">
+              <input
+                className="tl-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                data-testid="login-username"
+              />
+            </Field>
+            <Field label="Contraseña">
               <input
                 type="password"
+                className="tl-input"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 data-testid="login-password"
               />
-            </TextField>
+            </Field>
             {error && <ErrorMessage message={error} />}
-            <button
-              disabled={loading}
-              data-testid="login-submit"
-              className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
-            >
-              {loading ? 'Entrando...' : 'Iniciar sesion'}
-            </button>
+            <Button kind="primary" size="lg" type="submit" block disabled={loading} testId="login-submit">
+              {loading ? 'Entrando…' : 'Iniciar sesión'}
+            </Button>
           </form>
+
+          <div className="my-6 flex items-center gap-3 text-[11px] text-ink-400">
+            <div className="h-px flex-1 bg-border-soft" />
+            <span>roles disponibles</span>
+            <div className="h-px flex-1 bg-border-soft" />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="gray">OPERADOR</Pill>
+            <Pill tone="purple">GERENTE</Pill>
+            <Pill tone="good">DUEÑO</Pill>
+          </div>
         </div>
       </div>
     </main>
