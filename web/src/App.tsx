@@ -1209,34 +1209,34 @@ function Dashboard() {
 
       <Panel title="Tickets recientes">
         <div className="overflow-hidden rounded-xl border border-gray-100">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <table className="tl-tbl zebra">
+            <thead className="">
               <tr>
-                <th className="px-4 py-3">Nota</th>
-                <th className="px-4 py-3">Vehiculo</th>
-                <th className="px-4 py-3">Servicio</th>
-                <th className="px-4 py-3">Lavadores</th>
-                <th className="px-4 py-3 text-right">Importe</th>
-                <th className="px-4 py-3">Pago</th>
-                <th className="px-4 py-3">Estado</th>
+                <th>Nota</th>
+                <th>Vehiculo</th>
+                <th>Servicio</th>
+                <th>Lavadores</th>
+                <th className="r">Importe</th>
+                <th>Pago</th>
+                <th>Estado</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="">
               {(data?.recentTickets ?? []).map((ticket) => (
-                <tr key={ticket.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-semibold">{ticket.notaNumber}</td>
-                  <td className="px-4 py-3">{ticket.vehicleDescription || '-'}</td>
-                  <td className="px-4 py-3">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
-                  <td className="px-4 py-3">{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
-                  <td className="px-4 py-3 text-right">{money(ticket.priceAmount, ticket.currency)}</td>
-                  <td className="px-4 py-3">
+                <tr key={ticket.id}>
+                  <td className="font-semibold">{ticket.notaNumber}</td>
+                  <td>{ticket.vehicleDescription || '-'}</td>
+                  <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
+                  <td>{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
+                  <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
+                  <td>
                     {!ticket.courtesy && (
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                         {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'}
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     <TicketStatusPill ticket={ticket} />
                   </td>
                 </tr>
@@ -2008,22 +2008,22 @@ function CatalogsScreen() {
             </form>
             {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
             <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <table className="tl-tbl zebra">
+                <thead className="">
                   <tr>
-                    <th className="px-4 py-3">Servicio</th>
-                    <th className="px-4 py-3">Tamano</th>
-                    <th className="px-4 py-3 text-right">Precio</th>
-                    <th className="px-4 py-3">Desde</th>
+                    <th>Servicio</th>
+                    <th>Tamano</th>
+                    <th className="r">Precio</th>
+                    <th>Desde</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="">
                   {prices.map((price) => (
                     <tr key={price.id}>
-                      <td className="px-4 py-3">{price.serviceTypeName}</td>
-                      <td className="px-4 py-3">{price.vehicleSizeName}</td>
-                      <td className="px-4 py-3 text-right">{money(price.amount, price.currency)}</td>
-                      <td className="px-4 py-3">{price.effectiveFrom}</td>
+                      <td>{price.serviceTypeName}</td>
+                      <td>{price.vehicleSizeName}</td>
+                      <td className="r">{money(price.amount, price.currency)}</td>
+                      <td>{price.effectiveFrom}</td>
                     </tr>
                   ))}
                   {prices.length === 0 && (
@@ -2540,22 +2540,22 @@ function AuditScreen() {
       <Panel title="Eventos recientes">
         {events.error && <ErrorMessage message={events.error.message} />}
         <div className="overflow-hidden rounded-xl border border-gray-100">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <table className="tl-tbl zebra">
+            <thead className="">
               <tr>
-                <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Usuario</th>
-                <th className="px-4 py-3">Accion</th>
-                <th className="px-4 py-3">Entidad</th>
-                <th className="px-4 py-3">Motivo</th>
-                <th className="px-4 py-3">Detalle</th>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Accion</th>
+                <th>Entidad</th>
+                <th>Motivo</th>
+                <th>Detalle</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="">
               {(events.data ?? []).map((event) => (
-                <tr key={event.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-500">{formatDateTime(event.occurredAt)}</td>
-                  <td className="px-4 py-3">
+                <tr key={event.id}>
+                  <td className="whitespace-nowrap text-gray-500">{formatDateTime(event.occurredAt)}</td>
+                  <td>
                     <div className="flex items-center gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">
                         {actorInitials(event.actorUsername)}
@@ -2563,10 +2563,10 @@ function AuditScreen() {
                       <span className="text-sm">{event.actorUsername}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3"><AuditActionPill action={event.action} /></td>
-                  <td className="px-4 py-3 text-gray-500">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
-                  <td className="px-4 py-3">{event.reason || '-'}</td>
-                  <td className="px-4 py-3 text-gray-500">{event.details || '-'}</td>
+                  <td><AuditActionPill action={event.action} /></td>
+                  <td className="text-gray-500">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
+                  <td>{event.reason || '-'}</td>
+                  <td className="text-gray-500">{event.details || '-'}</td>
                 </tr>
               ))}
               {!events.isLoading && (events.data ?? []).length === 0 && (
@@ -2701,26 +2701,26 @@ function ReportsScreen() {
         <div className="space-y-5">
           <Panel title="Resumen por dia">
             <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <table className="tl-tbl zebra">
+                <thead className="">
                   <tr>
-                    <th className="px-4 py-3">Fecha</th>
-                    <th className="px-4 py-3 text-right">Carros</th>
-                    <th className="px-4 py-3 text-right">Ingresos</th>
-                    <th className="px-4 py-3 text-right">Gastos</th>
-                    <th className="px-4 py-3 text-right">Resultado</th>
-                    <th className="px-4 py-3 text-right">Varianza</th>
+                    <th>Fecha</th>
+                    <th className="r">Carros</th>
+                    <th className="r">Ingresos</th>
+                    <th className="r">Gastos</th>
+                    <th className="r">Resultado</th>
+                    <th className="r">Varianza</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="">
                   {(range?.days ?? []).map((day) => (
-                    <tr key={day.date} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold">{day.date}</td>
-                      <td className="px-4 py-3 text-right">{day.carsWashed}</td>
-                      <td className="px-4 py-3 text-right">{money(day.ticketRevenue, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(day.expensesTotal, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(day.result, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{day.cashVariance == null ? '-' : money(day.cashVariance, 'MXN')}</td>
+                    <tr key={day.date}>
+                      <td className="font-semibold">{day.date}</td>
+                      <td className="r">{day.carsWashed}</td>
+                      <td className="r">{money(day.ticketRevenue, 'MXN')}</td>
+                      <td className="r">{money(day.expensesTotal, 'MXN')}</td>
+                      <td className="r">{money(day.result, 'MXN')}</td>
+                      <td className="r">{day.cashVariance == null ? '-' : money(day.cashVariance, 'MXN')}</td>
                     </tr>
                   ))}
                   {!daily.isLoading && (range?.days.length ?? 0) === 0 && (
@@ -2735,22 +2735,22 @@ function ReportsScreen() {
 
           <Panel title="Rendimiento de lavadores">
             <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <table className="tl-tbl zebra">
+                <thead className="">
                   <tr>
-                    <th className="px-4 py-3">Lavador</th>
-                    <th className="px-4 py-3 text-right">Tickets</th>
-                    <th className="px-4 py-3 text-right">Carros acreditados</th>
-                    <th className="px-4 py-3 text-right">Ingreso referencia</th>
+                    <th>Lavador</th>
+                    <th className="r">Tickets</th>
+                    <th className="r">Carros acreditados</th>
+                    <th className="r">Ingreso referencia</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="">
                   {(performance.data?.employees ?? []).map((employee) => (
-                    <tr key={employee.employeeId} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold">{employee.employeeName}</td>
-                      <td className="px-4 py-3 text-right">{employee.ticketCount}</td>
-                      <td className="px-4 py-3 text-right">{employee.carsWashed.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right">{money(employee.ticketRevenue, 'MXN')}</td>
+                    <tr key={employee.employeeId}>
+                      <td className="font-semibold">{employee.employeeName}</td>
+                      <td className="r">{employee.ticketCount}</td>
+                      <td className="r">{employee.carsWashed.toFixed(2)}</td>
+                      <td className="r">{money(employee.ticketRevenue, 'MXN')}</td>
                     </tr>
                   ))}
                   {!performance.isLoading && (performance.data?.employees.length ?? 0) === 0 && (
@@ -2770,24 +2770,24 @@ function ReportsScreen() {
               <Metric label="Diferencia" value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : '...'} />
             </div>
             <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <table className="tl-tbl zebra">
+                <thead className="">
                   <tr>
-                    <th className="px-4 py-3">Fecha</th>
-                    <th className="px-4 py-3">Turno</th>
-                    <th className="px-4 py-3 text-right">Esperado</th>
-                    <th className="px-4 py-3 text-right">Contado</th>
-                    <th className="px-4 py-3 text-right">Diferencia</th>
+                    <th>Fecha</th>
+                    <th>Turno</th>
+                    <th className="r">Esperado</th>
+                    <th className="r">Contado</th>
+                    <th className="r">Diferencia</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="">
                   {(cashVariance.data?.rows ?? []).map((row) => (
                     <tr key={`${row.shiftId}-${row.date}`}>
-                      <td className="px-4 py-3">{row.date}</td>
-                      <td className="px-4 py-3">{row.shiftType}</td>
-                      <td className="px-4 py-3 text-right">{money(row.expectedCash, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(row.totalCounted, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(row.variance, 'MXN')}</td>
+                      <td>{row.date}</td>
+                      <td>{row.shiftType}</td>
+                      <td className="r">{money(row.expectedCash, 'MXN')}</td>
+                      <td className="r">{money(row.totalCounted, 'MXN')}</td>
+                      <td className="r">{money(row.variance, 'MXN')}</td>
                     </tr>
                   ))}
                   {!cashVariance.isLoading && (cashVariance.data?.rows.length ?? 0) === 0 && (
@@ -2847,26 +2847,26 @@ function ReportsScreen() {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <table className="tl-tbl zebra">
+              <thead className="">
                 <tr>
-                  <th className="px-4 py-3">Mes</th>
-                  <th className="px-4 py-3 text-right">Carros</th>
-                  <th className="px-4 py-3 text-right">Ingresos</th>
-                  <th className="px-4 py-3 text-right">Gastos</th>
-                  <th className="px-4 py-3 text-right">Resultado</th>
-                  <th className="px-4 py-3">Fuente</th>
+                  <th>Mes</th>
+                  <th className="r">Carros</th>
+                  <th className="r">Ingresos</th>
+                  <th className="r">Gastos</th>
+                  <th className="r">Resultado</th>
+                  <th>Fuente</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="">
                 {groupByMonth(historical.data?.days ?? []).map((row) => (
-                  <tr key={row.month} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{row.month}</td>
-                    <td className="px-4 py-3 text-right">{row.cars}</td>
-                    <td className="px-4 py-3 text-right">{money(row.revenue, 'MXN')}</td>
-                    <td className="px-4 py-3 text-right">{money(row.expenses, 'MXN')}</td>
+                  <tr key={row.month}>
+                    <td className="font-medium">{row.month}</td>
+                    <td className="r">{row.cars}</td>
+                    <td className="r">{money(row.revenue, 'MXN')}</td>
+                    <td className="r">{money(row.expenses, 'MXN')}</td>
                     <td className={`px-4 py-3 text-right font-medium ${row.resultado >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{money(row.resultado, 'MXN')}</td>
-                    <td className="px-4 py-3">
+                    <td>
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                         {Array.from(row.sources).join(', ')}
                       </span>
@@ -2941,35 +2941,35 @@ function InventoryScreen() {
 
       <Panel title="Productos">
         <div className="overflow-hidden rounded-xl border border-gray-100">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <table className="tl-tbl zebra">
+            <thead className="">
               <tr>
-                <th className="px-4 py-3">Producto</th>
-                <th className="px-4 py-3">SKU</th>
-                <th className="px-4 py-3 text-right">Stock</th>
-                <th className="px-4 py-3 text-right">Precio</th>
-                <th className="px-4 py-3">Ultimo movimiento</th>
-                <th className="px-4 py-3">Indicador</th>
-                <th className="px-4 py-3 text-right">Acciones</th>
+                <th>Producto</th>
+                <th>SKU</th>
+                <th className="r">Stock</th>
+                <th className="r">Precio</th>
+                <th>Ultimo movimiento</th>
+                <th>Indicador</th>
+                <th className="r">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="">
               {rows.map((row) => {
                 const latest = row.recentMovements[0]
                 const lowStock = row.product.trackInventory && row.quantityOnHand <= 5
                 return (
-                  <tr key={row.product.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold">{row.product.name}</td>
-                    <td className="px-4 py-3">{row.product.sku || '-'}</td>
-                    <td className="px-4 py-3 text-right">{row.quantityOnHand.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right">{money(row.product.currentUnitPrice, 'MXN')}</td>
-                    <td className="px-4 py-3">
+                  <tr key={row.product.id}>
+                    <td className="font-semibold">{row.product.name}</td>
+                    <td>{row.product.sku || '-'}</td>
+                    <td className="r">{row.quantityOnHand.toFixed(2)}</td>
+                    <td className="r">{money(row.product.currentUnitPrice, 'MXN')}</td>
+                    <td>
                       {latest ? `${movementLabel(latest.movementType)} / ${latest.quantity}` : 'Sin movimientos'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <InventoryStatusPill lowStock={lowStock} tracked={row.product.trackInventory} />
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="r">
                       <button
                         className="text-sm font-semibold text-blue-700 hover:text-blue-900"
                         onClick={() => {
@@ -3501,36 +3501,36 @@ function PayrollScreen() {
 
           <Panel title="Grid semanal">
             <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <table className="tl-tbl zebra">
+                <thead className="">
                   <tr>
-                    <th className="px-4 py-3">Lavador</th>
-                    <th className="px-4 py-3 text-right">Carros</th>
-                    <th className="px-4 py-3 text-right">Base</th>
-                    <th className="px-4 py-3 text-right">Bono carros</th>
-                    <th className="px-4 py-3 text-right">Comision</th>
-                    <th className="px-4 py-3 text-right">Extras</th>
-                    <th className="px-4 py-3 text-right">Deducciones</th>
-                    <th className="px-4 py-3 text-right">Prestamos</th>
-                    <th className="px-4 py-3 text-right">Neto</th>
+                    <th>Lavador</th>
+                    <th className="r">Carros</th>
+                    <th className="r">Base</th>
+                    <th className="r">Bono carros</th>
+                    <th className="r">Comision</th>
+                    <th className="r">Extras</th>
+                    <th className="r">Deducciones</th>
+                    <th className="r">Prestamos</th>
+                    <th className="r">Neto</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="">
                   {(selectedPeriod?.entries ?? []).map((entry) => (
                     <tr
                       key={entry.id}
                       className="cursor-pointer hover:bg-gray-50"
                       onClick={() => setSelectedEmployeeId(entry.employeeId)}
                     >
-                      <td className="px-4 py-3 font-semibold">{entry.employeeName}</td>
-                      <td className="px-4 py-3 text-right">{entry.carsWashed.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right">{money(entry.baseSalary, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(entry.carsBonus, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(entry.commissions, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(entry.manualEarnings, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(entry.manualDeductions, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right">{money(entry.advancesDeducted, 'MXN')}</td>
-                      <td className="px-4 py-3 text-right font-semibold">{money(entry.netPay, 'MXN')}</td>
+                      <td className="font-semibold">{entry.employeeName}</td>
+                      <td className="r">{entry.carsWashed.toFixed(2)}</td>
+                      <td className="r">{money(entry.baseSalary, 'MXN')}</td>
+                      <td className="r">{money(entry.carsBonus, 'MXN')}</td>
+                      <td className="r">{money(entry.commissions, 'MXN')}</td>
+                      <td className="r">{money(entry.manualEarnings, 'MXN')}</td>
+                      <td className="r">{money(entry.manualDeductions, 'MXN')}</td>
+                      <td className="r">{money(entry.advancesDeducted, 'MXN')}</td>
+                      <td className="r font-semibold">{money(entry.netPay, 'MXN')}</td>
                     </tr>
                   ))}
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
@@ -3585,26 +3585,26 @@ function PayrollScreen() {
             </form>
             {(addAdjustment.error || deleteAdjustment.error) && <ErrorMessage message={(addAdjustment.error || deleteAdjustment.error)!.message} />}
             <div className="overflow-hidden rounded-xl border border-gray-100">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <table className="tl-tbl zebra">
+                <thead className="">
                   <tr>
-                    <th className="px-4 py-3">Lavador</th>
-                    <th className="px-4 py-3">Concepto</th>
-                    <th className="px-4 py-3">Nota</th>
-                    <th className="px-4 py-3 text-right">Extra</th>
-                    <th className="px-4 py-3 text-right">Deduccion</th>
-                    <th className="px-4 py-3 text-right">Accion</th>
+                    <th>Lavador</th>
+                    <th>Concepto</th>
+                    <th>Nota</th>
+                    <th className="r">Extra</th>
+                    <th className="r">Deduccion</th>
+                    <th className="r">Accion</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="">
                   {(selectedPeriod?.adjustments ?? []).map((adjustment) => (
                     <tr key={adjustment.id}>
-                      <td className="px-4 py-3 font-semibold">{adjustment.employeeName}</td>
-                      <td className="px-4 py-3">{adjustment.concept}</td>
-                      <td className="px-4 py-3 text-gray-500">{adjustment.note || '-'}</td>
-                      <td className="px-4 py-3 text-right">{adjustment.type === 'EARNING' ? money(adjustment.amount, 'MXN') : '-'}</td>
-                      <td className="px-4 py-3 text-right">{adjustment.type === 'DEDUCTION' ? money(adjustment.amount, 'MXN') : '-'}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="font-semibold">{adjustment.employeeName}</td>
+                      <td>{adjustment.concept}</td>
+                      <td className="text-gray-500">{adjustment.note || '-'}</td>
+                      <td className="r">{adjustment.type === 'EARNING' ? money(adjustment.amount, 'MXN') : '-'}</td>
+                      <td className="r">{adjustment.type === 'DEDUCTION' ? money(adjustment.amount, 'MXN') : '-'}</td>
+                      <td className="r">
                         <button
                           type="button"
                           disabled={locked || deleteAdjustment.isPending}
@@ -3644,20 +3644,20 @@ function PayrollScreen() {
                   <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
                 </div>
                 <div className="overflow-hidden rounded-xl border border-gray-100">
-                  <table className="min-w-full divide-y divide-gray-100 text-sm">
-                    <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <table className="tl-tbl zebra">
+                    <thead className="">
                       <tr>
-                        <th className="px-4 py-3">Dia</th>
-                        <th className="px-4 py-3 text-right">Carros</th>
-                        <th className="px-4 py-3 text-right">Revenue ref.</th>
+                        <th>Dia</th>
+                        <th className="r">Carros</th>
+                        <th className="r">Revenue ref.</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="">
                       {(selectedPeriod?.days ?? []).filter((day) => day.employeeId === selectedEntry.employeeId).map((day) => (
                         <tr key={day.id}>
-                          <td className="px-4 py-3">{day.workDate}</td>
-                          <td className="px-4 py-3 text-right">{day.carsWashed.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-right">{money(day.ticketRevenue, 'MXN')}</td>
+                          <td>{day.workDate}</td>
+                          <td className="r">{day.carsWashed.toFixed(2)}</td>
+                          <td className="r">{money(day.ticketRevenue, 'MXN')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -3776,38 +3776,38 @@ function TicketsBrowser() {
       </Panel>
 
       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-        <table className="min-w-full divide-y divide-gray-100 text-sm">
-          <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <table className="tl-tbl zebra">
+          <thead className="">
             <tr>
-              <th className="px-4 py-3">Nota</th>
-              <th className="px-4 py-3">Vehiculo</th>
-              <th className="px-4 py-3">Servicio</th>
-              <th className="px-4 py-3">Lavadores</th>
-              <th className="px-4 py-3 text-right">Importe</th>
-              <th className="px-4 py-3">Pago</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3 text-right">Acciones</th>
+              <th>Nota</th>
+              <th>Vehiculo</th>
+              <th>Servicio</th>
+              <th>Lavadores</th>
+              <th className="r">Importe</th>
+              <th>Pago</th>
+              <th>Estado</th>
+              <th className="r">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="">
             {filtered.map((ticket) => (
-              <tr key={ticket.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-semibold">{ticket.notaNumber}</td>
-                <td className="px-4 py-3">{ticket.vehicleDescription || '-'}</td>
-                <td className="px-4 py-3">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
-                <td className="px-4 py-3">{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
-                <td className="px-4 py-3 text-right">{money(ticket.priceAmount, ticket.currency)}</td>
-                <td className="px-4 py-3">
+              <tr key={ticket.id}>
+                <td className="font-semibold">{ticket.notaNumber}</td>
+                <td>{ticket.vehicleDescription || '-'}</td>
+                <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
+                <td>{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
+                <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
+                <td>
                   {!ticket.courtesy && (
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                       {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'}
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td>
                   <TicketStatusPill ticket={ticket} />
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="r">
                   <button className="text-sm font-semibold text-blue-700 hover:text-blue-900" onClick={() => setSelected(ticket)}>Ver</button>
                   {ticket.status === 'ACTIVE' && (
                     <button className="ml-3 text-sm font-semibold text-red-700 hover:text-red-900" onClick={() => setVoiding(ticket)}>Cancelar</button>
@@ -4519,22 +4519,22 @@ function MoneyTable({
   return (
     <Panel title={title}>
       <div className="overflow-hidden rounded-xl border border-gray-100" data-testid={`money-table-${slug}`}>
-        <table className="min-w-full divide-y divide-gray-100 text-sm">
-          <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <table className="tl-tbl zebra">
+          <thead className="">
             <tr>
-              <th className="px-4 py-3">Fecha</th>
-              <th className="px-4 py-3">Concepto</th>
-              <th className="px-4 py-3">Detalle</th>
-              <th className="px-4 py-3 text-right">Monto</th>
+              <th>Fecha</th>
+              <th>Concepto</th>
+              <th>Detalle</th>
+              <th className="r">Monto</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="">
             {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">{row.date}</td>
-                <td className="px-4 py-3 font-semibold">{row.concept}</td>
-                <td className="px-4 py-3">{row.detail}</td>
-                <td className="px-4 py-3 text-right">{money(row.amount, 'MXN')}</td>
+              <tr key={row.id}>
+                <td>{row.date}</td>
+                <td className="font-semibold">{row.concept}</td>
+                <td>{row.detail}</td>
+                <td className="r">{money(row.amount, 'MXN')}</td>
               </tr>
             ))}
             {rows.length === 0 && (
