@@ -60,6 +60,7 @@ jobs:
         run: cd web && npm run test:e2e
         env:
           CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
 
       - name: Upload Playwright report
         if: failure()
