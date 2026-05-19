@@ -56,7 +56,7 @@ export function Panel({
       {(title || actions) && (
         <div className="tl-panel-head">
           <div>
-            {title && <h2>{title}</h2>}
+            {title && <h3>{title}</h3>}
             {subtitle && <p>{subtitle}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}

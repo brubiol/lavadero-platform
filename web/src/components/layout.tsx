@@ -108,7 +108,8 @@ export function Sidebar({
         <button
           type="button"
           onClick={onLogout}
-          title="Cerrar sesión"
+          title="Cerrar sesion"
+          aria-label="Cerrar sesion"
           className="tl-icon-btn"
           style={{ color: 'rgba(255,255,255,0.55)' }}
         >
