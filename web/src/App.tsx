@@ -1023,7 +1023,7 @@ function RequireRole({ role, children }: { role: AuthRole; children: ReactNode }
   if (!hasRole(role)) {
     return (
       <Panel title="Sin permiso">
-        <p className="text-sm text-gray-500">Tu usuario no tiene permiso para esta pantalla.</p>
+        <p className="text-[13.5px] text-ink-500 mt-0.5">Tu usuario no tiene permiso para esta pantalla.</p>
       </Panel>
     )
   }
@@ -1114,7 +1114,7 @@ function DayStatusCard() {
                 <button
                   onClick={() => openShiftMutation.mutate('MATUTINO')}
                   disabled={openShiftMutation.isPending}
-                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-violet-300"
+                  className="tl-btn tl-btn-primary disabled:bg-violet-300"
                 >
                   {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Matutino'}
                 </button>
@@ -1185,8 +1185,8 @@ function Dashboard() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Dashboard</h2>
-          <p className="text-sm text-gray-500">Resumen del dia — ventas, carros, estado del turno.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Dashboard</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Resumen del dia — ventas, carros, estado del turno.</p>
         </div>
         <label className="w-full max-w-48">
           <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
@@ -1287,8 +1287,8 @@ function EndOfDayScreen() {
   return (
     <section className="space-y-5">
       <div>
-        <h2 className="text-2xl font-bold">Cierre del dia</h2>
-        <p className="text-sm text-gray-500">Ruta rapida para terminar el dia sin brincar entre pantallas.</p>
+        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Cierre del dia</h2>
+        <p className="text-[13.5px] text-ink-500 mt-0.5">Ruta rapida para terminar el dia sin brincar entre pantallas.</p>
       </div>
 
       <DayStatusCard />
@@ -1306,14 +1306,14 @@ function EndOfDayScreen() {
               <button
                 type="button"
                 onClick={() => navigate('/tickets/nuevo')}
-                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]"
+                className="tl-btn tl-btn-primary"
               >
                 Agregar ticket
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/gastos')}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                className="tl-btn tl-btn-secondary"
               >
                 Revisar salidas
               </button>
@@ -1596,8 +1596,8 @@ function TicketWorkspace({
       {toast && <Toast message={toast} />}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">{mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}</h2>
-          <p className="text-sm text-gray-500">Captura rapida para operacion de mostrador.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">{mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Captura rapida para operacion de mostrador.</p>
         </div>
         <div className="rounded-lg border border-gray-100 bg-white px-4 py-2 text-sm">
           <span className="text-gray-400">Dia: </span>
@@ -1890,10 +1890,10 @@ function CatalogsScreen() {
       {toast && <Toast message={toast} />}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Catalogos</h2>
-          <p className="text-sm text-gray-500">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Catalogos</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
         </div>
-        <NavLink to="/tickets/nuevo" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
+        <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary">
           Ir a nuevo ticket
         </NavLink>
       </div>
@@ -2062,7 +2062,7 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openBusinessDay.isPending}
-                className="w-full rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {openBusinessDay.isPending ? 'Abriendo...' : 'Abrir dia'}
               </button>
@@ -2085,7 +2085,7 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openShift.isPending || !data.currentBusinessDay}
-                className="w-full rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {openShift.isPending ? 'Abriendo...' : 'Abrir turno'}
               </button>
@@ -2137,13 +2137,13 @@ function ExpenseLedgerScreen() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Gastos</h2>
-          <p className="text-sm text-gray-500">Registro de gastos, retiros y prestamos a lavadores.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Gastos</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Registro de gastos, retiros y prestamos a lavadores.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button data-testid="gastos-new-expense" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]" onClick={() => setModal('expense')}>Nuevo gasto</button>
-          <button data-testid="gastos-new-withdrawal" className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
-          <button data-testid="gastos-new-advance" className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('advance')}>Nuevo prestamo</button>
+          <button data-testid="gastos-new-expense" className="tl-btn tl-btn-primary" onClick={() => setModal('expense')}>Nuevo gasto</button>
+          <button data-testid="gastos-new-withdrawal" className="tl-btn tl-btn-secondary" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
+          <button data-testid="gastos-new-advance" className="tl-btn tl-btn-secondary" onClick={() => setModal('advance')}>Nuevo prestamo</button>
         </div>
       </div>
 
@@ -2316,8 +2316,8 @@ function ShiftCloseScreen() {
       {toast && <Toast message={toast} />}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Corte de turno</h2>
-          <p className="text-sm text-gray-500">Conteo de efectivo, revision de salidas y cierre del turno.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Corte de turno</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Conteo de efectivo, revision de salidas y cierre del turno.</p>
         </div>
         <SelectField label="Turno">
           <select data-testid="corte-shift-select" value={effectiveShiftId} onChange={(event) => {
@@ -2381,7 +2381,7 @@ function ShiftCloseScreen() {
                 type="submit"
                 disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
                 data-testid="corte-save-count"
-                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
               >
                 {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
               </button>
@@ -2522,8 +2522,8 @@ function AuditScreen() {
   return (
     <section className="space-y-5">
       <div>
-        <h2 className="text-2xl font-bold">Auditoria</h2>
-        <p className="text-sm text-gray-500">Cambios importantes de caja, tickets, gastos, nomina y correcciones.</p>
+        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Auditoria</h2>
+        <p className="text-[13.5px] text-ink-500 mt-0.5">Cambios importantes de caja, tickets, gastos, nomina y correcciones.</p>
       </div>
 
       <Panel title="Filtros">
@@ -2666,8 +2666,8 @@ function ReportsScreen() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Reportes</h2>
-          <p className="text-sm text-gray-500">Resumen diario, mensual, corte de caja, lavadores y exportacion Excel.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Reportes</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Resumen diario, mensual, corte de caja, lavadores y exportacion Excel.</p>
         </div>
       </div>
 
@@ -2925,14 +2925,14 @@ function InventoryScreen() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Inventario</h2>
-          <p className="text-sm text-gray-500">Productos y movimientos. El stock se calcula desde entradas y salidas.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Inventario</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Productos y movimientos. El stock se calcula desde entradas y salidas.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]" onClick={() => setModal('product')}>Nuevo producto</button>
-          <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('sale')}>Registrar venta</button>
-          <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('purchase')}>Registrar compra</button>
-          <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={() => setModal('adjustment')}>Ajuste</button>
+          <button className="tl-btn tl-btn-primary" onClick={() => setModal('product')}>Nuevo producto</button>
+          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('sale')}>Registrar venta</button>
+          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('purchase')}>Registrar compra</button>
+          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('adjustment')}>Ajuste</button>
         </div>
       </div>
 
@@ -3403,14 +3403,14 @@ function PayrollScreen() {
       {toast && <Toast message={toast} />}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Nomina</h2>
-          <p className="text-sm text-gray-500">Calculo semanal por sueldo, comision, bonos por carro y prestamos.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Nomina</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Calculo semanal por sueldo, comision, bonos por carro y prestamos.</p>
         </div>
         <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))} data-testid="payroll-period-form">
           <TextField label="Domingo" error={form.formState.errors.startDate?.message}>
             <input type="date" {...form.register('startDate')} data-testid="payroll-start-date" />
           </TextField>
-          <button data-testid="payroll-create-period" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
+          <button data-testid="payroll-create-period" className="tl-btn tl-btn-primary">
             Crear periodo
           </button>
         </form>
@@ -3463,7 +3463,7 @@ function PayrollScreen() {
                 <button
                   disabled={!selectedId || locked || compute.isPending}
                   data-testid="payroll-compute"
-                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                  className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
                   onClick={() => compute.mutate()}
                 >
                   Recalcular
@@ -3471,7 +3471,7 @@ function PayrollScreen() {
                 <button
                   disabled={!selectedId}
                   data-testid="payroll-export"
-                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:text-gray-400"
+                  className="tl-btn tl-btn-secondary"
                   onClick={() => void downloadPayrollExport()}
                 >
                   Exportar nomina
@@ -3479,7 +3479,7 @@ function PayrollScreen() {
                 <button
                   disabled={!selectedId || selectedPeriod?.status !== 'COMPUTED' || lock.isPending}
                   data-testid="payroll-lock"
-                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:text-gray-400"
+                  className="tl-btn tl-btn-secondary"
                   onClick={() => {
                     if (window.confirm('Bloquear nomina? Ya no se podra recalcular en v1.')) {
                       lock.mutate()
@@ -3594,7 +3594,7 @@ function PayrollScreen() {
                 type="submit"
                 disabled={!selectedId || locked || addAdjustment.isPending}
                 data-testid="payroll-add-adjustment"
-                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
               >
                 Agregar
               </button>
@@ -3768,10 +3768,10 @@ function TicketsBrowser() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Tickets</h2>
-          <p className="text-sm text-gray-500">Busqueda y revision de tickets capturados.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Tickets</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Busqueda y revision de tickets capturados.</p>
         </div>
-        <NavLink to="/tickets/nuevo" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
+        <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary">
           Nuevo ticket
         </NavLink>
       </div>
@@ -3791,7 +3791,7 @@ function TicketsBrowser() {
         </div>
       </Panel>
 
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+      <div className="tl-panel overflow-hidden">
         <table className="tl-tbl zebra">
           <thead className="">
             <tr>
@@ -3872,7 +3872,7 @@ function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: ()
   return (
     <Modal title="Cancelar ticket" onClose={onClose} narrow>
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-        <p className="text-sm text-gray-500">El ticket queda guardado como cancelado y no cuenta para ingresos.</p>
+        <p className="text-[13.5px] text-ink-500 mt-0.5">El ticket queda guardado como cancelado y no cuenta para ingresos.</p>
         <TextField label="Motivo" error={form.formState.errors.reason?.message}>
           <textarea rows={4} placeholder="Ej. Capturado por error" {...form.register('reason')} />
         </TextField>
@@ -4040,7 +4040,7 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+        className="w-full tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
       >
         {loading ? 'Guardando...' : label}
       </button>
@@ -4569,7 +4569,7 @@ function ModalActions({ onClose, submitLabel }: { onClose: () => void; submitLab
   return (
     <div className="flex justify-end gap-2">
       <button type="button" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={onClose}>Volver</button>
-      <button type="submit" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98]">
+      <button type="submit" className="tl-btn tl-btn-primary">
         {submitLabel}
       </button>
     </div>
@@ -4741,13 +4741,31 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
   const slug = testidSlug(title)
   const titleId = `modal-${slug}-title`
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid={`modal-${slug}`}>
-      <div className={`rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-6xl'}`}>
-        <div className="flex items-center justify-between rounded-t-2xl border-b border-gray-100 bg-slate-50 px-6 py-4">
-          <h3 id={titleId} className="text-base font-semibold text-gray-900">{title}</h3>
-          <button className="rounded-lg px-3 py-1.5 text-sm text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" onClick={onClose}>Cerrar</button>
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto px-4 py-8"
+      style={{ background: 'rgba(15,23,42,0.40)', backdropFilter: 'blur(6px)' }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      data-testid={`modal-${slug}`}
+    >
+      <div className={`flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-5xl'}`}>
+        <div className="flex items-start gap-3 border-b border-border-soft px-6 py-4">
+          <div>
+            <h3 id={titleId} className="text-base font-bold tracking-tight text-ink-900">{title}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="overflow-auto p-6">{children}</div>
       </div>
     </div>
   )
@@ -4755,10 +4773,18 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
 
 function Toast({ message }: { message: string }) {
   return (
-    <div className="fixed right-5 top-5 z-50 flex items-center gap-2.5 rounded-2xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white shadow-xl ring-1 ring-white/10">
-      <svg className="h-4 w-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-      </svg>
+    <div
+      className="fixed right-4 top-4 z-50 flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-semibold text-white"
+      style={{ background: 'var(--ink-900)', boxShadow: 'var(--shadow-lg)' }}
+    >
+      <span
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+        style={{ background: 'var(--good-500)' }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      </span>
       {message}
     </div>
   )

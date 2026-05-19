@@ -97,12 +97,34 @@ html, body, #root { height: 100%; }
     font-feature-settings: "cv11","ss01","ss03";
     -webkit-font-smoothing: antialiased;
   }
-  /* Backward-compatible default form styling. The new design uses .input/.select/.textarea
-     classes from @layer components instead. */
+  /* Global form styling — matches design tokens (38px height, 9px radius,
+     strong 3px violet focus ring). Any input still in App.tsx without an
+     explicit .tl-input class inherits this. */
   input, select, textarea {
-    @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400;
+    @apply w-full rounded-[9px] border border-border-strong bg-white px-3 text-[13.5px] text-ink-900 outline-none transition disabled:cursor-not-allowed disabled:bg-ink-50 disabled:text-ink-400;
+    height: 38px;
   }
-  textarea { resize: vertical; }
+  textarea {
+    height: auto;
+    min-height: 76px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    resize: vertical;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.20);
+  }
+  input::placeholder, textarea::placeholder { color: var(--ink-400); }
+  /* Date inputs in WebKit get extra height — clamp them */
+  input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.55; }
+  input[type="date"]:hover::-webkit-calendar-picker-indicator { opacity: 0.85; }
+  /* Native checkboxes/radios shouldn't get the full-width 38px treatment */
+  input[type="checkbox"], input[type="radio"] {
+    width: auto;
+    height: auto;
+    padding: 0;
+  }
 }
 
 @layer components {
