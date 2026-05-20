@@ -183,7 +183,7 @@ LAVADERO_AI_ENABLED=true
 LAVADERO_AI_PROVIDER=openai-compatible
 LAVADERO_AI_BASE_URL=https://api.openai.com/v1
 LAVADERO_AI_API_KEY=<real key stored only in prod secrets>
-LAVADERO_AI_MODEL=gpt-4.1-mini
+LAVADERO_AI_MODEL=gpt-5.5
 LAVADERO_AI_TIMEOUT_SECONDS=20
 LAVADERO_AI_SCHEDULER_ENABLED=false
 ```

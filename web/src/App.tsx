@@ -732,9 +732,14 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       })
     } else {
       writeStoredAuth(null)
+      throw new Error('Sesion expirada. Por favor vuelve a iniciar sesion.')
     }
   }
   if (!response.ok) {
+    if (response.status === 401) {
+      writeStoredAuth(null)
+      throw new Error('Sesion expirada. Por favor vuelve a iniciar sesion.')
+    }
     const body = await response.json().catch(() => ({}))
     throw new Error(body.error || `Error ${response.status}`)
   }

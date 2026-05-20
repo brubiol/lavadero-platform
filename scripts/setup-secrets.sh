@@ -39,7 +39,7 @@ LAVADERO_AI_ENABLED=true
 LAVADERO_AI_PROVIDER=$([[ -n "$OPENAI_API_KEY" ]] && echo openai-compatible || echo deterministic-local)
 LAVADERO_AI_BASE_URL=$([[ -n "$OPENAI_API_KEY" ]] && echo https://api.openai.com/v1 || echo "")
 LAVADERO_AI_API_KEY=$OPENAI_API_KEY
-LAVADERO_AI_MODEL=$([[ -n "$OPENAI_API_KEY" ]] && echo gpt-4.1-mini || echo local)
+LAVADERO_AI_MODEL=$([[ -n "$OPENAI_API_KEY" ]] && echo gpt-5.5 || echo local)
 LAVADERO_AI_TIMEOUT_SECONDS=20
 EOF
 

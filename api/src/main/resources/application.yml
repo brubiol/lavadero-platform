@@ -21,7 +21,7 @@ lavadero:
   auth:
     enabled: true
     jwt-secret: ${LAVADERO_JWT_SECRET:dev-only-change-this-secret-32-bytes-minimum}
-    access-token-minutes: 30
+    access-token-minutes: 480
     refresh-token-days: 14
     bootstrap-owner:
       enabled: true
