@@ -44,6 +44,10 @@ public class PayrollService {
     private static final BigDecimal ABSENCE_RATE_2 = new BigDecimal("15.00");
     private static final BigDecimal ABSENCE_RATE_3 = new BigDecimal("10.00");
 
+    // Weekly salaries cover 6 working days; the 7th is the paid rest day.
+    private static final BigDecimal WORK_DAYS_PER_WEEK = new BigDecimal("6");
+    private static final long FULL_WEEK_ATTENDANCE = 7;
+
     private final PayrollPeriodRepository periods;
     private final PayrollEntryRepository entries;
     private final PayrollDayRepository days;
@@ -154,7 +158,7 @@ public class PayrollService {
             Employee employee = accumulator.employee;
             BigDecimal carsWashed = money(accumulator.inShiftCars.add(accumulator.outOfShiftCars));
             BigDecimal baseSalary = employee.getPayrollType() == PayrollType.SALARY
-                    ? money(employee.getBaseWeeklySalary())
+                    ? salaryBaseFor(employee, period)
                     : ZERO;
             BigDecimal carsBonusRate = employee.getPayrollType() == PayrollType.SALARY
                     ? money(employee.getProductivityBonusRate())
@@ -250,6 +254,23 @@ public class PayrollService {
         return PayrollPeriodResponse.from(period, entries.findByPayrollPeriodIdOrderByEmployeeFullNameAsc(period.getId()),
                 days.findByPayrollPeriodIdOrderByWorkDateAscEmployeeFullNameAsc(period.getId()),
                 adjustments.findByPayrollPeriodIdOrderByEmployeeFullNameAscCreatedAtAsc(period.getId()));
+    }
+
+    // Weekly salary adjusted for the period: each absence loses a day's pay plus
+    // the employee's fixed penalty; a full 7-day week pays the rest day at the
+    // daily rate plus any rest-day premium.
+    private BigDecimal salaryBaseFor(Employee employee, PayrollPeriod period) {
+        BigDecimal weeklyBase = money(employee.getBaseWeeklySalary());
+        BigDecimal dailyRate = weeklyBase.divide(WORK_DAYS_PER_WEEK, 2, RoundingMode.HALF_UP);
+        long absences = attendance.countAbsences(employee.getId(), period.getStartDate(), period.getEndDate());
+        long presentDays = attendance.countPresentDays(employee.getId(), period.getStartDate(), period.getEndDate());
+
+        BigDecimal restDayPay = presentDays >= FULL_WEEK_ATTENDANCE
+                ? money(dailyRate.add(money(employee.getRestDayPremium())))
+                : ZERO;
+        BigDecimal absenceDeduction = money(dailyRate.add(money(employee.getAbsenceDayPenalty()))
+                .multiply(BigDecimal.valueOf(absences)));
+        return money(weeklyBase.add(restDayPay).subtract(absenceDeduction).max(ZERO));
     }
 
     private BigDecimal money(BigDecimal value) {

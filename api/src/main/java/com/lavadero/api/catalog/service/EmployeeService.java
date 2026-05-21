@@ -41,7 +41,8 @@ public class EmployeeService {
         Employee employee = get(id);
         employee.update(request.fullName(), request.phone(), request.active(), request.baseWeeklySalary(),
                 request.payrollType(), request.commissionRate(), request.productivityBonusRate(),
-                request.deactivationReason(), request.primaryShift(), request.outOfShiftCommissionRate());
+                request.deactivationReason(), request.primaryShift(), request.outOfShiftCommissionRate(),
+                request.restDayPremium(), request.absenceDayPenalty());
         return employee;
     }
 

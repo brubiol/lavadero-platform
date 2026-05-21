@@ -27,4 +27,10 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
     long countAbsences(@Param("employeeId") Long employeeId,
                        @Param("from") LocalDate from,
                        @Param("to") LocalDate to);
+
+    @Query("SELECT COUNT(a) FROM AttendanceRecord a WHERE a.employee.id = :employeeId " +
+           "AND a.workDate BETWEEN :from AND :to AND a.absence = false")
+    long countPresentDays(@Param("employeeId") Long employeeId,
+                          @Param("from") LocalDate from,
+                          @Param("to") LocalDate to);
 }

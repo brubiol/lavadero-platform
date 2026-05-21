@@ -55,6 +55,8 @@ type Employee = {
   deactivationReason?: string | null
   primaryShift?: string | null
   outOfShiftCommissionRate: number
+  restDayPremium: number
+  absenceDayPenalty: number
 }
 
 type ServiceType = {
@@ -1899,6 +1901,8 @@ const employeeEditSchema = z.object({
   deactivationReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
   primaryShift: z.enum(['MATUTINO', 'VESPERTINO', '']).optional(),
   outOfShiftCommissionRate: z.coerce.number().min(0, 'Minimo 0'),
+  restDayPremium: z.coerce.number().min(0, 'Minimo 0'),
+  absenceDayPenalty: z.coerce.number().min(0, 'Minimo 0'),
 })
 type EmployeeEditFormValues = z.infer<typeof employeeEditSchema>
 
@@ -1989,6 +1993,8 @@ function CatalogsScreen() {
           deactivationReason: !values.active ? (values.deactivationReason?.trim() || undefined) : undefined,
           primaryShift: values.primaryShift || undefined,
           outOfShiftCommissionRate: Number(values.outOfShiftCommissionRate),
+          restDayPremium: Number(values.restDayPremium),
+          absenceDayPenalty: Number(values.absenceDayPenalty),
         }),
       }),
     onSuccess: async () => {
@@ -4902,9 +4908,12 @@ function EmployeeEditModal({
       deactivationReason: employee.deactivationReason ?? '',
       primaryShift: (employee.primaryShift as 'MATUTINO' | 'VESPERTINO' | '') ?? '',
       outOfShiftCommissionRate: employee.outOfShiftCommissionRate ?? 0,
+      restDayPremium: employee.restDayPremium ?? 0,
+      absenceDayPenalty: employee.absenceDayPenalty ?? 0,
     },
   })
   const watchedActive = form.watch('active')
+  const watchedPayrollType = form.watch('payrollType')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
@@ -4947,6 +4956,23 @@ function EmployeeEditModal({
               <input type="number" min={0} step="0.01" {...form.register('outOfShiftCommissionRate')} />
             </TextField>
           </div>
+          {watchedPayrollType === 'SALARY' && (
+            <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reglas de sueldo</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <TextField label="Premio por dia de descanso" error={form.formState.errors.restDayPremium?.message}>
+                  <input type="number" min={0} step="0.01" {...form.register('restDayPremium')} />
+                </TextField>
+                <TextField label="Penalizacion fija por falta" error={form.formState.errors.absenceDayPenalty?.message}>
+                  <input type="number" min={0} step="0.01" {...form.register('absenceDayPenalty')} />
+                </TextField>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Si trabaja los 7 dias de la semana se le paga el dia de descanso (tarifa diaria + premio).
+                Cada falta descuenta un dia de sueldo mas la penalizacion fija.
+              </p>
+            </div>
+          )}
           <div className="rounded-lg border border-gray-100 p-3 space-y-3">
             <label className="flex items-center gap-3 text-sm font-medium">
               <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />

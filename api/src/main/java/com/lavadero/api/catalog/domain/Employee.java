@@ -49,6 +49,12 @@ public class Employee extends AuditedEntity {
     @Column(name = "out_of_shift_commission_rate", nullable = false, precision = 10, scale = 2)
     private BigDecimal outOfShiftCommissionRate = BigDecimal.ZERO;
 
+    @Column(name = "rest_day_premium", nullable = false, precision = 10, scale = 2)
+    private BigDecimal restDayPremium = BigDecimal.ZERO;
+
+    @Column(name = "absence_day_penalty", nullable = false, precision = 10, scale = 2)
+    private BigDecimal absenceDayPenalty = BigDecimal.ZERO;
+
     protected Employee() {
     }
 
@@ -119,9 +125,18 @@ public class Employee extends AuditedEntity {
         return outOfShiftCommissionRate;
     }
 
+    public BigDecimal getRestDayPremium() {
+        return restDayPremium;
+    }
+
+    public BigDecimal getAbsenceDayPenalty() {
+        return absenceDayPenalty;
+    }
+
     public void update(String fullName, String phone, Boolean active, BigDecimal baseWeeklySalary,
             PayrollType payrollType, BigDecimal commissionRate, BigDecimal productivityBonusRate,
-            String deactivationReason, String primaryShift, BigDecimal outOfShiftCommissionRate) {
+            String deactivationReason, String primaryShift, BigDecimal outOfShiftCommissionRate,
+            BigDecimal restDayPremium, BigDecimal absenceDayPenalty) {
         if (fullName != null) {
             this.fullName = fullName;
         }
@@ -152,6 +167,12 @@ public class Employee extends AuditedEntity {
         this.primaryShift = (primaryShift == null || primaryShift.isBlank()) ? null : primaryShift.trim();
         if (outOfShiftCommissionRate != null) {
             this.outOfShiftCommissionRate = outOfShiftCommissionRate;
+        }
+        if (restDayPremium != null) {
+            this.restDayPremium = restDayPremium;
+        }
+        if (absenceDayPenalty != null) {
+            this.absenceDayPenalty = absenceDayPenalty;
         }
     }
 
