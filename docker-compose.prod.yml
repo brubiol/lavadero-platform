@@ -37,15 +37,14 @@ services:
       api:
         condition: service_healthy
 
-  # HTTPS via a free temporary hostname (sslip.io) with an automatic
-  # Let's Encrypt certificate. Plain HTTP on port 80 stays available as a
-  # fallback. Swap the hostname for a real domain once one is purchased.
+  # HTTPS for turbolavado.org with an automatic Let's Encrypt certificate.
+  # Plain HTTP on port 80 stays available via the web container as a fallback.
   caddy:
     image: caddy:2
     container_name: lavadero-caddy
     restart: unless-stopped
     entrypoint: ["caddy"]
-    command: ["reverse-proxy", "--from", "100-49-45-120.sslip.io", "--to", "web:80"]
+    command: ["reverse-proxy", "--from", "turbolavado.org", "--to", "web:80"]
     ports:
       - "443:443"
     depends_on:
