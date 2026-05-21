@@ -775,8 +775,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json()
 }
 
-function money(value: number, currency: Currency) {
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(value)
+function money(value: number, currency?: Currency) {
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: currency ?? 'MXN' }).format(value)
 }
 
 function formatDateTime(value: string) {
@@ -1820,8 +1820,8 @@ function TicketWorkspace({
                 value={
                   livePrice === undefined ? 'Sin precio' : (
                     watched.discountPercent > 0 && !watched.courtesy
-                      ? `${money(livePrice, watched.currency)} (-${watched.discountPercent}%)`
-                      : money(livePrice, watched.currency)
+                      ? `${money(livePrice, 'MXN')} (-${watched.discountPercent}%)`
+                      : money(livePrice, 'MXN')
                   )
                 }
               />

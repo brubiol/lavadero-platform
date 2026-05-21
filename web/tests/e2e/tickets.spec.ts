@@ -72,11 +72,12 @@ test('dashboard counters match seeded ticket totals for selected date', async ({
   const businessDate = uniqueFutureDate()
   const fixture = await seedTicketFixture(request, 'E2E_DASH', businessDate, '125.00')
 
-  // Read the baseline count before seeding (persistent DB may have prior run data)
+  // Read the baseline count before seeding (the DB persists across tests in a run).
+  // Wait for the metric to settle on a numeric value — it shows "..." while loading.
   await loginAsDueno(page)
   await page.goto('/')
   await page.getByLabel('Fecha').fill(businessDate)
-  await expect(page.getByTestId('metric-carros-lavados')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByTestId('metric-carros-lavados-value')).toHaveText(/^\d+$/, { timeout: 8_000 })
   const baseCount = parseInt((await page.getByTestId('metric-carros-lavados-value').textContent()) ?? '0', 10)
 
   await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard cash', paymentMethod: 'CASH' })
