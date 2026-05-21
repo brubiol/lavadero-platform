@@ -36,3 +36,23 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  # HTTPS via a free temporary hostname (sslip.io) with an automatic
+  # Let's Encrypt certificate. Plain HTTP on port 80 stays available as a
+  # fallback. Swap the hostname for a real domain once one is purchased.
+  caddy:
+    image: caddy:2
+    container_name: lavadero-caddy
+    restart: unless-stopped
+    command: reverse-proxy --from 100-49-45-120.sslip.io --to web:80
+    ports:
+      - "443:443"
+    depends_on:
+      - web
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
