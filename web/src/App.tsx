@@ -1576,8 +1576,7 @@ function TicketWorkspace({
         ticket.courtesy ||
         ticket.priceOverride != null ||
         ticket.notes?.trim() ||
-        ticket.vehicleDescription?.trim() ||
-        ticket.internalRef?.trim()
+        ticket.vehicleDescription?.trim()
       ),
     ),
   )
@@ -1662,7 +1661,7 @@ function TicketWorkspace({
       ? 'No hay turno abierto para hoy.'
       : null
 
-  const hasAdvancedError = (['vehicleDescription', 'internalRef', 'occurredAt', 'priceOverride', 'notes', 'discountPercent', 'courtesyReason'] as const)
+  const hasAdvancedError = (['vehicleDescription', 'occurredAt', 'priceOverride', 'notes', 'discountPercent', 'courtesyReason'] as const)
     .some((field) => form.formState.errors[field])
   const effectiveShowAdvanced = showAdvanced || hasAdvancedError
 
@@ -1721,6 +1720,9 @@ function TicketWorkspace({
                 </select>
               </SelectField>
             </div>
+            <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
+              <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+            </TextField>
           </Panel>
 
           <Panel title="Lavadores">
@@ -1798,18 +1800,13 @@ function TicketWorkspace({
                   <TextField label="Descripcion del vehiculo" error={form.formState.errors.vehicleDescription?.message}>
                     <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
                   </TextField>
-                  <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
-                    <input placeholder="Ej. 41703" {...form.register('internalRef')} />
-                  </TextField>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
                   <TextField label="Fecha y hora del lavado" error={form.formState.errors.occurredAt?.message}>
                     <input type="datetime-local" {...form.register('occurredAt')} />
                   </TextField>
-                  <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
-                    <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
-                  </TextField>
                 </div>
+                <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
+                  <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
+                </TextField>
                 <TextField label="Notas internas" error={form.formState.errors.notes?.message}>
                   <textarea rows={2} placeholder="Notas visibles solo en esta pantalla por ahora" {...form.register('notes')} />
                 </TextField>
