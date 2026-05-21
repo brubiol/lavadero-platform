@@ -1246,8 +1246,9 @@ function Dashboard() {
 
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="feature" sub={data ? `${data.carsWashed} carros lavados` : undefined} />
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-8">
+        <Metric label="Carros lavados" value={data ? String(data.carsWashed) : '...'} />
+        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="feature" />
         <Metric label="Efectivo" value={data ? money(data.cashRevenue, 'MXN') : '...'} variant="success" />
         <Metric label="Tarjeta" value={data ? money(data.cardRevenue, 'MXN') : '...'} variant="info" />
         <Metric label="Miscelanea" value={data ? money(data.inventorySalesRevenue, 'MXN') : '...'} />
