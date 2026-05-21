@@ -26,6 +26,7 @@ async function fillTicketForm(page: Page, catalog: Catalog) {
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
   await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
   await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
+  await expect(page.locator('button').filter({ hasText: catalog.employeeName }).first()).toBeVisible({ timeout: 10_000 })
   await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
 
@@ -70,15 +71,22 @@ test('can create cash and card tickets and see payment labels in ticket browser'
 test('dashboard counters match seeded ticket totals for selected date', async ({ page, request }) => {
   const businessDate = uniqueFutureDate()
   const fixture = await seedTicketFixture(request, 'E2E_DASH', businessDate, '125.00')
-  await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard cash', paymentMethod: 'CASH' })
-  await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard card', paymentMethod: 'CARD' })
 
+  // Read the baseline count before seeding (persistent DB may have prior run data)
   await loginAsDueno(page)
   await page.goto('/')
   await page.getByLabel('Fecha').fill(businessDate)
+  await expect(page.getByTestId('metric-carros-lavados')).toBeVisible({ timeout: 8_000 })
+  const baseCount = parseInt((await page.getByTestId('metric-carros-lavados-value').textContent()) ?? '0', 10)
 
-  await expect(page.getByTestId('metric-carros-lavados-value')).toHaveText('2')
-  await expect(page.getByTestId('metric-ingresos-autos-value')).toContainText('250')
+  await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard cash', paymentMethod: 'CASH' })
+  await createTicket(request, fixture.headers, fixture, { vehicleDescription: 'Dashboard card', paymentMethod: 'CARD' })
+
+  await page.goto('/')
+  await page.getByLabel('Fecha').fill(businessDate)
+
+  await expect(page.getByTestId('metric-carros-lavados-value')).toHaveText(String(baseCount + 2), { timeout: 8_000 })
+  await expect(page.getByTestId('metric-ingresos-autos-value')).toContainText(String((baseCount + 2) * 125), { timeout: 8_000 })
 })
 
 test('can void a freshly seeded ticket without depending on another test', async ({ page, request }) => {

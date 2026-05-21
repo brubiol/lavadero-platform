@@ -15,6 +15,7 @@ async function fillBaseTicket(page: Page, catalog: Catalog, description: string)
   await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
   await page.getByLabel('Descripcion del vehiculo').fill(description)
   await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
+  await expect(page.locator('button').filter({ hasText: catalog.employeeName }).first()).toBeVisible({ timeout: 10_000 })
   await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
 
