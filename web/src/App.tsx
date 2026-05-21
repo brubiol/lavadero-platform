@@ -245,6 +245,8 @@ type PayrollEntry = {
   employeeName: string
   carsWashed: number
   baseSalary: number
+  restDayPay: number
+  absenceDeduction: number
   carsBonusRate: number
   carsBonus: number
   commissions: number
@@ -3836,6 +3838,7 @@ function PayrollScreen() {
                     <th className="r">Extras</th>
                     <th className="r">Deducciones</th>
                     <th className="r">Prestamos</th>
+                    <th className="r">Bruto</th>
                     <th className="r">Neto</th>
                   </tr>
                 </thead>
@@ -3848,18 +3851,19 @@ function PayrollScreen() {
                     >
                       <td className="font-semibold">{entry.employeeName}</td>
                       <td className="r">{entry.carsWashed.toFixed(2)}</td>
-                      <td className="r">{money(entry.baseSalary, 'MXN')}</td>
+                      <td className="r">{money(entry.baseSalary + entry.restDayPay - entry.absenceDeduction, 'MXN')}</td>
                       <td className="r">{money(entry.carsBonus, 'MXN')}</td>
                       <td className="r">{money(entry.commissions, 'MXN')}</td>
                       <td className="r">{money(entry.manualEarnings, 'MXN')}</td>
                       <td className="r">{money(entry.manualDeductions, 'MXN')}</td>
                       <td className="r">{money(entry.advancesDeducted, 'MXN')}</td>
+                      <td className="r">{money(entry.grossPay, 'MXN')}</td>
                       <td className="r font-semibold">{money(entry.netPay, 'MXN')}</td>
                     </tr>
                   ))}
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
                         Crea o selecciona un periodo y presiona Recalcular.
                       </td>
                     </tr>
@@ -3955,16 +3959,30 @@ function PayrollScreen() {
           <Panel title="Detalle de lavador">
             {selectedEntry ? (
               <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-                <div className="space-y-3 text-sm">
+                <div className="space-y-1.5 text-sm">
                   <SummaryRow label="Lavador" value={selectedEntry.employeeName} />
-                  <SummaryRow label="Carros" value={selectedEntry.carsWashed.toFixed(2)} />
-                  <SummaryRow label="Bono por carro" value={money(selectedEntry.carsBonusRate, 'MXN')} />
-                  <SummaryRow label="Comision" value={money(selectedEntry.commissions, 'MXN')} />
-                  <SummaryRow label="Extras" value={money(selectedEntry.manualEarnings, 'MXN')} />
-                  <SummaryRow label="Deducciones" value={money(selectedEntry.manualDeductions, 'MXN')} />
-                  <SummaryRow label="Prestamos" value={money(selectedEntry.advancesDeducted, 'MXN')} />
-                  <SummaryRow label="Bruto" value={money(selectedEntry.grossPay, 'MXN')} />
-                  <SummaryRow label="Neto" value={money(selectedEntry.netPay, 'MXN')} />
+                  <div className="my-2 border-t border-gray-100" />
+                  <SummaryRow label="Sueldo base" value={money(selectedEntry.baseSalary, 'MXN')} />
+                  {selectedEntry.restDayPay > 0 && (
+                    <SummaryRow label="+ Dia de descanso" value={money(selectedEntry.restDayPay, 'MXN')} />
+                  )}
+                  {selectedEntry.absenceDeduction > 0 && (
+                    <SummaryRow label="- Faltas" value={`-${money(selectedEntry.absenceDeduction, 'MXN')}`} />
+                  )}
+                  <SummaryRow label={`+ Bono carros (${selectedEntry.carsWashed.toFixed(2)})`} value={money(selectedEntry.carsBonus, 'MXN')} />
+                  <SummaryRow label="+ Comision" value={money(selectedEntry.commissions, 'MXN')} />
+                  <SummaryRow label="+ Extras" value={money(selectedEntry.manualEarnings, 'MXN')} />
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-2 font-semibold">
+                    <span>= Bruto</span>
+                    <span>{money(selectedEntry.grossPay, 'MXN')}</span>
+                  </div>
+                  <SummaryRow label="- Deducciones" value={`-${money(selectedEntry.manualDeductions, 'MXN')}`} />
+                  <SummaryRow label="- Prestamos" value={`-${money(selectedEntry.advancesDeducted, 'MXN')}`} />
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-2 text-base font-bold text-violet-700">
+                    <span>= Neto a pagar</span>
+                    <span>{money(selectedEntry.netPay, 'MXN')}</span>
+                  </div>
+                  <div className="my-2 border-t border-gray-100" />
                   <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
                 </div>
                 <div className="overflow-hidden rounded-xl border border-gray-100">

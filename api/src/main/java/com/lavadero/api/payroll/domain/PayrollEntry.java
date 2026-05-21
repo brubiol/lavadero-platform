@@ -34,6 +34,12 @@ public class PayrollEntry extends AuditedEntity {
     @Column(name = "base_salary", nullable = false, precision = 10, scale = 2)
     private BigDecimal baseSalary;
 
+    @Column(name = "rest_day_pay", nullable = false, precision = 10, scale = 2)
+    private BigDecimal restDayPay = BigDecimal.ZERO;
+
+    @Column(name = "absence_deduction", nullable = false, precision = 10, scale = 2)
+    private BigDecimal absenceDeduction = BigDecimal.ZERO;
+
     @Column(name = "cars_bonus_rate", nullable = false, precision = 10, scale = 2)
     private BigDecimal carsBonusRate;
 
@@ -65,21 +71,15 @@ public class PayrollEntry extends AuditedEntity {
     }
 
     public PayrollEntry(PayrollPeriod payrollPeriod, Employee employee, BigDecimal carsWashed, BigDecimal baseSalary,
-            BigDecimal carsBonusRate, BigDecimal carsBonus, BigDecimal commissions, BigDecimal tipsPoolShare,
-            BigDecimal advancesDeducted, BigDecimal netPay) {
-        this(payrollPeriod, employee, carsWashed, baseSalary, carsBonusRate, carsBonus, commissions, tipsPoolShare,
-                BigDecimal.ZERO, BigDecimal.ZERO, advancesDeducted,
-                baseSalary.add(carsBonus).add(commissions).add(tipsPoolShare), netPay);
-    }
-
-    public PayrollEntry(PayrollPeriod payrollPeriod, Employee employee, BigDecimal carsWashed, BigDecimal baseSalary,
-            BigDecimal carsBonusRate, BigDecimal carsBonus, BigDecimal commissions, BigDecimal tipsPoolShare,
-            BigDecimal manualEarnings, BigDecimal manualDeductions, BigDecimal advancesDeducted, BigDecimal grossPay,
-            BigDecimal netPay) {
+            BigDecimal restDayPay, BigDecimal absenceDeduction, BigDecimal carsBonusRate, BigDecimal carsBonus,
+            BigDecimal commissions, BigDecimal tipsPoolShare, BigDecimal manualEarnings, BigDecimal manualDeductions,
+            BigDecimal advancesDeducted, BigDecimal grossPay, BigDecimal netPay) {
         this.payrollPeriod = payrollPeriod;
         this.employee = employee;
         this.carsWashed = carsWashed;
         this.baseSalary = baseSalary;
+        this.restDayPay = restDayPay;
+        this.absenceDeduction = absenceDeduction;
         this.carsBonusRate = carsBonusRate;
         this.carsBonus = carsBonus;
         this.commissions = commissions;
@@ -109,6 +109,14 @@ public class PayrollEntry extends AuditedEntity {
 
     public BigDecimal getBaseSalary() {
         return baseSalary;
+    }
+
+    public BigDecimal getRestDayPay() {
+        return restDayPay;
+    }
+
+    public BigDecimal getAbsenceDeduction() {
+        return absenceDeduction;
     }
 
     public BigDecimal getCarsBonusRate() {

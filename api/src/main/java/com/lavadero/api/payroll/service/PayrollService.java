@@ -160,9 +160,10 @@ public class PayrollService {
         for (EmployeeAccumulator accumulator : byEmployee.values()) {
             Employee employee = accumulator.employee;
             BigDecimal carsWashed = money(accumulator.inShiftCars.add(accumulator.outOfShiftCars));
-            BigDecimal baseSalary = employee.getPayrollType() == PayrollType.SALARY
-                    ? salaryBaseFor(employee, period)
-                    : ZERO;
+            SalaryComponents salary = employee.getPayrollType() == PayrollType.SALARY
+                    ? salaryComponentsFor(employee, period)
+                    : SalaryComponents.ZERO;
+            BigDecimal baseSalary = salary.contractualBase();
             BigDecimal carsBonusRate = employee.getPayrollType() == PayrollType.SALARY
                     ? money(employee.getProductivityBonusRate())
                     : ZERO;
@@ -185,12 +186,14 @@ public class PayrollService {
             }
             AdjustmentTotals manual = adjustmentsByEmployee.getOrDefault(employee.getId(), AdjustmentTotals.ZERO);
             BigDecimal debtBalance = debtLedgerService.balance(employee);
-            BigDecimal grossPay = money(baseSalary.add(carsBonus).add(commissions).add(manual.earnings));
+            BigDecimal grossPay = money(baseSalary.add(salary.restDayPay()).subtract(salary.absenceDeduction())
+                    .add(carsBonus).add(commissions).add(manual.earnings).max(ZERO));
             BigDecimal maxDeductions = grossPay.subtract(manual.deductions).max(ZERO);
             BigDecimal advancesDeducted = money(debtBalance.min(maxDeductions).max(ZERO));
             BigDecimal netPay = money(grossPay.subtract(manual.deductions).subtract(advancesDeducted).max(ZERO));
-            entries.save(new PayrollEntry(period, employee, carsWashed, baseSalary, carsBonusRate, carsBonus,
-                    commissions, ZERO, manual.earnings, manual.deductions, advancesDeducted, grossPay, netPay));
+            entries.save(new PayrollEntry(period, employee, carsWashed, baseSalary, salary.restDayPay(),
+                    salary.absenceDeduction(), carsBonusRate, carsBonus, commissions, ZERO, manual.earnings,
+                    manual.deductions, advancesDeducted, grossPay, netPay));
             debtLedgerService.recordPayrollDeduction(employee, period, advancesDeducted);
         }
 
@@ -264,10 +267,11 @@ public class PayrollService {
                 adjustments.findByPayrollPeriodIdOrderByEmployeeFullNameAscCreatedAtAsc(period.getId()));
     }
 
-    // Weekly salary adjusted for the period: each absence loses a day's pay plus
-    // the employee's fixed penalty; a full 7-day week pays the rest day at the
-    // daily rate plus any rest-day premium.
-    private BigDecimal salaryBaseFor(Employee employee, PayrollPeriod period) {
+    // Breaks a salaried employee's period pay into its visible parts: the
+    // contractual weekly base, rest-day pay (a full 7-day week pays the rest
+    // day at the daily rate plus the premium), and the absence deduction (each
+    // absence loses a day of pay plus the employee's fixed penalty).
+    private SalaryComponents salaryComponentsFor(Employee employee, PayrollPeriod period) {
         BigDecimal weeklyBase = money(employee.getBaseWeeklySalary());
         BigDecimal dailyRate = weeklyBase.divide(WORK_DAYS_PER_WEEK, 2, RoundingMode.HALF_UP);
         long absences = attendance.countAbsences(employee.getId(), period.getStartDate(), period.getEndDate());
@@ -278,7 +282,12 @@ public class PayrollService {
                 : ZERO;
         BigDecimal absenceDeduction = money(dailyRate.add(money(employee.getAbsenceDayPenalty()))
                 .multiply(BigDecimal.valueOf(absences)));
-        return money(weeklyBase.add(restDayPay).subtract(absenceDeduction).max(ZERO));
+        return new SalaryComponents(weeklyBase, restDayPay, absenceDeduction);
+    }
+
+    private record SalaryComponents(BigDecimal contractualBase, BigDecimal restDayPay, BigDecimal absenceDeduction) {
+        static final SalaryComponents ZERO = new SalaryComponents(
+                new BigDecimal("0.00"), new BigDecimal("0.00"), new BigDecimal("0.00"));
     }
 
     private BigDecimal money(BigDecimal value) {

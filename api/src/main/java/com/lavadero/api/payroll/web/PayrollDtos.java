@@ -48,14 +48,15 @@ public final class PayrollDtos {
     }
 
     public record PayrollEntryResponse(Long id, Long employeeId, String employeeName, BigDecimal carsWashed,
-            BigDecimal baseSalary, BigDecimal carsBonusRate, BigDecimal carsBonus, BigDecimal commissions,
-            BigDecimal tipsPoolShare, BigDecimal manualEarnings, BigDecimal manualDeductions,
-            BigDecimal advancesDeducted, BigDecimal grossPay, BigDecimal netPay) {
+            BigDecimal baseSalary, BigDecimal restDayPay, BigDecimal absenceDeduction, BigDecimal carsBonusRate,
+            BigDecimal carsBonus, BigDecimal commissions, BigDecimal tipsPoolShare, BigDecimal manualEarnings,
+            BigDecimal manualDeductions, BigDecimal advancesDeducted, BigDecimal grossPay, BigDecimal netPay) {
         public static PayrollEntryResponse from(PayrollEntry entry) {
             return new PayrollEntryResponse(entry.getId(), entry.getEmployee().getId(), entry.getEmployee().getFullName(),
-                    entry.getCarsWashed(), entry.getBaseSalary(), entry.getCarsBonusRate(), entry.getCarsBonus(),
-                    entry.getCommissions(), entry.getTipsPoolShare(), entry.getManualEarnings(),
-                    entry.getManualDeductions(), entry.getAdvancesDeducted(), entry.getGrossPay(), entry.getNetPay());
+                    entry.getCarsWashed(), entry.getBaseSalary(), entry.getRestDayPay(), entry.getAbsenceDeduction(),
+                    entry.getCarsBonusRate(), entry.getCarsBonus(), entry.getCommissions(), entry.getTipsPoolShare(),
+                    entry.getManualEarnings(), entry.getManualDeductions(), entry.getAdvancesDeducted(),
+                    entry.getGrossPay(), entry.getNetPay());
         }
     }
 
