@@ -48,6 +48,7 @@ test('can create cash and card tickets and see payment labels in ticket browser'
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
   await fillTicketForm(page, fixture.catalog)
+  await page.getByTestId('ticket-advanced-toggle').click()
   await page.getByLabel('Descripcion del vehiculo').fill(cashVehicle)
   await page.getByLabel('Forma de pago').selectOption('CASH')
   await page.getByTestId('ticket-submit').click()
@@ -55,6 +56,7 @@ test('can create cash and card tickets and see payment labels in ticket browser'
 
   await page.goto('/tickets/nuevo')
   await fillTicketForm(page, fixture.catalog)
+  await page.getByTestId('ticket-advanced-toggle').click()
   await page.getByLabel('Descripcion del vehiculo').fill(cardVehicle)
   await page.getByLabel('Forma de pago').selectOption('CARD')
   await page.getByTestId('ticket-submit').click()

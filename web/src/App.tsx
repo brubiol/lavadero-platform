@@ -1275,7 +1275,10 @@ function Dashboard() {
               {(data?.recentTickets ?? []).map((ticket) => (
                 <tr key={ticket.id}>
                   <td className="font-semibold">{ticket.notaNumber}</td>
-                  <td>{ticket.vehicleDescription || '-'}</td>
+                  <td>
+                    <span>{ticket.vehicleDescription || '-'}</span>
+                    {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
+                  </td>
                   <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
                   <td>{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
                   <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
@@ -1566,6 +1569,18 @@ function TicketWorkspace({
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
   const [washerSearch, setWasherSearch] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(() =>
+    Boolean(
+      ticket && (
+        (ticket.discountPercent ?? 0) > 0 ||
+        ticket.courtesy ||
+        ticket.priceOverride != null ||
+        ticket.notes?.trim() ||
+        ticket.vehicleDescription?.trim() ||
+        ticket.internalRef?.trim()
+      ),
+    ),
+  )
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
   const defaultShift = openShifts[0]
@@ -1647,6 +1662,10 @@ function TicketWorkspace({
       ? 'No hay turno abierto para hoy.'
       : null
 
+  const hasAdvancedError = (['vehicleDescription', 'internalRef', 'occurredAt', 'priceOverride', 'notes', 'discountPercent', 'courtesyReason'] as const)
+    .some((field) => form.formState.errors[field])
+  const effectiveShowAdvanced = showAdvanced || hasAdvancedError
+
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
@@ -1702,25 +1721,6 @@ function TicketWorkspace({
                 </select>
               </SelectField>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextField label="Descripcion del vehiculo" error={form.formState.errors.vehicleDescription?.message}>
-                <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-              </TextField>
-              <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
-                <input placeholder="Ej. 41703" {...form.register('internalRef')} />
-              </TextField>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextField label="Fecha y hora del lavado" error={form.formState.errors.occurredAt?.message}>
-                <input type="datetime-local" {...form.register('occurredAt')} />
-              </TextField>
-              <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
-                <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
-              </TextField>
-            </div>
-            <TextField label="Notas internas" error={form.formState.errors.notes?.message}>
-              <textarea rows={2} placeholder="Notas visibles solo en esta pantalla por ahora" {...form.register('notes')} />
-            </TextField>
           </Panel>
 
           <Panel title="Lavadores">
@@ -1782,34 +1782,69 @@ function TicketWorkspace({
             {form.formState.errors.employeeIds?.message && <p className="mt-2 text-sm text-red-600">{form.formState.errors.employeeIds.message}</p>}
           </Panel>
 
-          <Panel title="Descuento">
-            <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                placeholder="0"
-                disabled={watched.courtesy}
-                {...form.register('discountPercent')}
-              />
-            </TextField>
-            {watched.discountPercent > 0 && !watched.courtesy && (
-              <p className="mt-1 text-xs text-amber-700">Precio final reducido {watched.discountPercent}%</p>
-            )}
-          </Panel>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            data-testid="ticket-advanced-toggle"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition-all hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 active:scale-[0.99]"
+          >
+            {effectiveShowAdvanced ? 'Menos opciones' : 'Mas opciones — descripcion, descuento, cortesia, notas'}
+          </button>
 
-          <Panel title="Cortesia">
-            <label className="flex items-center gap-3 text-sm font-medium">
-              <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
-              Marcar como cortesia
-            </label>
-            {watched.courtesy && (
-              <TextField label="Motivo de cortesia" error={form.formState.errors.courtesyReason?.message}>
-                <textarea rows={3} placeholder="Ej. Cliente del dueno" {...form.register('courtesyReason')} />
-              </TextField>
-            )}
-          </Panel>
+          {effectiveShowAdvanced && (
+            <>
+              <Panel title="Mas opciones">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextField label="Descripcion del vehiculo" error={form.formState.errors.vehicleDescription?.message}>
+                    <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
+                  </TextField>
+                  <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
+                    <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+                  </TextField>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextField label="Fecha y hora del lavado" error={form.formState.errors.occurredAt?.message}>
+                    <input type="datetime-local" {...form.register('occurredAt')} />
+                  </TextField>
+                  <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
+                    <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
+                  </TextField>
+                </div>
+                <TextField label="Notas internas" error={form.formState.errors.notes?.message}>
+                  <textarea rows={2} placeholder="Notas visibles solo en esta pantalla por ahora" {...form.register('notes')} />
+                </TextField>
+              </Panel>
+
+              <Panel title="Descuento">
+                <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    placeholder="0"
+                    disabled={watched.courtesy}
+                    {...form.register('discountPercent')}
+                  />
+                </TextField>
+                {watched.discountPercent > 0 && !watched.courtesy && (
+                  <p className="mt-1 text-xs text-amber-700">Precio final reducido {watched.discountPercent}%</p>
+                )}
+              </Panel>
+
+              <Panel title="Cortesia">
+                <label className="flex items-center gap-3 text-sm font-medium">
+                  <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
+                  Marcar como cortesia
+                </label>
+                {watched.courtesy && (
+                  <TextField label="Motivo de cortesia" error={form.formState.errors.courtesyReason?.message}>
+                    <textarea rows={3} placeholder="Ej. Cliente del dueno" {...form.register('courtesyReason')} />
+                  </TextField>
+                )}
+              </Panel>
+            </>
+          )}
         </div>
 
         <aside className="space-y-4">
@@ -3937,17 +3972,27 @@ function TicketsBrowser() {
   const queryClient = useQueryClient()
   const data = usePhaseData()
   const [query, setQuery] = useState('')
+  const [notaLookup, setNotaLookup] = useState('')
   const [status, setStatus] = useState<TicketStatus>('ACTIVE')
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [voiding, setVoiding] = useState<Ticket | null>(null)
 
   const tickets = useQuery({
     queryKey: ['tickets', data.currentBusinessDay?.id, status],
-    enabled: Boolean(data.currentBusinessDay?.id),
+    enabled: Boolean(data.currentBusinessDay?.id) && !notaLookup.trim(),
     queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${data.currentBusinessDay!.id}&status=${status}`),
   })
 
-  const filtered = (tickets.data ?? []).filter((ticket) => {
+  const notaResult = useQuery({
+    queryKey: ['tickets', 'nota', notaLookup.trim()],
+    enabled: Boolean(notaLookup.trim()),
+    queryFn: () => api<Ticket[]>(`/api/v1/tickets?nota_number=${encodeURIComponent(notaLookup.trim())}`),
+  })
+
+  const activeSource = notaLookup.trim() ? notaResult : tickets
+
+  const filtered = (activeSource.data ?? []).filter((ticket) => {
+    if (notaLookup.trim()) return true
     const haystack = `${ticket.notaNumber} ${ticket.vehicleDescription ?? ''} ${ticket.serviceTypeName} ${ticket.vehicleSizeName} ${ticket.assignments.map((a) => a.employeeName).join(' ')}`
       .toLowerCase()
     return haystack.includes(query.toLowerCase())
@@ -3966,14 +4011,21 @@ function TicketsBrowser() {
       </div>
 
       <Panel title="Filtros">
-        <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px]">
+          <input
+            className="field"
+            value={notaLookup}
+            onChange={(event) => { setNotaLookup(event.target.value); setQuery('') }}
+            placeholder="Buscar por nota de control (ej. 20260521-0042)"
+          />
           <input
             className="field"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por nota, vehiculo, servicio o lavador"
+            onChange={(event) => { setQuery(event.target.value); setNotaLookup('') }}
+            placeholder="Buscar por vehiculo, servicio o lavador"
+            disabled={Boolean(notaLookup.trim())}
           />
-          <select className="field" value={status} onChange={(event) => setStatus(event.target.value as TicketStatus)}>
+          <select className="field" value={status} onChange={(event) => setStatus(event.target.value as TicketStatus)} disabled={Boolean(notaLookup.trim())}>
             <option value="ACTIVE">Activos</option>
             <option value="VOIDED">Cancelados</option>
           </select>

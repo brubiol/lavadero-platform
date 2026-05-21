@@ -39,8 +39,9 @@ public class TicketController {
     public List<TicketResponse> list(@RequestParam(name = "business_day_id", required = false) Long businessDayId,
             @RequestParam(name = "shift_id", required = false) Long shiftId,
             @RequestParam(name = "employee_id", required = false) Long employeeId,
+            @RequestParam(name = "nota_number", required = false) String notaNumber,
             @RequestParam(required = false) TicketStatus status) {
-        return tickets.list(businessDayId, shiftId, employeeId, status).stream().map(TicketResponse::from).toList();
+        return tickets.list(businessDayId, shiftId, employeeId, notaNumber, status).stream().map(TicketResponse::from).toList();
     }
 
     @GetMapping("/{id}")

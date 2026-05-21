@@ -110,20 +110,27 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public List<Ticket> list(Long businessDayId, Long shiftId, Long employeeId, TicketStatus status) {
+    public List<Ticket> list(Long businessDayId, Long shiftId, Long employeeId, String notaNumber, TicketStatus status) {
         TicketStatus effectiveStatus = status == null ? TicketStatus.ACTIVE : status;
         Specification<Ticket> spec = (root, query, cb) -> {
             query.distinct(true);
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("status"), effectiveStatus));
-            if (businessDayId != null) {
-                predicates.add(cb.equal(root.get("businessDay").get("id"), businessDayId));
+            // nota_number lookup is cross-date; skip status filter so both ACTIVE and VOIDED are reachable
+            if (notaNumber == null || notaNumber.isBlank()) {
+                predicates.add(cb.equal(root.get("status"), effectiveStatus));
             }
-            if (shiftId != null) {
-                predicates.add(cb.equal(root.get("shift").get("id"), shiftId));
-            }
-            if (employeeId != null) {
-                predicates.add(cb.equal(root.join("assignments", JoinType.INNER).get("employee").get("id"), employeeId));
+            if (notaNumber != null && !notaNumber.isBlank()) {
+                predicates.add(cb.equal(root.get("notaNumber"), notaNumber.trim()));
+            } else {
+                if (businessDayId != null) {
+                    predicates.add(cb.equal(root.get("businessDay").get("id"), businessDayId));
+                }
+                if (shiftId != null) {
+                    predicates.add(cb.equal(root.get("shift").get("id"), shiftId));
+                }
+                if (employeeId != null) {
+                    predicates.add(cb.equal(root.join("assignments", JoinType.INNER).get("employee").get("id"), employeeId));
+                }
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
