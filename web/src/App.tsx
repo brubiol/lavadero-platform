@@ -1711,7 +1711,7 @@ function TicketWorkspace({
               </TextField>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <TextField label="Fecha y hora del servicio" error={form.formState.errors.occurredAt?.message}>
+              <TextField label="Fecha y hora del lavado" error={form.formState.errors.occurredAt?.message}>
                 <input type="datetime-local" {...form.register('occurredAt')} />
               </TextField>
               <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
