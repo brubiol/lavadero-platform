@@ -25,7 +25,8 @@ async function fillTicketForm(page: Page, catalog: Catalog) {
   await expect(page.getByLabel('Turno')).not.toHaveValue('0', { timeout: 15_000 })
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
   await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
-  await page.locator('label').filter({ hasText: catalog.employeeName }).first().click()
+  await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
+  await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
 
 test('new ticket form shows resolved price on service selection', async ({ page, request }) => {

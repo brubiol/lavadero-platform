@@ -14,7 +14,8 @@ async function fillBaseTicket(page: Page, catalog: Catalog, description: string)
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
   await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
   await page.getByLabel('Descripcion del vehiculo').fill(description)
-  await page.locator('label').filter({ hasText: catalog.employeeName }).first().click()
+  await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
+  await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
 
 test('discount field reduces price preview and saved ticket price', async ({ page, request }) => {
