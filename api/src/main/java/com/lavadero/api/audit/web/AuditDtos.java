@@ -8,11 +8,12 @@ public final class AuditDtos {
     }
 
     public record AuditEventResponse(Long id, Instant occurredAt, String actorUsername, String action,
-            String entityType, Long entityId, String reason, String details) {
+            String entityType, Long entityId, String reason, String details, String severity,
+            Instant reviewedAt, String reviewedBy) {
         public static AuditEventResponse from(AuditEvent event) {
             return new AuditEventResponse(event.getId(), event.getOccurredAt(), event.getActorUsername(),
                     event.getAction(), event.getEntityType(), event.getEntityId(), event.getReason(),
-                    event.getDetails());
+                    event.getDetails(), event.getSeverity().name(), event.getReviewedAt(), event.getReviewedBy());
         }
     }
 }

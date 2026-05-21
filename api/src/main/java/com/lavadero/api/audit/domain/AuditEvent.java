@@ -2,6 +2,8 @@ package com.lavadero.api.audit.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -39,17 +41,38 @@ public class AuditEvent {
     @Column(length = 1000)
     private String details;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AuditSeverity severity = AuditSeverity.INFO;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "reviewed_by", length = 120)
+    private String reviewedBy;
+
     protected AuditEvent() {
     }
 
     public AuditEvent(String actorUsername, String action, String entityType, Long entityId, String reason,
             String details) {
+        this(actorUsername, action, entityType, entityId, reason, details, AuditSeverity.INFO);
+    }
+
+    public AuditEvent(String actorUsername, String action, String entityType, Long entityId, String reason,
+            String details, AuditSeverity severity) {
         this.actorUsername = actorUsername;
         this.action = action;
         this.entityType = entityType;
         this.entityId = entityId;
         this.reason = reason;
         this.details = details;
+        this.severity = severity == null ? AuditSeverity.INFO : severity;
+    }
+
+    public void markReviewed(String reviewer) {
+        this.reviewedAt = Instant.now();
+        this.reviewedBy = reviewer;
     }
 
     public Long getId() {
@@ -82,5 +105,17 @@ public class AuditEvent {
 
     public String getDetails() {
         return details;
+    }
+
+    public AuditSeverity getSeverity() {
+        return severity;
+    }
+
+    public Instant getReviewedAt() {
+        return reviewedAt;
+    }
+
+    public String getReviewedBy() {
+        return reviewedBy;
     }
 }

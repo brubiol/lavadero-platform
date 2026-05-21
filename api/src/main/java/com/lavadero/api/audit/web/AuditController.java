@@ -6,6 +6,8 @@ import java.time.LocalDate;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,5 +28,15 @@ public class AuditController {
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) Long entityId) {
         return audit.search(from, to, entityType, entityId).stream().map(AuditEventResponse::from).toList();
+    }
+
+    @GetMapping("/flagged")
+    public List<AuditEventResponse> flagged() {
+        return audit.pendingFlagged().stream().map(AuditEventResponse::from).toList();
+    }
+
+    @PostMapping("/{id}/review")
+    public AuditEventResponse review(@PathVariable Long id) {
+        return AuditEventResponse.from(audit.markReviewed(id));
     }
 }

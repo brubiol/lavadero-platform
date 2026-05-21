@@ -304,6 +304,9 @@ type AuditEvent = {
   entityId?: number | null
   reason?: string | null
   details?: string | null
+  severity: 'INFO' | 'FLAGGED'
+  reviewedAt?: string | null
+  reviewedBy?: string | null
 }
 
 type MovementType = 'SALE' | 'FIADO' | 'PURCHASE' | 'ADJUSTMENT' | 'OPENING_COUNT' | 'CLOSING_COUNT'
@@ -1218,6 +1221,15 @@ function Dashboard() {
 
   const data = summary.data
 
+  const { hasRole } = useAuth()
+  const isOwner = hasRole('DUENO')
+  const flagged = useQuery({
+    queryKey: ['audit-events', 'flagged'],
+    queryFn: () => api<AuditEvent[]>('/api/v1/audit-events/flagged'),
+    enabled: isOwner,
+  })
+  const pendingFlagged = flagged.data ?? []
+
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1230,6 +1242,24 @@ function Dashboard() {
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
         </label>
       </div>
+
+      {isOwner && pendingFlagged.length > 0 && (
+        <NavLink
+          to="/auditoria"
+          className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 transition-colors hover:bg-amber-100"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-200 text-base font-bold text-amber-800">!</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {pendingFlagged.length} cambio{pendingFlagged.length === 1 ? '' : 's'} irregular{pendingFlagged.length === 1 ? '' : 'es'} por revisar
+              </p>
+              <p className="text-xs text-amber-700">Cambios grandes de nomina o de pago del personal. Toca para revisar.</p>
+            </div>
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-amber-700">Revisar</span>
+        </NavLink>
+      )}
 
       <DayStatusCard />
 
@@ -2739,12 +2769,54 @@ function AuditScreen() {
     queryFn: () => api<AuditEvent[]>(`/api/v1/audit-events?${query.toString()}`),
   })
 
+  const queryClient = useQueryClient()
+  const flagged = useQuery({
+    queryKey: ['audit-events', 'flagged'],
+    queryFn: () => api<AuditEvent[]>('/api/v1/audit-events/flagged'),
+  })
+  const review = useMutation({
+    mutationFn: (id: number) => api<AuditEvent>(`/api/v1/audit-events/${id}/review`, { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['audit-events'] })
+    },
+  })
+  const pendingFlagged = flagged.data ?? []
+
   return (
     <section className="space-y-5">
       <div>
         <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Auditoria</h2>
         <p className="text-[13.5px] text-ink-500 mt-0.5">Cambios importantes de caja, tickets, gastos, nomina y correcciones.</p>
       </div>
+
+      {pendingFlagged.length > 0 && (
+        <Panel title={`Cambios irregulares por revisar (${pendingFlagged.length})`}>
+          <p className="mb-3 text-[13px] text-ink-500">
+            Cambios grandes de nomina o de pago del personal. Revisa cada uno y marcalo como revisado.
+          </p>
+          <div className="space-y-2">
+            {pendingFlagged.map((event) => (
+              <div key={event.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-900">{event.reason || event.action}</p>
+                  {event.details && <p className="text-xs text-amber-700">{event.details}</p>}
+                  <p className="mt-0.5 text-[11px] text-amber-600">
+                    {event.actorUsername} · {formatDateTime(event.occurredAt)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => review.mutate(event.id)}
+                  disabled={review.isPending}
+                  className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  Marcar revisado
+                </button>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       <Panel title="Filtros">
         <div className="grid gap-3 md:grid-cols-[180px_180px_220px_160px]">
@@ -2789,7 +2861,7 @@ function AuditScreen() {
             </thead>
             <tbody className="">
               {(events.data ?? []).map((event) => (
-                <tr key={event.id}>
+                <tr key={event.id} className={event.severity === 'FLAGGED' ? 'bg-amber-50' : ''}>
                   <td className="whitespace-nowrap text-gray-500">{formatDateTime(event.occurredAt)}</td>
                   <td>
                     <div className="flex items-center gap-2">

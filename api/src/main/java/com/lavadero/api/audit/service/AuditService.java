@@ -1,7 +1,9 @@
 package com.lavadero.api.audit.service;
 
 import com.lavadero.api.audit.domain.AuditEvent;
+import com.lavadero.api.audit.domain.AuditSeverity;
 import com.lavadero.api.audit.repository.AuditEventRepository;
+import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -22,6 +24,26 @@ public class AuditService {
     @Transactional
     public void record(String action, String entityType, Long entityId, String reason, String details) {
         events.save(new AuditEvent(currentActor(), action, entityType, entityId, normalize(reason), normalize(details)));
+    }
+
+    // Records an irregular change for the owner to review and acknowledge.
+    @Transactional
+    public void recordFlagged(String action, String entityType, Long entityId, String reason, String details) {
+        events.save(new AuditEvent(currentActor(), action, entityType, entityId, normalize(reason),
+                normalize(details), AuditSeverity.FLAGGED));
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditEvent> pendingFlagged() {
+        return events.findBySeverityAndReviewedAtIsNullOrderByOccurredAtDesc(AuditSeverity.FLAGGED);
+    }
+
+    @Transactional
+    public AuditEvent markReviewed(Long id) {
+        AuditEvent event = events.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Audit event not found"));
+        event.markReviewed(currentActor());
+        return events.save(event);
     }
 
     @Transactional(readOnly = true)

@@ -48,6 +48,9 @@ public class PayrollService {
     private static final BigDecimal WORK_DAYS_PER_WEEK = new BigDecimal("6");
     private static final long FULL_WEEK_ATTENDANCE = 7;
 
+    // Manual payroll adjustments above this amount are flagged for owner review.
+    private static final BigDecimal LARGE_ADJUSTMENT_THRESHOLD = new BigDecimal("1000.00");
+
     private final PayrollPeriodRepository periods;
     private final PayrollEntryRepository entries;
     private final PayrollDayRepository days;
@@ -232,6 +235,11 @@ public class PayrollService {
                 money(request.amount()), request.concept().trim(), normalize(request.note())));
         audit.record("PAYROLL_ADJUSTMENT_CREATED", "PAYROLL_ADJUSTMENT", adjustment.getId(), request.concept(),
                 "Period " + period.getId() + ": " + employee.getFullName() + " " + request.type() + " " + money(request.amount()));
+        if (money(request.amount()).abs().compareTo(LARGE_ADJUSTMENT_THRESHOLD) > 0) {
+            audit.recordFlagged("PAYROLL_ADJUSTMENT_LARGE", "PAYROLL_ADJUSTMENT", adjustment.getId(),
+                    "Ajuste de nomina grande: " + employee.getFullName(),
+                    request.type() + " " + money(request.amount()).toPlainString() + " - " + request.concept());
+        }
         return PayrollAdjustmentResponse.from(adjustment);
     }
 
