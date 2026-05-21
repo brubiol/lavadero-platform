@@ -1,5 +1,6 @@
 package com.lavadero.api.inventory.domain;
 
+import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.common.domain.AuditedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -45,6 +46,10 @@ public class ProductMovement extends AuditedEntity {
     @Column(length = 500)
     private String reason;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employee_id")
+    private Employee employee;
+
     protected ProductMovement() {
     }
 
@@ -57,6 +62,14 @@ public class ProductMovement extends AuditedEntity {
         this.unitPrice = unitPrice;
         this.totalAmount = totalAmount;
         this.reason = reason;
+    }
+
+    public void setEmployee(Employee employee) {
+        this.employee = employee;
+    }
+
+    public Employee getEmployee() {
+        return employee;
     }
 
     public Long getId() {

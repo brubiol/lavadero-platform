@@ -27,6 +27,9 @@ public class Employee extends AuditedEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "deactivation_reason", length = 500)
+    private String deactivationReason;
+
     @Column(name = "base_weekly_salary", nullable = false, precision = 10, scale = 2)
     private BigDecimal baseWeeklySalary = BigDecimal.ZERO;
 
@@ -39,6 +42,12 @@ public class Employee extends AuditedEntity {
 
     @Column(name = "productivity_bonus_rate", nullable = false, precision = 10, scale = 2)
     private BigDecimal productivityBonusRate = new BigDecimal("10.00");
+
+    @Column(name = "primary_shift", length = 20)
+    private String primaryShift;
+
+    @Column(name = "out_of_shift_commission_rate", nullable = false, precision = 10, scale = 2)
+    private BigDecimal outOfShiftCommissionRate = BigDecimal.ZERO;
 
     protected Employee() {
     }
@@ -82,6 +91,10 @@ public class Employee extends AuditedEntity {
         return active;
     }
 
+    public String getDeactivationReason() {
+        return deactivationReason;
+    }
+
     public BigDecimal getBaseWeeklySalary() {
         return baseWeeklySalary;
     }
@@ -98,8 +111,17 @@ public class Employee extends AuditedEntity {
         return productivityBonusRate;
     }
 
+    public String getPrimaryShift() {
+        return primaryShift;
+    }
+
+    public BigDecimal getOutOfShiftCommissionRate() {
+        return outOfShiftCommissionRate;
+    }
+
     public void update(String fullName, String phone, Boolean active, BigDecimal baseWeeklySalary,
-            PayrollType payrollType, BigDecimal commissionRate, BigDecimal productivityBonusRate) {
+            PayrollType payrollType, BigDecimal commissionRate, BigDecimal productivityBonusRate,
+            String deactivationReason, String primaryShift, BigDecimal outOfShiftCommissionRate) {
         if (fullName != null) {
             this.fullName = fullName;
         }
@@ -108,6 +130,12 @@ public class Employee extends AuditedEntity {
         }
         if (active != null) {
             this.active = active;
+            if (!active && deactivationReason != null && !deactivationReason.isBlank()) {
+                this.deactivationReason = deactivationReason.trim();
+            }
+            if (Boolean.TRUE.equals(active)) {
+                this.deactivationReason = null;
+            }
         }
         if (baseWeeklySalary != null) {
             this.baseWeeklySalary = baseWeeklySalary;
@@ -120,6 +148,10 @@ public class Employee extends AuditedEntity {
         }
         if (productivityBonusRate != null) {
             this.productivityBonusRate = productivityBonusRate;
+        }
+        this.primaryShift = (primaryShift == null || primaryShift.isBlank()) ? null : primaryShift.trim();
+        if (outOfShiftCommissionRate != null) {
+            this.outOfShiftCommissionRate = outOfShiftCommissionRate;
         }
     }
 

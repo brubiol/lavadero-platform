@@ -29,7 +29,10 @@ public final class TicketDtos {
             Boolean courtesy,
             @Size(max = 500) String courtesyReason,
             @DecimalMin("0") @DecimalMax("100") BigDecimal discountPercent,
-            @NotEmpty List<@NotNull Long> employeeIds) {
+            @NotEmpty List<@NotNull Long> employeeIds,
+            Instant occurredAt,
+            @Size(max = 40) String internalRef,
+            @DecimalMin("0.01") BigDecimal priceOverride) {
     }
 
     public record UpdateTicketRequest(
@@ -41,7 +44,11 @@ public final class TicketDtos {
             Boolean courtesy,
             @Size(max = 500) String courtesyReason,
             @DecimalMin("0") @DecimalMax("100") BigDecimal discountPercent,
-            List<@NotNull Long> employeeIds) {
+            List<@NotNull Long> employeeIds,
+            Instant occurredAt,
+            @Size(max = 40) String internalRef,
+            @DecimalMin("0.01") BigDecimal priceOverride,
+            @Size(max = 500) String notes) {
     }
 
     public record VoidTicketRequest(@NotNull @Size(min = 1, max = 500) String reason) {
@@ -63,7 +70,8 @@ public final class TicketDtos {
             BigDecimal originalPriceAmount, TicketCurrency currency, PaymentMethod paymentMethod,
             boolean courtesy, String courtesyReason, TicketStatus status, String voidReason, Instant voidedAt,
             List<TicketAssignmentResponse> assignments, Instant createdAt, Instant updatedAt,
-            Long customerId, String customerName) {
+            Long customerId, String customerName, Instant occurredAt, String internalRef, BigDecimal priceOverride,
+            String notes) {
         public static TicketResponse from(Ticket ticket) {
             return new TicketResponse(ticket.getId(), ticket.getBusinessDay().getId(), ticket.getShift().getId(),
                     ticket.getServiceType().getId(), ticket.getServiceType().getName(), ticket.getVehicleSize().getId(),
@@ -75,7 +83,9 @@ public final class TicketDtos {
                     ticket.getAssignments().stream().map(TicketAssignmentResponse::from).toList(),
                     ticket.getCreatedAt(), ticket.getUpdatedAt(),
                     ticket.getCustomer() != null ? ticket.getCustomer().getId() : null,
-                    ticket.getCustomer() != null ? ticket.getCustomer().getName() : null);
+                    ticket.getCustomer() != null ? ticket.getCustomer().getName() : null,
+                    ticket.getOccurredAt(), ticket.getInternalRef(), ticket.getPriceOverride(),
+                    ticket.getNotes());
         }
     }
 }

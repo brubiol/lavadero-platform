@@ -67,6 +67,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/customers/**").hasRole("GERENTE")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/customers/**").hasRole("GERENTE")
                         .requestMatchers(HttpMethod.GET, "/api/v1/customers/**").hasRole("OPERADOR")
+                        .requestMatchers("/api/v1/attendance/**").hasRole("GERENTE")
                         .requestMatchers("/api/v1/employees/**", "/api/v1/service-types/**",
                                 "/api/v1/vehicle-sizes/**", "/api/v1/service-prices/**").hasRole("GERENTE")
                         .requestMatchers("/api/v1/business-days/**", "/api/v1/shifts/**",

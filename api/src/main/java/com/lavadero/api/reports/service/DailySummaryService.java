@@ -2,8 +2,10 @@ package com.lavadero.api.reports.service;
 
 import com.lavadero.api.cash.domain.ShiftCloseSummary;
 import com.lavadero.api.cash.repository.ShiftCloseSummaryRepository;
+import com.lavadero.api.inventory.domain.MovementType;
 import com.lavadero.api.inventory.repository.ProductMovementRepository;
 import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
+import com.lavadero.api.operations.domain.PaymentMethod;
 import com.lavadero.api.money.repository.ExpenseRepository;
 import com.lavadero.api.money.repository.WithdrawalRepository;
 import com.lavadero.api.operations.domain.Ticket;
@@ -85,24 +87,34 @@ public class DailySummaryService {
         long voidedCount = dailyTickets.stream()
                 .filter(ticket -> ticket.getStatus() == TicketStatus.VOIDED)
                 .count();
-        BigDecimal ticketRevenue = dailyTickets.stream()
+
+        List<Ticket> paidTickets = dailyTickets.stream()
                 .filter(ticket -> ticket.getStatus() != TicketStatus.VOIDED)
                 .filter(ticket -> !ticket.isCourtesy())
-                .map(Ticket::getPriceAmount)
-                .reduce(ZERO, BigDecimal::add);
+                .toList();
+        BigDecimal ticketRevenue = paidTickets.stream().map(Ticket::getPriceAmount).reduce(ZERO, BigDecimal::add);
+        BigDecimal cashRevenue = paidTickets.stream()
+                .filter(ticket -> ticket.getPaymentMethod() == PaymentMethod.CASH)
+                .map(Ticket::getPriceAmount).reduce(ZERO, BigDecimal::add);
+        BigDecimal cardRevenue = paidTickets.stream()
+                .filter(ticket -> ticket.getPaymentMethod() == PaymentMethod.CARD)
+                .map(Ticket::getPriceAmount).reduce(ZERO, BigDecimal::add);
+        BigDecimal inventorySalesRevenue = inventoryMovements.sumTotalAmountByTypeAndDateBetween(
+                MovementType.SALE, startInstant(date), endInstant(date));
 
         BigDecimal expensesTotal = expenses.sumForDate(date)
                 .add(withdrawals.sumForDate(date))
                 .add(advances.sumForDate(date));
-        BigDecimal result = ticketRevenue.subtract(expensesTotal);
+        BigDecimal result = ticketRevenue.add(inventorySalesRevenue).subtract(expensesTotal);
         List<Ticket> recentTickets = dailyTickets.stream().limit(10).toList();
         List<ShiftCloseSummary> closes = closeSummaries.findByShiftBusinessDayBusinessDate(date);
         BigDecimal cashVariance = closes.isEmpty()
                 ? null
                 : closes.stream().map(ShiftCloseSummary::getVariance).reduce(ZERO, BigDecimal::add);
 
-        return DailySummaryResponse.from(date, carsWashed, ticketRevenue, expensesTotal, result,
-                courtesyCount, voidedCount, recentTickets, cashVariance);
+        return DailySummaryResponse.from(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue,
+                inventorySalesRevenue, expensesTotal, result, courtesyCount, voidedCount, recentTickets,
+                cashVariance);
     }
 
     @Transactional(readOnly = true)

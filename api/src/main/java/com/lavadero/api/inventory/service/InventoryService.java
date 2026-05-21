@@ -1,5 +1,7 @@
 package com.lavadero.api.inventory.service;
 
+import com.lavadero.api.catalog.domain.Employee;
+import com.lavadero.api.catalog.repository.EmployeeRepository;
 import com.lavadero.api.inventory.domain.MovementType;
 import com.lavadero.api.inventory.domain.Product;
 import com.lavadero.api.inventory.domain.ProductMovement;
@@ -14,10 +16,13 @@ import com.lavadero.api.inventory.web.InventoryDtos.MovementResponse;
 import com.lavadero.api.inventory.web.InventoryDtos.ProductResponse;
 import com.lavadero.api.inventory.web.InventoryDtos.ProductSnapshotResponse;
 import com.lavadero.api.inventory.web.InventoryDtos.UpdateProductRequest;
+import com.lavadero.api.money.domain.EmployeeAdvance;
+import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,10 +35,15 @@ public class InventoryService {
 
     private final ProductRepository products;
     private final ProductMovementRepository movements;
+    private final EmployeeRepository employees;
+    private final EmployeeAdvanceRepository advances;
 
-    public InventoryService(ProductRepository products, ProductMovementRepository movements) {
+    public InventoryService(ProductRepository products, ProductMovementRepository movements,
+            EmployeeRepository employees, EmployeeAdvanceRepository advances) {
         this.products = products;
         this.movements = movements;
+        this.employees = employees;
+        this.advances = advances;
     }
 
     @Transactional(readOnly = true)
@@ -86,9 +96,19 @@ public class InventoryService {
         Product product = activeProduct(request.productId());
         BigDecimal quantity = positive(request.quantity(), "quantity must be positive").negate();
         BigDecimal unitPrice = moneyOrDefault(request.unitPrice(), product.getCurrentUnitPrice());
-        MovementType type = Boolean.TRUE.equals(request.fiado()) ? MovementType.FIADO : MovementType.SALE;
-        return movements.save(new ProductMovement(product, type, movementDate(request.movementDate()), quantity,
-                unitPrice, money(unitPrice.multiply(quantity.abs())), null));
+        BigDecimal total = money(unitPrice.multiply(quantity.abs()));
+        boolean fiado = Boolean.TRUE.equals(request.fiado());
+        MovementType type = fiado ? MovementType.FIADO : MovementType.SALE;
+        ProductMovement movement = new ProductMovement(product, type, movementDate(request.movementDate()), quantity,
+                unitPrice, total, null);
+        if (fiado && request.employeeId() != null) {
+            Employee employee = employees.findById(request.employeeId())
+                    .orElseThrow(() -> new EntityNotFoundException("Employee not found"));
+            movement.setEmployee(employee);
+            advances.save(new EmployeeAdvance(null, null, employee, LocalDate.now(), total,
+                    "Fiado: " + product.getName()));
+        }
+        return movements.save(movement);
     }
 
     @Transactional

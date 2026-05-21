@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface TicketAssignmentRepository extends JpaRepository<TicketAssignment, Long> {
-    @EntityGraph(attributePaths = {"employee", "ticket", "ticket.businessDay"})
+    @EntityGraph(attributePaths = {"employee", "ticket", "ticket.businessDay", "ticket.shift"})
     @Query("""
             select ta
             from TicketAssignment ta

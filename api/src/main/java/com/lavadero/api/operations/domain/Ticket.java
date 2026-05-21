@@ -87,6 +87,18 @@ public class Ticket extends AuditedEntity {
     @Column(name = "voided_at")
     private Instant voidedAt;
 
+    @Column(name = "occurred_at")
+    private Instant occurredAt;
+
+    @Column(name = "internal_ref", length = 40)
+    private String internalRef;
+
+    @Column(name = "price_override", precision = 10, scale = 2)
+    private BigDecimal priceOverride;
+
+    @Column(length = 500)
+    private String notes;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     private Customer customer;
@@ -189,6 +201,34 @@ public class Ticket extends AuditedEntity {
         return voidedAt;
     }
 
+    public Instant getOccurredAt() {
+        return occurredAt;
+    }
+
+    public void setOccurredAt(Instant occurredAt) {
+        this.occurredAt = occurredAt;
+    }
+
+    public String getInternalRef() {
+        return internalRef;
+    }
+
+    public void setInternalRef(String internalRef) {
+        this.internalRef = internalRef;
+    }
+
+    public BigDecimal getPriceOverride() {
+        return priceOverride;
+    }
+
+    public void setPriceOverride(BigDecimal priceOverride) {
+        this.priceOverride = priceOverride;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
     public List<TicketAssignment> getAssignments() {
         return assignments;
     }
@@ -203,7 +243,8 @@ public class Ticket extends AuditedEntity {
 
     public void update(ServiceType serviceType, VehicleSize vehicleSize, String vehicleDescription,
             BigDecimal priceAmount, BigDecimal discountPercent, BigDecimal originalPriceAmount,
-            TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason) {
+            TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason,
+            Instant occurredAt, String internalRef, String notes) {
         this.serviceType = serviceType;
         this.vehicleSize = vehicleSize;
         this.vehicleDescription = vehicleDescription;
@@ -214,6 +255,15 @@ public class Ticket extends AuditedEntity {
         this.paymentMethod = paymentMethod != null ? paymentMethod : this.paymentMethod;
         this.courtesy = courtesy;
         this.courtesyReason = courtesyReason;
+        if (occurredAt != null) {
+            this.occurredAt = occurredAt;
+        }
+        if (internalRef != null) {
+            this.internalRef = internalRef;
+        }
+        if (notes != null) {
+            this.notes = notes.isBlank() ? null : notes.trim();
+        }
     }
 
     public void replaceAssignments(List<TicketAssignment> nextAssignments) {

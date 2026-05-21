@@ -40,7 +40,8 @@ public class EmployeeService {
     public Employee update(Long id, UpdateEmployeeRequest request) {
         Employee employee = get(id);
         employee.update(request.fullName(), request.phone(), request.active(), request.baseWeeklySalary(),
-                request.payrollType(), request.commissionRate(), request.productivityBonusRate());
+                request.payrollType(), request.commissionRate(), request.productivityBonusRate(),
+                request.deactivationReason(), request.primaryShift(), request.outOfShiftCommissionRate());
         return employee;
     }
 

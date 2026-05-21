@@ -1,5 +1,6 @@
 package com.lavadero.api.inventory.web;
 
+import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.inventory.domain.MovementType;
 import com.lavadero.api.inventory.domain.Product;
 import com.lavadero.api.inventory.domain.ProductMovement;
@@ -40,7 +41,7 @@ public final class InventoryDtos {
     }
 
     public record CreateSaleRequest(@NotNull Long productId, @NotNull @DecimalMin("0.01") BigDecimal quantity,
-            BigDecimal unitPrice, Boolean fiado, Instant movementDate) {
+            BigDecimal unitPrice, Boolean fiado, Instant movementDate, Long employeeId) {
     }
 
     public record CreatePurchaseRequest(@NotNull Long productId, @NotNull @DecimalMin("0.01") BigDecimal quantity,
@@ -52,11 +53,14 @@ public final class InventoryDtos {
     }
 
     public record MovementResponse(Long id, Long productId, String productName, MovementType movementType,
-            Instant movementDate, BigDecimal quantity, BigDecimal unitPrice, BigDecimal totalAmount, String reason) {
+            Instant movementDate, BigDecimal quantity, BigDecimal unitPrice, BigDecimal totalAmount, String reason,
+            Long employeeId, String employeeName) {
         public static MovementResponse from(ProductMovement movement) {
+            Employee emp = movement.getEmployee();
             return new MovementResponse(movement.getId(), movement.getProduct().getId(), movement.getProduct().getName(),
                     movement.getMovementType(), movement.getMovementDate(), movement.getQuantity(),
-                    movement.getUnitPrice(), movement.getTotalAmount(), movement.getReason());
+                    movement.getUnitPrice(), movement.getTotalAmount(), movement.getReason(),
+                    emp != null ? emp.getId() : null, emp != null ? emp.getFullName() : null);
         }
     }
 

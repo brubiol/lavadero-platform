@@ -30,9 +30,10 @@ const NAV_OPS: NavItem[] = [
 ]
 
 const NAV_MGMT: NavItem[] = [
-  { id: 'nomina',     to: '/nomina',     label: 'Nómina',     icon: <IPayroll />,   roles: ['GERENTE','DUENO'] },
-  { id: 'inventario', to: '/inventario', label: 'Inventario', icon: <IInventory />, roles: ['GERENTE','DUENO'] },
-  { id: 'catalogos',  to: '/catalogos',  label: 'Catálogos',  icon: <ICatalog />,   roles: ['GERENTE','DUENO'] },
+  { id: 'nomina',      to: '/nomina',      label: 'Nómina',      icon: <IPayroll />,   roles: ['GERENTE','DUENO'] },
+  { id: 'inventario',  to: '/inventario',  label: 'Inventario',  icon: <IInventory />, roles: ['GERENTE','DUENO'] },
+  { id: 'catalogos',   to: '/catalogos',   label: 'Catálogos',   icon: <ICatalog />,   roles: ['GERENTE','DUENO'] },
+  { id: 'asistencia',  to: '/asistencia',  label: 'Asistencia',  icon: <ICalendar />,  roles: ['GERENTE','DUENO'] },
 ]
 
 const NAV_OWNER: NavItem[] = [

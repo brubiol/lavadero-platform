@@ -29,6 +29,7 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -82,8 +83,11 @@ public class TicketService {
                 : (request.discountPercent() != null ? request.discountPercent() : ZERO);
         BigDecimal[] resolved = resolvePrice(serviceType.getId(), vehicleSize.getId(), request.currency(), businessDay,
                 courtesy, request.courtesyReason(), discount);
-        BigDecimal priceAmount = resolved[0];
         BigDecimal originalPriceAmount = resolved[1];
+        BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
+                && request.priceOverride().compareTo(ZERO) > 0)
+                ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
+                : resolved[0];
 
         PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
                 : (request.paymentMethod() != null ? request.paymentMethod() : PaymentMethod.CASH);
@@ -92,6 +96,13 @@ public class TicketService {
         Ticket ticket = new Ticket(businessDay, shift, serviceType, vehicleSize, dailySeq, notaNumber,
                 request.vehicleDescription(), priceAmount, discount, originalPriceAmount,
                 request.currency(), paymentMethod, courtesy, request.courtesyReason());
+        ticket.setOccurredAt(request.occurredAt() != null ? request.occurredAt() : Instant.now());
+        if (request.internalRef() != null && !request.internalRef().isBlank()) {
+            ticket.setInternalRef(request.internalRef().trim());
+        }
+        if (request.priceOverride() != null && request.priceOverride().compareTo(ZERO) > 0) {
+            ticket.setPriceOverride(request.priceOverride().setScale(2, RoundingMode.HALF_UP));
+        }
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         Ticket saved = tickets.save(ticket);
         audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
@@ -152,10 +163,18 @@ public class TicketService {
                 : (request.discountPercent() != null ? request.discountPercent() : ticket.getDiscountPercent());
         BigDecimal[] resolved = resolvePrice(serviceType.getId(), vehicleSize.getId(), currency, ticket.getBusinessDay(),
                 courtesy, courtesyReason, discount);
-        BigDecimal priceAmount = resolved[0];
         BigDecimal originalPriceAmount = resolved[1];
+        BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
+                && request.priceOverride().compareTo(ZERO) > 0)
+                ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
+                : resolved[0];
+        BigDecimal override = (!courtesy && request.priceOverride() != null
+                && request.priceOverride().compareTo(ZERO) > 0)
+                ? request.priceOverride().setScale(2, RoundingMode.HALF_UP) : ticket.getPriceOverride();
         ticket.update(serviceType, vehicleSize, vehicleDescription, priceAmount, discount, originalPriceAmount,
-                currency, paymentMethod, courtesy, courtesyReason);
+                currency, paymentMethod, courtesy, courtesyReason, request.occurredAt(), request.internalRef(),
+                request.notes());
+        ticket.setPriceOverride(override);
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }

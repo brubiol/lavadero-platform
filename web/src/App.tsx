@@ -52,6 +52,9 @@ type Employee = {
   payrollType: PayrollType
   commissionRate: number
   productivityBonusRate: number
+  deactivationReason?: string | null
+  primaryShift?: string | null
+  outOfShiftCommissionRate: number
 }
 
 type ServiceType = {
@@ -163,12 +166,32 @@ type Ticket = {
   assignments: TicketAssignment[]
   createdAt: string
   updatedAt: string
+  occurredAt?: string | null
+  internalRef?: string | null
+  priceOverride?: number | null
+  notes?: string | null
+}
+
+type AttendanceRecord = {
+  id: number
+  employeeId: number
+  employeeName: string
+  workDate: string
+  clockIn?: string | null
+  clockOut?: string | null
+  absence: boolean
+  note?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 type DailySummary = {
   date: string
   carsWashed: number
   ticketRevenue: number
+  cashRevenue: number
+  cardRevenue: number
+  inventorySalesRevenue: number
   expensesTotal: number
   result: number
   courtesyCount: number
@@ -302,6 +325,8 @@ type ProductMovement = {
   unitPrice: number
   totalAmount: number
   reason?: string | null
+  employeeId?: number | null
+  employeeName?: string | null
 }
 
 type ProductSnapshot = {
@@ -482,7 +507,6 @@ const ticketSchema = z.object({
   shiftId: z.coerce.number().positive('Selecciona un turno abierto'),
   serviceTypeId: z.coerce.number().positive('Selecciona un servicio'),
   vehicleSizeId: z.coerce.number().positive('Selecciona un tamano'),
-  currency: z.enum(['MXN', 'USD']),
   paymentMethod: z.enum(['CASH', 'CARD']).default('CASH'),
   vehicleDescription: z.string().max(160, 'Maximo 160 caracteres').optional(),
   notes: z.string().max(500, 'Maximo 500 caracteres').optional(),
@@ -490,6 +514,9 @@ const ticketSchema = z.object({
   courtesyReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
   discountPercent: z.coerce.number().min(0, 'Minimo 0').max(100, 'Maximo 100').default(0),
   employeeIds: z.array(z.coerce.number()).min(1, 'Selecciona al menos un lavador'),
+  occurredAt: z.string().optional(),
+  internalRef: z.string().max(40, 'Maximo 40 caracteres').optional(),
+  priceOverride: z.coerce.number().min(0.01, 'Minimo $0.01').optional().or(z.literal('')),
 }).superRefine((value, ctx) => {
   if (value.courtesy && !value.courtesyReason?.trim()) {
     ctx.addIssue({
@@ -544,7 +571,6 @@ const servicePriceSchema = z.object({
   serviceTypeId: z.coerce.number().positive('Selecciona servicio'),
   vehicleSizeId: z.coerce.number().positive('Selecciona tamano'),
   amount: z.coerce.number().positive('El precio debe ser mayor que 0'),
-  currency: z.enum(['MXN', 'USD']),
   effectiveFrom: z.string().min(1, 'Selecciona fecha'),
 })
 
@@ -591,7 +617,6 @@ type AdvanceFormValues = z.infer<typeof advanceSchema>
 
 const cashCountSchema = z.object({
   shiftId: z.coerce.number().positive('Selecciona turno'),
-  currency: z.enum(['MXN', 'USD']),
   bills1000: z.coerce.number().int().min(0),
   bills500: z.coerce.number().int().min(0),
   bills200: z.coerce.number().int().min(0),
@@ -646,6 +671,7 @@ const inventorySaleSchema = z.object({
   unitPrice: z.coerce.number().min(0, 'Minimo 0').optional(),
   movementDate: z.string().optional(),
   fiado: z.boolean().default(false),
+  employeeId: z.coerce.number().optional(),
 })
 
 type InventorySaleFormValues = z.infer<typeof inventorySaleSchema>
@@ -826,6 +852,7 @@ const ROUTE_META: Record<string, { title: string; section: string }> = {
   '/nomina':        { title: 'Nómina',        section: 'Gestión'   },
   '/inventario':    { title: 'Inventario',    section: 'Gestión'   },
   '/catalogos':     { title: 'Catálogos',     section: 'Gestión'   },
+  '/asistencia':    { title: 'Asistencia',    section: 'Gestión'   },
   '/reportes':      { title: 'Reportes',      section: 'Dueño'     },
   '/ai':            { title: 'AI',            section: 'Dueño'     },
   '/auditoria':     { title: 'Auditoría',     section: 'Dueño'     },
@@ -877,6 +904,7 @@ function AppShell() {
           <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
           <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
           <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
+          <Route path="/asistencia" element={<RequireRole role="GERENTE"><AttendanceScreen /></RequireRole>} />
         </Routes>
       </main>
 
@@ -1220,11 +1248,11 @@ function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="feature" sub={data ? `${data.carsWashed} carros lavados` : undefined} />
+        <Metric label="Efectivo" value={data ? money(data.cashRevenue, 'MXN') : '...'} variant="success" />
+        <Metric label="Tarjeta" value={data ? money(data.cardRevenue, 'MXN') : '...'} variant="info" />
+        <Metric label="Miscelanea" value={data ? money(data.inventorySalesRevenue, 'MXN') : '...'} />
         <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} variant="danger" />
         <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} variant="info" />
-        <Metric label="Carros lavados" value={String(data?.carsWashed ?? '...')} variant="info" />
-        <Metric label="Cortesias" value={String(data?.courtesyCount ?? '...')} />
-        <Metric label="Anulados" value={String(data?.voidedCount ?? '...')} />
         <Metric label="Sobrante/Faltante" value={data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN')} variant={data?.cashVariance == null ? 'default' : data.cashVariance >= 0 ? 'success' : 'warn'} />
       </div>
 
@@ -1304,8 +1332,10 @@ function EndOfDayScreen() {
             <div className="grid gap-4 md:grid-cols-4">
               <Metric label="Tickets" value={String(daily?.recentTickets.length ?? 0)} />
               <Metric label="Carros" value={String(daily?.carsWashed ?? 0)} />
-              <Metric label="Efectivo + tarjeta" value={daily ? money(daily.ticketRevenue, 'MXN') : '...'} />
-              <Metric label="Gastos" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} />
+              <Metric label="Efectivo" value={daily ? money(daily.cashRevenue, 'MXN') : '...'} variant="success" />
+              <Metric label="Tarjeta" value={daily ? money(daily.cardRevenue, 'MXN') : '...'} variant="info" />
+              <Metric label="Miscelanea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : '...'} />
+              <Metric label="Gastos" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} variant="danger" />
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -1511,17 +1541,30 @@ function usePhaseData() {
   }
 }
 
+function toLocalDateTimeValue(isoString?: string | null): string {
+  const d = isoString ? new Date(isoString) : new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function localDateTimeToIso(dtStr: string): string {
+  return new Date(dtStr).toISOString()
+}
+
 function TicketWorkspace({
   mode,
   ticket,
   onSaved,
+  readOnly,
 }: {
   mode: 'create' | 'edit'
   ticket?: Ticket
   onSaved: () => void
+  readOnly?: boolean
 }) {
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
+  const [washerSearch, setWasherSearch] = useState('')
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
   const defaultShift = openShifts[0]
@@ -1533,14 +1576,16 @@ function TicketWorkspace({
       shiftId: ticket?.shiftId ?? defaultShift?.id ?? 0,
       serviceTypeId: ticket?.serviceTypeId ?? 0,
       vehicleSizeId: ticket?.vehicleSizeId ?? 0,
-      currency: ticket?.currency ?? 'MXN',
       paymentMethod: ticket?.paymentMethod ?? 'CASH',
       vehicleDescription: ticket?.vehicleDescription ?? '',
-      notes: '',
+      notes: ticket?.notes ?? '',
       courtesy: ticket?.courtesy ?? false,
       courtesyReason: ticket?.courtesyReason ?? '',
       discountPercent: ticket?.discountPercent ?? 0,
       employeeIds: ticket?.assignments.map((assignment) => assignment.employeeId) ?? [],
+      occurredAt: toLocalDateTimeValue(ticket?.occurredAt),
+      internalRef: ticket?.internalRef ?? '',
+      priceOverride: ticket?.priceOverride ? Number(ticket.priceOverride) : '',
     },
   })
 
@@ -1550,27 +1595,32 @@ function TicketWorkspace({
     const base = (data.prices.data ?? []).find((price) =>
       price.serviceTypeId === Number(watched.serviceTypeId) &&
       price.vehicleSizeId === Number(watched.vehicleSizeId) &&
-      price.currency === watched.currency
+      price.currency === 'MXN'
     )?.amount
     if (base === undefined) return undefined
     const pct = watched.discountPercent ?? 0
     return pct > 0 ? Math.round(base * (1 - pct / 100) * 100) / 100 : base
-  }, [data.prices.data, watched.courtesy, watched.currency, watched.serviceTypeId, watched.vehicleSizeId, watched.discountPercent])
+  }, [data.prices.data, watched.courtesy, watched.serviceTypeId, watched.vehicleSizeId, watched.discountPercent])
 
   const save = useMutation({
     mutationFn: (values: TicketFormValues) => {
+      const override = values.priceOverride !== '' && values.priceOverride != null ? Number(values.priceOverride) : undefined
       const payload = {
         businessDayId: Number(values.businessDayId),
         shiftId: Number(values.shiftId),
         serviceTypeId: Number(values.serviceTypeId),
         vehicleSizeId: Number(values.vehicleSizeId),
-        currency: values.currency,
+        currency: 'MXN',
         paymentMethod: values.courtesy ? 'CASH' : values.paymentMethod,
         vehicleDescription: values.vehicleDescription || undefined,
         courtesy: values.courtesy,
         courtesyReason: values.courtesyReason || undefined,
         discountPercent: values.courtesy ? 0 : (values.discountPercent ?? 0),
         employeeIds: values.employeeIds.map(Number),
+        occurredAt: values.occurredAt ? localDateTimeToIso(values.occurredAt) : undefined,
+        internalRef: values.internalRef?.trim() || undefined,
+        priceOverride: override,
+        notes: values.notes?.trim() || undefined,
       }
       if (mode === 'edit' && ticket) {
         return api<Ticket>(`/api/v1/tickets/${ticket.id}`, {
@@ -1628,12 +1678,6 @@ function TicketWorkspace({
                   ))}
                 </select>
               </SelectField>
-              <SelectField label="Moneda" error={form.formState.errors.currency?.message}>
-                <select {...form.register('currency')}>
-                  <option value="MXN">MXN</option>
-                  <option value="USD">USD</option>
-                </select>
-              </SelectField>
               <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
                 <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
                   <option value="CASH">Efectivo</option>
@@ -1657,28 +1701,83 @@ function TicketWorkspace({
                 </select>
               </SelectField>
             </div>
-            <TextField label="Descripcion del vehiculo" error={form.formState.errors.vehicleDescription?.message}>
-              <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-            </TextField>
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextField label="Descripcion del vehiculo" error={form.formState.errors.vehicleDescription?.message}>
+                <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
+              </TextField>
+              <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
+                <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+              </TextField>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextField label="Fecha y hora del servicio" error={form.formState.errors.occurredAt?.message}>
+                <input type="datetime-local" {...form.register('occurredAt')} />
+              </TextField>
+              <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
+                <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
+              </TextField>
+            </div>
             <TextField label="Notas internas" error={form.formState.errors.notes?.message}>
-              <textarea rows={3} placeholder="Notas visibles solo en esta pantalla por ahora" {...form.register('notes')} />
+              <textarea rows={2} placeholder="Notas visibles solo en esta pantalla por ahora" {...form.register('notes')} />
             </TextField>
           </Panel>
 
           <Panel title="Lavadores">
-            <div className="grid gap-2 md:grid-cols-2">
-              {(data.employees.data ?? []).map((employee) => (
-                <label key={employee.id} className="flex items-center gap-3 rounded-md border border-gray-100 bg-white px-3 py-2 text-sm">
+            {(() => {
+              const allActive = (data.employees.data ?? []).filter((e) => e.active)
+              const selectedIds = (form.watch('employeeIds') ?? []).map(Number)
+              const selectedEmployees = allActive.filter((e) => selectedIds.includes(e.id))
+              const query = washerSearch.toLowerCase()
+              const filtered = allActive.filter(
+                (e) => !selectedIds.includes(e.id) && e.fullName.toLowerCase().includes(query)
+              )
+              const toggle = (id: number) => {
+                const current = selectedIds
+                const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+                form.setValue('employeeIds', next, { shouldValidate: true })
+              }
+              return (
+                <div className="space-y-3">
+                  {selectedEmployees.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedEmployees.map((e) => (
+                        <span key={e.id} className="flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-800">
+                          {e.fullName}
+                          <button type="button" onClick={() => toggle(e.id)} className="ml-0.5 text-violet-500 hover:text-violet-900">✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <input
-                    type="checkbox"
-                    value={employee.id}
-                    {...form.register('employeeIds')}
-                    className="h-4 w-4 rounded border-gray-200 text-violet-600"
+                    type="text"
+                    placeholder="Buscar lavador..."
+                    value={washerSearch}
+                    onChange={(e) => setWasherSearch(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                   />
-                  <span>{employee.fullName}</span>
-                </label>
-              ))}
-            </div>
+                  {washerSearch && (
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-100 bg-white">
+                      {filtered.length === 0 && (
+                        <p className="px-3 py-2 text-sm text-gray-400">Sin resultados</p>
+                      )}
+                      {filtered.map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => { toggle(e.id); setWasherSearch('') }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-violet-50"
+                        >
+                          {e.fullName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!washerSearch && selectedEmployees.length === 0 && (
+                    <p className="text-xs text-gray-400">Escribe el nombre para buscar</p>
+                  )}
+                </div>
+              )
+            })()}
             {form.formState.errors.employeeIds?.message && <p className="mt-2 text-sm text-red-600">{form.formState.errors.employeeIds.message}</p>}
           </Panel>
 
@@ -1730,14 +1829,20 @@ function TicketWorkspace({
               <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'} />
             </div>
             {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
-            <button
-              type="submit"
-              disabled={save.isPending || Boolean(disabledReason)}
-              data-testid="ticket-submit"
-              className="mt-5 w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
-            >
-              {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
-            </button>
+            {readOnly ? (
+              <p className="mt-5 rounded-xl bg-amber-50 p-3 text-center text-sm text-amber-700 ring-1 ring-amber-200">
+                Turno cerrado — solo lectura
+              </p>
+            ) : (
+              <button
+                type="submit"
+                disabled={save.isPending || Boolean(disabledReason)}
+                data-testid="ticket-submit"
+                className="mt-5 w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+              >
+                {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
+              </button>
+            )}
           </Panel>
         </aside>
       </form>
@@ -1745,9 +1850,25 @@ function TicketWorkspace({
   )
 }
 
+const employeeEditSchema = z.object({
+  fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
+  phone: z.string().max(40, 'Maximo 40 caracteres').optional(),
+  active: z.boolean(),
+  baseWeeklySalary: z.coerce.number().min(0, 'Minimo 0'),
+  payrollType: z.enum(['SALARY', 'COMMISSION']),
+  commissionRate: z.coerce.number().min(0, 'Minimo 0'),
+  productivityBonusRate: z.coerce.number().min(0, 'Minimo 0'),
+  deactivationReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  primaryShift: z.enum(['MATUTINO', 'VESPERTINO', '']).optional(),
+  outOfShiftCommissionRate: z.coerce.number().min(0, 'Minimo 0'),
+})
+type EmployeeEditFormValues = z.infer<typeof employeeEditSchema>
+
 function CatalogsScreen() {
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [showInactiveEmployees, setShowInactiveEmployees] = useState(false)
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
 
@@ -1777,7 +1898,7 @@ function CatalogsScreen() {
   })
   const priceForm = useForm<ServicePriceFormValues>({
     resolver: zodResolver(servicePriceSchema),
-    defaultValues: { serviceTypeId: 0, vehicleSizeId: 0, amount: 0, currency: 'MXN', effectiveFrom: today },
+    defaultValues: { serviceTypeId: 0, vehicleSizeId: 0, amount: 0, effectiveFrom: today },
   })
   const operationsForm = useForm<OperationsFormValues>({
     resolver: zodResolver(operationsSchema),
@@ -1812,6 +1933,30 @@ function CatalogsScreen() {
       })
       await queryClient.invalidateQueries({ queryKey: ['employees'] })
       showToast('Lavador guardado')
+    },
+  })
+
+  const updateEmployee = useMutation({
+    mutationFn: ({ id, values }: { id: number; values: EmployeeEditFormValues }) =>
+      api<Employee>(`/api/v1/employees/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          fullName: values.fullName.trim(),
+          phone: values.phone?.trim() || undefined,
+          active: values.active,
+          baseWeeklySalary: Number(values.baseWeeklySalary),
+          payrollType: values.payrollType,
+          commissionRate: Number(values.commissionRate),
+          productivityBonusRate: Number(values.productivityBonusRate),
+          deactivationReason: !values.active ? (values.deactivationReason?.trim() || undefined) : undefined,
+          primaryShift: values.primaryShift || undefined,
+          outOfShiftCommissionRate: Number(values.outOfShiftCommissionRate),
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['employees'] })
+      setEditingEmployee(null)
+      showToast('Lavador actualizado')
     },
   })
 
@@ -1854,12 +1999,12 @@ function CatalogsScreen() {
         serviceTypeId: Number(values.serviceTypeId),
         vehicleSizeId: Number(values.vehicleSizeId),
         amount: Number(values.amount),
-        currency: values.currency,
+        currency: 'MXN',
         effectiveFrom: values.effectiveFrom,
       }),
     }),
     onSuccess: async () => {
-      priceForm.reset({ serviceTypeId: 0, vehicleSizeId: 0, amount: 0, currency: 'MXN', effectiveFrom: today })
+      priceForm.reset({ serviceTypeId: 0, vehicleSizeId: 0, amount: 0, effectiveFrom: today })
       await queryClient.invalidateQueries({ queryKey: ['service-prices'] })
       showToast('Precio guardado')
     },
@@ -1931,16 +2076,50 @@ function CatalogsScreen() {
               <FormButton label="Agregar" loading={createEmployee.isPending} />
             </form>
             {createEmployee.error && <ErrorMessage message={createEmployee.error.message} />}
-            <SimpleList
-              empty="No hay lavadores activos."
-              rows={employees.map((employee) => ({
-                id: employee.id,
-                title: employee.fullName,
-                detail: employee.payrollType === 'COMMISSION'
-                  ? `${employee.phone || 'Sin telefono'} / Comision ${money(employee.commissionRate, 'MXN')} por carro`
-                  : `${employee.phone || 'Sin telefono'} / Sueldo ${money(employee.baseWeeklySalary, 'MXN')} + ${money(employee.productivityBonusRate, 'MXN')} por carro`,
-              }))}
-            />
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-600">Lavadores registrados</span>
+              <button
+                type="button"
+                onClick={() => setShowInactiveEmployees(!showInactiveEmployees)}
+                className="text-xs text-violet-600 hover:underline"
+              >
+                {showInactiveEmployees ? 'Solo activos' : 'Ver todos'}
+              </button>
+            </div>
+            <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+              {employees.filter(e => showInactiveEmployees || e.active).length === 0 && (
+                <p className="px-3 py-3 text-sm text-gray-400">No hay lavadores.</p>
+              )}
+              {employees.filter(e => showInactiveEmployees || e.active).map((employee) => (
+                <div key={employee.id} className={`flex items-center justify-between gap-4 px-3 py-2 text-sm ${!employee.active ? 'opacity-50' : ''}`}>
+                  <div>
+                    <span className="font-medium">{employee.fullName}</span>
+                    {!employee.active && <span className="ml-2 text-xs text-red-500">Baja</span>}
+                    <p className="text-xs text-gray-400">
+                      {employee.payrollType === 'COMMISSION'
+                        ? `Comision ${money(employee.commissionRate, 'MXN')}/carro`
+                        : `Sueldo ${money(employee.baseWeeklySalary, 'MXN')}/sem`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingEmployee(employee)}
+                    className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                  >
+                    Editar
+                  </button>
+                </div>
+              ))}
+            </div>
+            {editingEmployee && (
+              <EmployeeEditModal
+                employee={editingEmployee}
+                onSave={(values) => updateEmployee.mutate({ id: editingEmployee.id, values })}
+                onClose={() => setEditingEmployee(null)}
+                saving={updateEmployee.isPending}
+                error={updateEmployee.error?.message}
+              />
+            )}
           </Panel>
 
           <Panel title="Servicios">
@@ -2014,12 +2193,6 @@ function CatalogsScreen() {
               <TextField label="Precio" error={priceForm.formState.errors.amount?.message}>
                 <input type="number" min={0} step="0.01" {...priceForm.register('amount')} />
               </TextField>
-              <SelectField label="Moneda" error={priceForm.formState.errors.currency?.message}>
-                <select {...priceForm.register('currency')}>
-                  <option value="MXN">MXN</option>
-                  <option value="USD">USD</option>
-                </select>
-              </SelectField>
               <TextField label="Desde" error={priceForm.formState.errors.effectiveFrom?.message}>
                 <input type="date" {...priceForm.register('effectiveFrom')} />
               </TextField>
@@ -2244,7 +2417,6 @@ function ShiftCloseScreen() {
     resolver: zodResolver(cashCountSchema),
     values: {
       shiftId: effectiveShiftId,
-      currency: 'MXN',
       bills1000: 0,
       bills500: 0,
       bills200: 0,
@@ -2270,6 +2442,7 @@ function ShiftCloseScreen() {
       body: JSON.stringify({
         ...values,
         shiftId: Number(effectiveShiftId),
+        currency: 'MXN',
         morrallaTotal: Number(values.morrallaTotal),
       }),
     }),
@@ -2356,12 +2529,6 @@ function ShiftCloseScreen() {
           <Panel title="1. Conteo de efectivo">
             <form className="space-y-4" onSubmit={cashForm.handleSubmit((values) => countMutation.mutate(values))}>
               <div className="grid gap-3 md:grid-cols-4">
-                <SelectField label="Moneda" error={cashForm.formState.errors.currency?.message}>
-                  <select {...cashForm.register('currency')}>
-                    <option value="MXN">MXN</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </SelectField>
                 <CashInput label="$1000" name="bills1000" form={cashForm} />
                 <CashInput label="$500" name="bills500" form={cashForm} />
                 <CashInput label="$200" name="bills200" form={cashForm} />
@@ -2379,7 +2546,7 @@ function ShiftCloseScreen() {
               </TextField>
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3 text-sm">
                 <span className="text-gray-500">Total contado preview</span>
-                <strong className="text-lg">{money(localCountPreview, watchedCount.currency)}</strong>
+                <strong className="text-lg">{money(localCountPreview, 'MXN')}</strong>
               </div>
               {countMutation.error && <ErrorMessage message={countMutation.error.message} />}
               <button
@@ -2917,6 +3084,10 @@ function InventoryScreen() {
     queryKey: ['products', 'active'],
     queryFn: () => api<Product[]>('/api/v1/products?active=true'),
   })
+  const activeEmployees = useQuery({
+    queryKey: ['employees', 'active'],
+    queryFn: () => api<Employee[]>('/api/v1/employees?active=true'),
+  })
   const snapshot = useQuery({
     queryKey: ['inventory-snapshot', asOf],
     queryFn: () => api<InventorySnapshot>(`/api/v1/inventory/snapshot${asOf ? `?as_of=${encodeURIComponent(toIsoDateTime(asOf))}` : ''}`),
@@ -3025,7 +3196,7 @@ function InventoryScreen() {
           }}
         />
       )}
-      {modal === 'sale' && <InventorySaleModal products={products.data ?? []} onClose={() => setModal(null)} />}
+      {modal === 'sale' && <InventorySaleModal products={products.data ?? []} employees={activeEmployees.data ?? []} onClose={() => setModal(null)} />}
       {modal === 'purchase' && <InventoryPurchaseModal products={products.data ?? []} onClose={() => setModal(null)} />}
       {modal === 'adjustment' && <InventoryAdjustmentModal products={products.data ?? []} onClose={() => setModal(null)} />}
     </section>
@@ -3090,13 +3261,14 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
   )
 }
 
-function InventorySaleModal({ products, onClose }: { products: Product[]; onClose: () => void }) {
+function InventorySaleModal({ products, employees, onClose }: { products: Product[]; employees: Employee[]; onClose: () => void }) {
   const queryClient = useQueryClient()
   const form = useForm<InventorySaleFormValues>({
     resolver: zodResolver(inventorySaleSchema),
-    defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '', fiado: false },
+    defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '', fiado: false, employeeId: 0 },
   })
   const product = products.find((item) => item.id === Number(form.watch('productId')))
+  const isFiado = form.watch('fiado')
   const mutation = useMutation({
     mutationFn: (values: InventorySaleFormValues) => api<ProductMovement>('/api/v1/inventory/sales', {
       method: 'POST',
@@ -3106,6 +3278,7 @@ function InventorySaleModal({ products, onClose }: { products: Product[]; onClos
         unitPrice: Number(values.unitPrice || product?.currentUnitPrice || 0),
         movementDate: values.movementDate ? toIsoDateTime(values.movementDate) : undefined,
         fiado: values.fiado,
+        employeeId: values.fiado && values.employeeId ? Number(values.employeeId) : undefined,
       }),
     }),
     onSuccess: async () => {
@@ -3125,8 +3298,18 @@ function InventorySaleModal({ products, onClose }: { products: Product[]; onClos
     >
       <label className="flex items-center gap-3 text-sm font-medium">
         <input type="checkbox" {...form.register('fiado')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
-        Venta fiada
+        Fiado (a credito — no suma al corte)
       </label>
+      {isFiado && (
+        <SelectField label="Lavador que lleva fiado (opcional)">
+          <select {...form.register('employeeId')}>
+            <option value={0}>Sin asignar</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>{emp.fullName}</option>
+            ))}
+          </select>
+        </SelectField>
+      )}
     </InventoryMovementModal>
   )
 }
@@ -3374,7 +3557,7 @@ function PayrollScreen() {
   const locked = selectedPeriod?.status === 'LOCKED'
   const adjustmentType = adjustmentForm.watch('type')
   const conceptOptions = adjustmentType === 'EARNING'
-    ? ['extra', 'puntualidad', 'bono manual', 'other']
+    ? ['extra', 'puntualidad', 'bono manual', 'dia de descanso', 'other']
     : ['vales', 'deduccion', 'falta', 'permiso', 'clima', 'other']
 
   const downloadPayrollExport = async () => {
@@ -3847,7 +4030,12 @@ function TicketsBrowser() {
 
       {selected && (
         <Modal title={`Ticket ${selected.notaNumber}`} onClose={() => setSelected(null)}>
-          <TicketWorkspace mode="edit" ticket={selected} onSaved={() => setSelected(null)} />
+          <TicketWorkspace
+            mode="edit"
+            ticket={selected}
+            onSaved={() => setSelected(null)}
+            readOnly={!(data.shifts.data ?? []).some((s) => s.id === selected.shiftId && s.status === 'OPEN')}
+          />
         </Modal>
       )}
       {voiding && (
@@ -4629,6 +4817,104 @@ async function invalidateInventory(queryClient: ReturnType<typeof useQueryClient
   ])
 }
 
+function EmployeeEditModal({
+  employee,
+  onSave,
+  onClose,
+  saving,
+  error,
+}: {
+  employee: Employee
+  onSave: (values: EmployeeEditFormValues) => void
+  onClose: () => void
+  saving: boolean
+  error?: string
+}) {
+  const form = useForm<EmployeeEditFormValues>({
+    resolver: zodResolver(employeeEditSchema),
+    defaultValues: {
+      fullName: employee.fullName,
+      phone: employee.phone ?? '',
+      active: employee.active,
+      baseWeeklySalary: employee.baseWeeklySalary,
+      payrollType: employee.payrollType,
+      commissionRate: employee.commissionRate,
+      productivityBonusRate: employee.productivityBonusRate,
+      deactivationReason: employee.deactivationReason ?? '',
+      primaryShift: (employee.primaryShift as 'MATUTINO' | 'VESPERTINO' | '') ?? '',
+      outOfShiftCommissionRate: employee.outOfShiftCommissionRate ?? 0,
+    },
+  })
+  const watchedActive = form.watch('active')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Editar lavador — {employee.fullName}</h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSave)}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <TextField label="Nombre" error={form.formState.errors.fullName?.message}>
+              <input {...form.register('fullName')} />
+            </TextField>
+            <TextField label="Telefono" error={form.formState.errors.phone?.message}>
+              <input {...form.register('phone')} />
+            </TextField>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <SelectField label="Regla de pago" error={form.formState.errors.payrollType?.message}>
+              <select {...form.register('payrollType')}>
+                <option value="COMMISSION">Comision</option>
+                <option value="SALARY">Sueldo</option>
+              </select>
+            </SelectField>
+            <TextField label="Sueldo base/sem" error={form.formState.errors.baseWeeklySalary?.message}>
+              <input type="number" min={0} step="0.01" {...form.register('baseWeeklySalary')} />
+            </TextField>
+            <TextField label="$ por carro" error={form.formState.errors.commissionRate?.message}>
+              <input type="number" min={0} step="0.01" {...form.register('commissionRate')} />
+            </TextField>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <SelectField label="Turno principal" error={form.formState.errors.primaryShift?.message}>
+              <select {...form.register('primaryShift')}>
+                <option value="">Sin asignacion</option>
+                <option value="MATUTINO">Matutino</option>
+                <option value="VESPERTINO">Vespertino</option>
+              </select>
+            </SelectField>
+            <TextField label="$ por carro fuera de turno" error={form.formState.errors.outOfShiftCommissionRate?.message}>
+              <input type="number" min={0} step="0.01" {...form.register('outOfShiftCommissionRate')} />
+            </TextField>
+          </div>
+          <div className="rounded-lg border border-gray-100 p-3 space-y-3">
+            <label className="flex items-center gap-3 text-sm font-medium">
+              <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
+              Activo
+            </label>
+            {!watchedActive && (
+              <TextField label="Motivo de baja" error={form.formState.errors.deactivationReason?.message}>
+                <input placeholder="Ej. Renuncia voluntaria" {...form.register('deactivationReason')} />
+              </TextField>
+            )}
+            {!watchedActive && employee.deactivationReason && (
+              <p className="text-xs text-gray-500">Motivo anterior: {employee.deactivationReason}</p>
+            )}
+          </div>
+          {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail: string }[]; empty: string }) {
   if (rows.length === 0) {
     return <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">{empty}</p>
@@ -4792,6 +5078,231 @@ function Toast({ message }: { message: string }) {
       </span>
       {message}
     </div>
+  )
+}
+
+function formatLocalTime(isoString?: string | null): string {
+  if (!isoString) return '—'
+  return new Date(isoString).toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Monterrey',
+  })
+}
+
+function AttendanceScreen() {
+  const queryClient = useQueryClient()
+  const [date, setDate] = useState(today)
+  const [toast, setToast] = useState<string | null>(null)
+  const [clockOutId, setClockOutId] = useState<number | null>(null)
+  const [clockOutTime, setClockOutTime] = useState('')
+
+  const showToast = (message: string) => {
+    setToast(message)
+    window.setTimeout(() => setToast(null), 1800)
+  }
+
+  const employees = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => api<Employee[]>('/api/v1/employees'),
+  })
+
+  const records = useQuery({
+    queryKey: ['attendance', date],
+    queryFn: () => api<AttendanceRecord[]>(`/api/v1/attendance?date=${date}`),
+  })
+
+  const attendedIds = new Set((records.data ?? []).map((r) => r.employeeId))
+  const activeEmployees = (employees.data ?? []).filter((e) => e.active)
+  const notRecorded = activeEmployees.filter((e) => !attendedIds.has(e.id))
+
+  const clockIn = useMutation({
+    mutationFn: (employeeId: number) =>
+      api<AttendanceRecord>('/api/v1/attendance', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, workDate: date, absence: false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['attendance', date] })
+      showToast('Entrada registrada')
+    },
+  })
+
+  const markAbsent = useMutation({
+    mutationFn: (employeeId: number) =>
+      api<AttendanceRecord>('/api/v1/attendance', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, workDate: date, absence: true }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['attendance', date] })
+      showToast('Falta registrada')
+    },
+  })
+
+  const clockOut = useMutation({
+    mutationFn: ({ id, clockOutIso }: { id: number; clockOutIso: string }) =>
+      api<AttendanceRecord>(`/api/v1/attendance/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ clockOut: clockOutIso }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['attendance', date] })
+      setClockOutId(null)
+      setClockOutTime('')
+      showToast('Salida registrada')
+    },
+  })
+
+  const handleClockOut = (id: number) => {
+    const now = new Date()
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    setClockOutTime(`${hh}:${mm}`)
+    setClockOutId(id)
+  }
+
+  const submitClockOut = () => {
+    if (clockOutId == null || !clockOutTime) return
+    const [hh, mm] = clockOutTime.split(':').map(Number)
+    const d = new Date(`${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`)
+    clockOut.mutate({ id: clockOutId, clockOutIso: d.toISOString() })
+  }
+
+  return (
+    <section className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Asistencia</h2>
+          <p className="text-[13.5px] text-ink-500 mt-0.5">Entradas, salidas y faltas del personal.</p>
+        </div>
+        <label className="w-full max-w-48">
+          <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+      </div>
+
+      {records.error && <ErrorMessage message={records.error.message} />}
+
+      <Panel title="Registros del dia">
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="tl-tbl zebra">
+            <thead>
+              <tr>
+                <th>Lavador</th>
+                <th>Entrada</th>
+                <th>Salida</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(records.data ?? []).map((record) => (
+                <tr key={record.id}>
+                  <td className="font-medium">{record.employeeName}</td>
+                  <td>{record.absence ? '—' : formatLocalTime(record.clockIn)}</td>
+                  <td>{record.absence ? '—' : formatLocalTime(record.clockOut)}</td>
+                  <td>
+                    {record.absence ? (
+                      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Falta</span>
+                    ) : record.clockOut ? (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Completo</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">En turno</span>
+                    )}
+                  </td>
+                  <td>
+                    {!record.absence && !record.clockOut && (
+                      <button
+                        type="button"
+                        onClick={() => handleClockOut(record.id)}
+                        className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        Registrar salida
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!records.isLoading && (records.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
+                    No hay registros para esta fecha.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {notRecorded.length > 0 && (
+        <Panel title="Sin registrar">
+          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+            {notRecorded.map((emp) => (
+              <div key={emp.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-sm font-medium">{emp.fullName}</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={clockIn.isPending}
+                    onClick={() => clockIn.mutate(emp.id)}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Entrada
+                  </button>
+                  <button
+                    type="button"
+                    disabled={markAbsent.isPending}
+                    onClick={() => markAbsent.mutate(emp.id)}
+                    className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Falta
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {clockOutId != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-base font-semibold">Registrar salida</h3>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-gray-700">Hora de salida</span>
+              <input
+                type="time"
+                value={clockOutTime}
+                onChange={(e) => setClockOutTime(e.target.value)}
+                className="w-full"
+              />
+            </label>
+            {clockOut.error && <p className="mt-2 text-sm text-red-600">{clockOut.error.message}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setClockOutId(null); setClockOutTime('') }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!clockOutTime || clockOut.isPending}
+                onClick={submitClockOut}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {clockOut.isPending ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <Toast message={toast} />}
+    </section>
   )
 }
 

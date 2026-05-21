@@ -1,5 +1,6 @@
 package com.lavadero.api.payroll.service;
 
+import com.lavadero.api.attendance.repository.AttendanceRepository;
 import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.catalog.domain.PayrollType;
@@ -40,6 +41,9 @@ public class PayrollService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100.00");
 
+    private static final BigDecimal ABSENCE_RATE_2 = new BigDecimal("15.00");
+    private static final BigDecimal ABSENCE_RATE_3 = new BigDecimal("10.00");
+
     private final PayrollPeriodRepository periods;
     private final PayrollEntryRepository entries;
     private final PayrollDayRepository days;
@@ -48,13 +52,14 @@ public class PayrollService {
     private final EmployeeRepository employees;
     private final EmployeeAdvanceRepository advances;
     private final TicketAssignmentRepository ticketAssignments;
+    private final AttendanceRepository attendance;
     private final DebtLedgerService debtLedgerService;
     private final AuditService audit;
 
     public PayrollService(PayrollPeriodRepository periods, PayrollEntryRepository entries, PayrollDayRepository days,
             PayrollAdjustmentRepository adjustments, DebtLedgerRepository debtLedger, EmployeeRepository employees,
             EmployeeAdvanceRepository advances, TicketAssignmentRepository ticketAssignments,
-            DebtLedgerService debtLedgerService, AuditService audit) {
+            AttendanceRepository attendance, DebtLedgerService debtLedgerService, AuditService audit) {
         this.periods = periods;
         this.entries = entries;
         this.days = days;
@@ -63,6 +68,7 @@ public class PayrollService {
         this.employees = employees;
         this.advances = advances;
         this.ticketAssignments = ticketAssignments;
+        this.attendance = attendance;
         this.debtLedgerService = debtLedgerService;
         this.audit = audit;
     }
@@ -119,8 +125,10 @@ public class PayrollService {
             BigDecimal revenueShare = assignment.getTicket().isCourtesy()
                     ? ZERO
                     : assignment.getTicket().getPriceAmount().multiply(share);
+            String ticketShift = assignment.getTicket().getShift().getShiftType().name();
+            boolean inShift = employee.getPrimaryShift() == null || employee.getPrimaryShift().equals(ticketShift);
             byEmployee.computeIfAbsent(employee.getId(), ignored -> new EmployeeAccumulator(employee))
-                    .add(share);
+                    .add(share, inShift);
             LocalDate workDate = assignment.getTicket().getBusinessDay().getBusinessDate();
             byDay.computeIfAbsent(new DayKey(employee.getId(), workDate), ignored -> new DayAccumulator(employee, workDate))
                     .add(share, revenueShare);
@@ -144,7 +152,7 @@ public class PayrollService {
 
         for (EmployeeAccumulator accumulator : byEmployee.values()) {
             Employee employee = accumulator.employee;
-            BigDecimal carsWashed = money(accumulator.carsWashed);
+            BigDecimal carsWashed = money(accumulator.inShiftCars.add(accumulator.outOfShiftCars));
             BigDecimal baseSalary = employee.getPayrollType() == PayrollType.SALARY
                     ? money(employee.getBaseWeeklySalary())
                     : ZERO;
@@ -154,12 +162,20 @@ public class PayrollService {
             BigDecimal carsBonus = employee.getPayrollType() == PayrollType.SALARY
                     ? money(carsWashed.multiply(carsBonusRate))
                     : ZERO;
-            BigDecimal commissionRate = employee.getPayrollType() == PayrollType.COMMISSION
-                    ? money(employee.getCommissionRate())
-                    : ZERO;
-            BigDecimal commissions = employee.getPayrollType() == PayrollType.COMMISSION
-                    ? money(carsWashed.multiply(commissionRate))
-                    : ZERO;
+            BigDecimal commissionRate = ZERO;
+            BigDecimal outOfShiftRate = ZERO;
+            BigDecimal commissions = ZERO;
+            if (employee.getPayrollType() == PayrollType.COMMISSION) {
+                long absences = attendance.countAbsences(employee.getId(), period.getStartDate(), period.getEndDate());
+                BigDecimal baseRate = absences >= 3 ? ABSENCE_RATE_3.min(money(employee.getCommissionRate()))
+                        : absences == 2 ? ABSENCE_RATE_2.min(money(employee.getCommissionRate()))
+                        : money(employee.getCommissionRate());
+                commissionRate = baseRate;
+                outOfShiftRate = absences >= 2 ? baseRate.min(money(employee.getOutOfShiftCommissionRate()))
+                        : money(employee.getOutOfShiftCommissionRate());
+                commissions = money(accumulator.inShiftCars.multiply(commissionRate)
+                        .add(accumulator.outOfShiftCars.multiply(outOfShiftRate)));
+            }
             AdjustmentTotals manual = adjustmentsByEmployee.getOrDefault(employee.getId(), AdjustmentTotals.ZERO);
             BigDecimal debtBalance = debtLedgerService.balance(employee);
             BigDecimal grossPay = money(baseSalary.add(carsBonus).add(commissions).add(manual.earnings));
@@ -282,14 +298,23 @@ public class PayrollService {
 
     private static final class EmployeeAccumulator {
         private final Employee employee;
-        private BigDecimal carsWashed = ZERO;
+        private BigDecimal inShiftCars = ZERO;
+        private BigDecimal outOfShiftCars = ZERO;
 
         private EmployeeAccumulator(Employee employee) {
             this.employee = employee;
         }
 
+        private void add(BigDecimal cars, boolean inShift) {
+            if (inShift) {
+                inShiftCars = inShiftCars.add(cars);
+            } else {
+                outOfShiftCars = outOfShiftCars.add(cars);
+            }
+        }
+
         private void add(BigDecimal cars) {
-            carsWashed = carsWashed.add(cars);
+            inShiftCars = inShiftCars.add(cars);
         }
     }
 

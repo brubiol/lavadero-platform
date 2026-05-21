@@ -28,17 +28,22 @@ public final class EmployeeDtos {
             @DecimalMin("0.00") BigDecimal baseWeeklySalary,
             PayrollType payrollType,
             @DecimalMin("0.00") BigDecimal commissionRate,
-            @DecimalMin("0.00") BigDecimal productivityBonusRate) {
+            @DecimalMin("0.00") BigDecimal productivityBonusRate,
+            @Size(max = 500) String deactivationReason,
+            @Size(max = 20) String primaryShift,
+            @DecimalMin("0.00") BigDecimal outOfShiftCommissionRate) {
     }
 
     public record EmployeeResponse(Long id, String fullName, String phone, boolean active,
             BigDecimal baseWeeklySalary, PayrollType payrollType, BigDecimal commissionRate,
-            BigDecimal productivityBonusRate, Instant createdAt, Instant updatedAt) {
+            BigDecimal productivityBonusRate, String deactivationReason, String primaryShift,
+            BigDecimal outOfShiftCommissionRate, Instant createdAt, Instant updatedAt) {
         public static EmployeeResponse from(Employee employee) {
             return new EmployeeResponse(employee.getId(), employee.getFullName(), employee.getPhone(),
                     employee.isActive(), employee.getBaseWeeklySalary(), employee.getPayrollType(),
                     employee.getCommissionRate(), employee.getProductivityBonusRate(),
-                    employee.getCreatedAt(), employee.getUpdatedAt());
+                    employee.getDeactivationReason(), employee.getPrimaryShift(),
+                    employee.getOutOfShiftCommissionRate(), employee.getCreatedAt(), employee.getUpdatedAt());
         }
     }
 }
