@@ -11,14 +11,14 @@ public final class DailySummaryDtos {
     }
 
     public record DailySummaryResponse(LocalDate date, long carsWashed, BigDecimal ticketRevenue,
-            BigDecimal cashRevenue, BigDecimal cardRevenue, BigDecimal inventorySalesRevenue,
-            BigDecimal expensesTotal, BigDecimal result, long courtesyCount, long voidedCount,
-            List<TicketResponse> recentTickets, BigDecimal cashVariance) {
+            BigDecimal cashRevenue, BigDecimal cardRevenue, BigDecimal transferRevenue,
+            BigDecimal inventorySalesRevenue, BigDecimal expensesTotal, BigDecimal result,
+            long courtesyCount, long voidedCount, List<TicketResponse> recentTickets, BigDecimal cashVariance) {
         public static DailySummaryResponse from(LocalDate date, long carsWashed, BigDecimal ticketRevenue,
-                BigDecimal cashRevenue, BigDecimal cardRevenue, BigDecimal inventorySalesRevenue,
-                BigDecimal expensesTotal, BigDecimal result, long courtesyCount, long voidedCount,
-                List<Ticket> recentTickets, BigDecimal cashVariance) {
-            return new DailySummaryResponse(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue,
+                BigDecimal cashRevenue, BigDecimal cardRevenue, BigDecimal transferRevenue,
+                BigDecimal inventorySalesRevenue, BigDecimal expensesTotal, BigDecimal result,
+                long courtesyCount, long voidedCount, List<Ticket> recentTickets, BigDecimal cashVariance) {
+            return new DailySummaryResponse(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue, transferRevenue,
                     inventorySalesRevenue, expensesTotal, result,
                     courtesyCount, voidedCount, recentTickets.stream().map(TicketResponse::from).toList(),
                     cashVariance);

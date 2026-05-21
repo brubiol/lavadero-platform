@@ -99,6 +99,9 @@ public class DailySummaryService {
         BigDecimal cardRevenue = paidTickets.stream()
                 .filter(ticket -> ticket.getPaymentMethod() == PaymentMethod.CARD)
                 .map(Ticket::getPriceAmount).reduce(ZERO, BigDecimal::add);
+        BigDecimal transferRevenue = paidTickets.stream()
+                .filter(ticket -> ticket.getPaymentMethod() == PaymentMethod.TRANSFER)
+                .map(Ticket::getPriceAmount).reduce(ZERO, BigDecimal::add);
         BigDecimal inventorySalesRevenue = inventoryMovements.sumTotalAmountByTypeAndDateBetween(
                 MovementType.SALE, startInstant(date), endInstant(date));
 
@@ -112,7 +115,7 @@ public class DailySummaryService {
                 ? null
                 : closes.stream().map(ShiftCloseSummary::getVariance).reduce(ZERO, BigDecimal::add);
 
-        return DailySummaryResponse.from(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue,
+        return DailySummaryResponse.from(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue, transferRevenue,
                 inventorySalesRevenue, expensesTotal, result, courtesyCount, voidedCount, recentTickets,
                 cashVariance);
     }

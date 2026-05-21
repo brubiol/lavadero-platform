@@ -24,7 +24,7 @@ import {
 } from './components/ui'
 
 type Currency = 'MXN' | 'USD'
-type PaymentMethod = 'CASH' | 'CARD'
+type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER'
 type TicketStatus = 'ACTIVE' | 'VOIDED'
 type AuthRole = 'OPERADOR' | 'GERENTE' | 'DUENO'
 type PayrollType = 'SALARY' | 'COMMISSION'
@@ -125,6 +125,7 @@ type ShiftCloseSummary = {
   ticketRevenue: number
   cashRevenue: number
   cardRevenue: number
+  transferRevenue: number
   expensesTotal: number
   withdrawalsTotal: number
   expectedCash: number
@@ -191,6 +192,7 @@ type DailySummary = {
   ticketRevenue: number
   cashRevenue: number
   cardRevenue: number
+  transferRevenue: number
   inventorySalesRevenue: number
   expensesTotal: number
   result: number
@@ -507,7 +509,7 @@ const ticketSchema = z.object({
   shiftId: z.coerce.number().positive('Selecciona un turno abierto'),
   serviceTypeId: z.coerce.number().positive('Selecciona un servicio'),
   vehicleSizeId: z.coerce.number().positive('Selecciona un tamano'),
-  paymentMethod: z.enum(['CASH', 'CARD']).default('CASH'),
+  paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
   vehicleDescription: z.string().max(160, 'Maximo 160 caracteres').optional(),
   notes: z.string().max(500, 'Maximo 500 caracteres').optional(),
   courtesy: z.boolean().default(false),
@@ -1251,6 +1253,7 @@ function Dashboard() {
         <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="feature" />
         <Metric label="Efectivo" value={data ? money(data.cashRevenue, 'MXN') : '...'} variant="success" />
         <Metric label="Tarjeta" value={data ? money(data.cardRevenue, 'MXN') : '...'} variant="info" />
+        <Metric label="Deposito" value={data ? money(data.transferRevenue, 'MXN') : '...'} variant="warn" />
         <Metric label="Miscelanea" value={data ? money(data.inventorySalesRevenue, 'MXN') : '...'} />
         <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} variant="danger" />
         <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} variant="info" />
@@ -1284,8 +1287,8 @@ function Dashboard() {
                   <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
                   <td>
                     {!ticket.courtesy && (
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'}
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : ticket.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Deposito' : 'Efectivo'}
                       </span>
                     )}
                   </td>
@@ -1338,6 +1341,7 @@ function EndOfDayScreen() {
               <Metric label="Carros" value={String(daily?.carsWashed ?? 0)} />
               <Metric label="Efectivo" value={daily ? money(daily.cashRevenue, 'MXN') : '...'} variant="success" />
               <Metric label="Tarjeta" value={daily ? money(daily.cardRevenue, 'MXN') : '...'} variant="info" />
+              <Metric label="Deposito" value={daily ? money(daily.transferRevenue, 'MXN') : '...'} variant="warn" />
               <Metric label="Miscelanea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : '...'} />
               <Metric label="Gastos" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} variant="danger" />
             </div>
@@ -1701,6 +1705,7 @@ function TicketWorkspace({
                 <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
                   <option value="CASH">Efectivo</option>
                   <option value="CARD">Tarjeta</option>
+                  <option value="TRANSFER">Deposito / ventanas</option>
                 </select>
               </SelectField>
               <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
@@ -1859,7 +1864,7 @@ function TicketWorkspace({
               />
               <SummaryRow label="Lavadores" value={String(watched.employeeIds?.length ?? 0)} />
               <SummaryRow label="Tipo" value={watched.courtesy ? 'Cortesia' : 'Venta'} />
-              <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'} />
+              <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Deposito' : 'Efectivo'} />
             </div>
             {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
             {readOnly ? (
@@ -2599,7 +2604,7 @@ function ShiftCloseScreen() {
               <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
               <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
             </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
               <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
                 <span className="text-gray-500">Efectivo</span>
                 <strong>{summary ? money(summary.cashRevenue, 'MXN') : '...'}</strong>
@@ -2608,9 +2613,13 @@ function ShiftCloseScreen() {
                 <span className="text-blue-600">Tarjeta</span>
                 <strong className="text-blue-700">{summary ? money(summary.cardRevenue, 'MXN') : '...'}</strong>
               </div>
+              <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm">
+                <span className="text-amber-600">Deposito</span>
+                <strong className="text-amber-700">{summary ? money(summary.transferRevenue, 'MXN') : '...'}</strong>
+              </div>
             </div>
             <p className="mt-3 text-sm text-gray-500">
-              Efectivo esperado = ingresos en efectivo - gastos - retiros. Los pagos con tarjeta no cuentan para el conteo de caja.
+              Efectivo esperado = ingresos en efectivo - gastos - retiros. Tarjeta y depositos no cuentan para el conteo de caja.
             </p>
           </Panel>
 
@@ -4053,8 +4062,8 @@ function TicketsBrowser() {
                 <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
                 <td>
                   {!ticket.courtesy && (
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : 'Efectivo'}
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : ticket.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Deposito' : 'Efectivo'}
                     </span>
                   )}
                 </td>
