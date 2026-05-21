@@ -44,7 +44,8 @@ services:
     image: caddy:2
     container_name: lavadero-caddy
     restart: unless-stopped
-    command: reverse-proxy --from 100-49-45-120.sslip.io --to web:80
+    entrypoint: ["caddy"]
+    command: ["reverse-proxy", "--from", "100-49-45-120.sslip.io", "--to", "web:80"]
     ports:
       - "443:443"
     depends_on:
