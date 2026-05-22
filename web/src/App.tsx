@@ -1,7 +1,7 @@
-import { createContext, useContext, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
-import { useForm, type UseFormReturn } from 'react-hook-form'
+import { useForm, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Frame, MobileNav, MobileTopbar, Sidebar, Topbar, type NavRole } from './components/layout'
@@ -34,6 +34,7 @@ type AuthUser = {
   username: string
   fullName: string
   role: AuthRole
+  payrollAccess: boolean
 }
 
 type AuthPayload = {
@@ -297,6 +298,19 @@ type DebtBalance = {
   balance: number
 }
 
+type PrepaidPackage = {
+  id: number
+  businessDayId: number
+  shiftId: number
+  washesIncluded: number
+  amount: number
+  currency: string
+  paymentMethod: string
+  notes?: string | null
+  occurredAt: string
+  createdAt: string
+}
+
 type AuditEvent = {
   id: number
   occurredAt: string
@@ -526,14 +540,6 @@ const ticketSchema = z.object({
   occurredAt: z.string().optional(),
   internalRef: z.string().max(40, 'Maximo 40 caracteres').optional(),
   priceOverride: z.coerce.number().min(0.01, 'Minimo $0.01').optional().or(z.literal('')),
-}).superRefine((value, ctx) => {
-  if (value.courtesy && !value.courtesyReason?.trim()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['courtesyReason'],
-      message: 'La cortesia requiere motivo',
-    })
-  }
 })
 
 type TicketFormValues = z.infer<typeof ticketSchema>
@@ -855,6 +861,7 @@ const ROUTE_META: Record<string, { title: string; section: string }> = {
   '/':              { title: 'Dashboard',     section: 'Operación' },
   '/tickets/nuevo': { title: 'Nuevo ticket',  section: 'Operación' },
   '/tickets':       { title: 'Tickets',       section: 'Operación' },
+  '/paquetes':      { title: 'Paquetes',      section: 'Operación' },
   '/gastos':        { title: 'Gastos',        section: 'Operación' },
   '/cierre-dia':    { title: 'Cierre del día',section: 'Operación' },
   '/corte':         { title: 'Corte',         section: 'Operación' },
@@ -887,6 +894,7 @@ function AppShell() {
         <Sidebar
           role={role}
           userName={auth.user.fullName}
+          payrollAccess={auth.user.payrollAccess ?? true}
           onLogout={() => void logout()}
         />
       }
@@ -904,10 +912,11 @@ function AppShell() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
           <Route path="/tickets" element={<TicketsBrowser />} />
+          <Route path="/paquetes" element={<PrepaidPackageScreen />} />
           <Route path="/gastos" element={<ExpenseLedgerScreen />} />
           <Route path="/cierre-dia" element={<EndOfDayScreen />} />
           <Route path="/corte" element={<ShiftCloseScreen />} />
-          <Route path="/nomina" element={<RequireRole role="GERENTE"><PayrollScreen /></RequireRole>} />
+          <Route path="/nomina" element={<RequirePayroll><PayrollScreen /></RequirePayroll>} />
           <Route path="/inventario" element={<RequireRole role="GERENTE"><InventoryScreen /></RequireRole>} />
           <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
           <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
@@ -1063,6 +1072,18 @@ function roleLabel(role: AuthRole) {
 function RequireRole({ role, children }: { role: AuthRole; children: ReactNode }) {
   const { hasRole } = useAuth()
   if (!hasRole(role)) {
+    return (
+      <Panel title="Sin permiso">
+        <p className="text-[13.5px] text-ink-500 mt-0.5">Tu usuario no tiene permiso para esta pantalla.</p>
+      </Panel>
+    )
+  }
+  return <>{children}</>
+}
+
+function RequirePayroll({ children }: { children: ReactNode }) {
+  const { auth, hasRole } = useAuth()
+  if (!hasRole('GERENTE') || !(auth?.user.payrollAccess ?? true)) {
     return (
       <Panel title="Sin permiso">
         <p className="text-[13.5px] text-ink-500 mt-0.5">Tu usuario no tiene permiso para esta pantalla.</p>
@@ -1322,7 +1343,7 @@ function Dashboard() {
                   <td>
                     {!ticket.courtesy && (
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : ticket.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Deposito' : 'Efectivo'}
+                        {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
                       </span>
                     )}
                   </td>
@@ -1583,14 +1604,14 @@ function usePhaseData() {
   }
 }
 
-function toLocalDateTimeValue(isoString?: string | null): string {
+function toLocalTimeValue(isoString?: string | null): string {
   const d = isoString ? new Date(isoString) : new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function localDateTimeToIso(dtStr: string): string {
-  return new Date(dtStr).toISOString()
+function localTimeToIso(timeStr: string, baseDate: string): string {
+  return new Date(`${baseDate}T${timeStr}:00`).toISOString()
 }
 
 function TicketWorkspace({
@@ -1622,25 +1643,48 @@ function TicketWorkspace({
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
   const defaultShift = openShifts[0]
 
+  // Stable defaults — only recomputed when ticket.id changes to prevent form reset on every render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const formDefaults = useMemo(() => ({
+    businessDayId: ticket?.businessDayId ?? data.currentBusinessDay?.id ?? 0,
+    shiftId: ticket?.shiftId ?? defaultShift?.id ?? 0,
+    serviceTypeId: ticket?.serviceTypeId ?? 0,
+    vehicleSizeId: ticket?.vehicleSizeId ?? 0,
+    paymentMethod: (ticket?.paymentMethod ?? 'CASH') as 'CASH' | 'CARD' | 'TRANSFER',
+    vehicleDescription: ticket?.vehicleDescription ?? '',
+    notes: ticket?.notes ?? '',
+    courtesy: ticket?.courtesy ?? false,
+    courtesyReason: ticket?.courtesyReason ?? '',
+    discountPercent: ticket?.discountPercent ?? 0,
+    employeeIds: ticket?.assignments.map((a) => a.employeeId) ?? [],
+    occurredAt: toLocalTimeValue(ticket?.occurredAt),
+    internalRef: ticket?.internalRef ?? '',
+    priceOverride: (ticket?.priceOverride ? Number(ticket.priceOverride) : '') as number | '',
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [ticket?.id])
+
   const form = useForm<TicketFormValues>({
-    resolver: zodResolver(ticketSchema),
-    values: {
-      businessDayId: ticket?.businessDayId ?? data.currentBusinessDay?.id ?? 0,
-      shiftId: ticket?.shiftId ?? defaultShift?.id ?? 0,
-      serviceTypeId: ticket?.serviceTypeId ?? 0,
-      vehicleSizeId: ticket?.vehicleSizeId ?? 0,
-      paymentMethod: ticket?.paymentMethod ?? 'CASH',
-      vehicleDescription: ticket?.vehicleDescription ?? '',
-      notes: ticket?.notes ?? '',
-      courtesy: ticket?.courtesy ?? false,
-      courtesyReason: ticket?.courtesyReason ?? '',
-      discountPercent: ticket?.discountPercent ?? 0,
-      employeeIds: ticket?.assignments.map((assignment) => assignment.employeeId) ?? [],
-      occurredAt: toLocalDateTimeValue(ticket?.occurredAt),
-      internalRef: ticket?.internalRef ?? '',
-      priceOverride: ticket?.priceOverride ? Number(ticket.priceOverride) : '',
-    },
+    resolver: zodResolver(ticketSchema) as Resolver<TicketFormValues>,
+    defaultValues: formDefaults,
   })
+
+  // Reset when navigating between tickets in edit mode
+  useEffect(() => {
+    form.reset(formDefaults)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.id])
+
+  // Populate async catalog IDs for create mode once queries resolve
+  useEffect(() => {
+    if (mode !== 'create') return
+    if (data.currentBusinessDay?.id && !form.getValues('businessDayId')) {
+      form.setValue('businessDayId', data.currentBusinessDay.id)
+    }
+    if (defaultShift?.id && !form.getValues('shiftId')) {
+      form.setValue('shiftId', defaultShift.id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.currentBusinessDay?.id, defaultShift?.id])
 
   const watched = form.watch()
   const livePrice = useMemo(() => {
@@ -1658,6 +1702,9 @@ function TicketWorkspace({
   const save = useMutation({
     mutationFn: (values: TicketFormValues) => {
       const override = values.priceOverride !== '' && values.priceOverride != null ? Number(values.priceOverride) : undefined
+      const baseDate = mode === 'edit' && ticket?.occurredAt
+        ? (() => { const d = new Date(ticket.occurredAt!); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+        : (data.currentBusinessDay?.businessDate ?? today)
       const payload = {
         businessDayId: Number(values.businessDayId),
         shiftId: Number(values.shiftId),
@@ -1670,7 +1717,7 @@ function TicketWorkspace({
         courtesyReason: values.courtesyReason || undefined,
         discountPercent: values.courtesy ? 0 : (values.discountPercent ?? 0),
         employeeIds: values.employeeIds.map(Number),
-        occurredAt: values.occurredAt ? localDateTimeToIso(values.occurredAt) : undefined,
+        occurredAt: values.occurredAt ? localTimeToIso(values.occurredAt, baseDate) : undefined,
         internalRef: values.internalRef?.trim() || undefined,
         priceOverride: override,
         notes: values.notes?.trim() || undefined,
@@ -1693,13 +1740,15 @@ function TicketWorkspace({
     },
   })
 
-  const disabledReason = !data.currentBusinessDay
-    ? 'No hay dia de trabajo abierto para hoy.'
-    : openShifts.length === 0
-      ? 'No hay turno abierto para hoy.'
-      : null
+  const disabledReason = mode === 'edit' ? null : (
+    !data.currentBusinessDay
+      ? 'No hay dia de trabajo abierto para hoy.'
+      : openShifts.length === 0
+        ? 'No hay turno abierto.'
+        : null
+  )
 
-  const hasAdvancedError = (['vehicleDescription', 'occurredAt', 'priceOverride', 'notes', 'discountPercent', 'courtesyReason'] as const)
+  const hasAdvancedError = (['priceOverride', 'notes', 'discountPercent', 'courtesyReason'] as const)
     .some((field) => form.formState.errors[field])
   const effectiveShowAdvanced = showAdvanced || hasAdvancedError
 
@@ -1726,20 +1775,13 @@ function TicketWorkspace({
       <form className="grid gap-5 xl:grid-cols-[1fr_360px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
         <div className="space-y-5">
           <Panel title="Datos del servicio">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <SelectField label="Turno" error={form.formState.errors.shiftId?.message}>
                 <select {...form.register('shiftId')} disabled={Boolean(disabledReason)}>
                   <option value={0}>Selecciona turno</option>
                   {openShifts.map((shift) => (
-                    <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}</option>
+                    <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
                   ))}
-                </select>
-              </SelectField>
-              <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
-                <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
-                  <option value="CASH">Efectivo</option>
-                  <option value="CARD">Tarjeta</option>
-                  <option value="TRANSFER">Deposito / ventanas</option>
                 </select>
               </SelectField>
               <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
@@ -1758,10 +1800,25 @@ function TicketWorkspace({
                   ))}
                 </select>
               </SelectField>
+              <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
+                <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
+                  <option value="CASH">Efectivo</option>
+                  <option value="CARD">Tarjeta</option>
+                  <option value="TRANSFER">Windows</option>
+                </select>
+              </SelectField>
             </div>
-            <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
-              <input placeholder="Ej. 41703" {...form.register('internalRef')} />
-            </TextField>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <TextField label="Vehiculo" error={form.formState.errors.vehicleDescription?.message}>
+                <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
+              </TextField>
+              <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
+                <input type="time" {...form.register('occurredAt')} />
+              </TextField>
+              <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
+                <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+              </TextField>
+            </div>
           </Panel>
 
           <Panel title="Lavadores">
@@ -1835,14 +1892,6 @@ function TicketWorkspace({
           {effectiveShowAdvanced && (
             <>
               <Panel title="Mas opciones">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <TextField label="Descripcion del vehiculo" error={form.formState.errors.vehicleDescription?.message}>
-                    <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-                  </TextField>
-                  <TextField label="Fecha y hora del lavado" error={form.formState.errors.occurredAt?.message}>
-                    <input type="datetime-local" {...form.register('occurredAt')} />
-                  </TextField>
-                </div>
                 <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
                   <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
                 </TextField>
@@ -1873,11 +1922,6 @@ function TicketWorkspace({
                   <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
                   Marcar como cortesia
                 </label>
-                {watched.courtesy && (
-                  <TextField label="Motivo de cortesia" error={form.formState.errors.courtesyReason?.message}>
-                    <textarea rows={3} placeholder="Ej. Cliente del dueno" {...form.register('courtesyReason')} />
-                  </TextField>
-                )}
               </Panel>
             </>
           )}
@@ -1898,7 +1942,7 @@ function TicketWorkspace({
               />
               <SummaryRow label="Lavadores" value={String(watched.employeeIds?.length ?? 0)} />
               <SummaryRow label="Tipo" value={watched.courtesy ? 'Cortesia' : 'Venta'} />
-              <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Deposito' : 'Efectivo'} />
+              <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'} />
             </div>
             {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
             {readOnly ? (
@@ -3643,14 +3687,16 @@ function PayrollScreen() {
     onSuccess: async () => {
       adjustmentForm.reset({ employeeId: 0, type: 'EARNING', amount: 0, concept: 'extra', note: '' })
       await invalidatePayroll(queryClient)
-      setToast('Ajuste guardado. Recalcula antes de bloquear.')
+      setToast('Ajuste guardado.')
+      if (selectedPeriod?.status !== 'LOCKED') compute.mutate()
     },
   })
   const deleteAdjustment = useMutation({
     mutationFn: (id: number) => api<void>(`/api/v1/payroll/adjustments/${id}`, { method: 'DELETE' }),
     onSuccess: async () => {
       await invalidatePayroll(queryClient)
-      setToast('Ajuste eliminado. Recalcula antes de bloquear.')
+      setToast('Ajuste eliminado.')
+      if (selectedPeriod?.status !== 'LOCKED') compute.mutate()
     },
   })
   const unlock = useMutation({
@@ -3663,6 +3709,14 @@ function PayrollScreen() {
       setToast('Nomina desbloqueada')
     },
   })
+
+  // Auto-compute when an OPEN period is loaded/selected
+  useEffect(() => {
+    if (selectedPeriod?.status === 'OPEN' && !compute.isPending) {
+      compute.mutate()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeriod?.id])
 
   const totals = {
     cars: (selectedPeriod?.entries ?? []).reduce((sum, entry) => sum + entry.carsWashed, 0),
@@ -3864,7 +3918,7 @@ function PayrollScreen() {
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
                     <tr>
                       <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
-                        Crea o selecciona un periodo y presiona Recalcular.
+                        Crea o selecciona un periodo para calcular automaticamente.
                       </td>
                     </tr>
                   )}
@@ -4070,9 +4124,167 @@ function calculateCashCount(values: CashCountFormValues) {
   )
 }
 
+const packageSchema = z.object({
+  shiftId: z.coerce.number().positive('Selecciona un turno'),
+  washesIncluded: z.coerce.number().int().min(1, 'Minimo 1'),
+  amount: z.coerce.number().min(0.01, 'Minimo $0.01'),
+  paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
+  notes: z.string().max(500).optional(),
+})
+type PackageFormValues = z.infer<typeof packageSchema>
+
+function PrepaidPackageScreen() {
+  const queryClient = useQueryClient()
+  const [toast, setToast] = useState<string | null>(null)
+  const data = usePhaseData()
+  const effectiveBusinessDay = data.currentBusinessDay ?? data.businessDays.data?.[0]
+  const openShifts = (data.shifts.data ?? []).filter((s) => s.status === 'OPEN')
+
+  const form = useForm<PackageFormValues>({
+    resolver: zodResolver(packageSchema) as Resolver<PackageFormValues>,
+    defaultValues: { shiftId: 0, washesIncluded: 10, amount: 0, paymentMethod: 'CASH', notes: '' },
+  })
+
+  useEffect(() => {
+    if (openShifts[0]?.id && !form.getValues('shiftId')) {
+      form.setValue('shiftId', openShifts[0].id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openShifts[0]?.id])
+
+  const packages = useQuery({
+    queryKey: ['prepaid-packages', effectiveBusinessDay?.id],
+    enabled: Boolean(effectiveBusinessDay?.id),
+    queryFn: () => api<PrepaidPackage[]>(`/api/v1/prepaid-packages?business_day_id=${effectiveBusinessDay!.id}`),
+  })
+
+  const save = useMutation({
+    mutationFn: (values: PackageFormValues) => api<PrepaidPackage>('/api/v1/prepaid-packages', {
+      method: 'POST',
+      body: JSON.stringify({
+        businessDayId: effectiveBusinessDay?.id,
+        shiftId: Number(values.shiftId),
+        washesIncluded: Number(values.washesIncluded),
+        amount: Number(values.amount),
+        currency: 'MXN',
+        paymentMethod: values.paymentMethod,
+        notes: values.notes?.trim() || undefined,
+      }),
+    }),
+    onSuccess: async () => {
+      form.reset({ shiftId: openShifts[0]?.id ?? 0, washesIncluded: 10, amount: 0, paymentMethod: 'CASH', notes: '' })
+      await queryClient.invalidateQueries({ queryKey: ['prepaid-packages'] })
+      setToast('Paquete registrado')
+    },
+  })
+
+  const disabledReason = !effectiveBusinessDay
+    ? 'No hay dia de trabajo para hoy.'
+    : openShifts.length === 0
+      ? 'No hay turno abierto.'
+      : null
+
+  const list = packages.data ?? []
+  const totalHoy = list.reduce((sum, p) => sum + p.amount, 0)
+
+  return (
+    <section className="space-y-5">
+      {toast && <Toast message={toast} />}
+      <div>
+        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Paquetes prepagados</h2>
+        <p className="text-[13.5px] text-ink-500 mt-0.5">Registra la venta del paquete. Los lavados individuales se capturan como cortesia.</p>
+      </div>
+
+      {disabledReason && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{disabledReason}</div>
+      )}
+
+      <div className="grid gap-5 xl:grid-cols-[400px_1fr]">
+        <Panel title="Vender paquete">
+          <form className="space-y-4" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
+            <SelectField label="Turno" error={form.formState.errors.shiftId?.message}>
+              <select {...form.register('shiftId')} disabled={Boolean(disabledReason)}>
+                <option value={0}>Selecciona turno</option>
+                {openShifts.map((s) => (
+                  <option key={s.id} value={s.id}>{s.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
+                ))}
+              </select>
+            </SelectField>
+            <div className="grid grid-cols-2 gap-4">
+              <TextField label="Lavadas incluidas" error={form.formState.errors.washesIncluded?.message}>
+                <input type="number" min={1} {...form.register('washesIncluded')} />
+              </TextField>
+              <TextField label="Monto cobrado ($)" error={form.formState.errors.amount?.message}>
+                <input type="number" min={0.01} step={0.01} {...form.register('amount')} />
+              </TextField>
+            </div>
+            <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
+              <select {...form.register('paymentMethod')}>
+                <option value="CASH">Efectivo</option>
+                <option value="CARD">Tarjeta</option>
+                <option value="TRANSFER">Windows</option>
+              </select>
+            </SelectField>
+            <TextField label="Notas (opcional)" error={form.formState.errors.notes?.message}>
+              <input placeholder="Ej. Cliente VIP, 10+3" {...form.register('notes')} />
+            </TextField>
+            {save.error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
+            <button
+              type="submit"
+              disabled={save.isPending || Boolean(disabledReason)}
+              className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+            >
+              {save.isPending ? 'Guardando...' : 'Registrar venta'}
+            </button>
+          </form>
+        </Panel>
+
+        <Panel title={`Paquetes vendidos hoy — ${money(totalHoy, 'MXN')}`}>
+          {packages.isLoading && <p className="text-sm text-gray-400">Cargando...</p>}
+          {list.length === 0 && !packages.isLoading && (
+            <p className="text-sm text-gray-400">Sin paquetes vendidos hoy.</p>
+          )}
+          {list.length > 0 && (
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="tl-tbl zebra">
+                <thead>
+                  <tr>
+                    <th>Hora</th>
+                    <th>Lavadas</th>
+                    <th className="r">Monto</th>
+                    <th>Pago</th>
+                    <th>Notas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((pkg) => (
+                    <tr key={pkg.id}>
+                      <td className="text-ink-500">{new Date(pkg.occurredAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="font-semibold">{pkg.washesIncluded}</td>
+                      <td className="r font-semibold text-violet-700">{money(pkg.amount, 'MXN')}</td>
+                      <td>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${pkg.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : pkg.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {pkg.paymentMethod === 'CARD' ? 'Tarjeta' : pkg.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
+                        </span>
+                      </td>
+                      <td className="text-ink-500">{pkg.notes || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+    </section>
+  )
+}
+
 function TicketsBrowser() {
   const queryClient = useQueryClient()
+  const { hasRole } = useAuth()
   const data = usePhaseData()
+  const effectiveBusinessDay = data.currentBusinessDay ?? data.businessDays.data?.[0]
   const [query, setQuery] = useState('')
   const [notaLookup, setNotaLookup] = useState('')
   const [status, setStatus] = useState<TicketStatus>('ACTIVE')
@@ -4080,9 +4292,9 @@ function TicketsBrowser() {
   const [voiding, setVoiding] = useState<Ticket | null>(null)
 
   const tickets = useQuery({
-    queryKey: ['tickets', data.currentBusinessDay?.id, status],
-    enabled: Boolean(data.currentBusinessDay?.id) && !notaLookup.trim(),
-    queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${data.currentBusinessDay!.id}&status=${status}`),
+    queryKey: ['tickets', effectiveBusinessDay?.id, status],
+    enabled: Boolean(effectiveBusinessDay?.id) && !notaLookup.trim(),
+    queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${effectiveBusinessDay!.id}&status=${status}`),
   })
 
   const notaResult = useQuery({
@@ -4095,7 +4307,7 @@ function TicketsBrowser() {
 
   const filtered = (activeSource.data ?? []).filter((ticket) => {
     if (notaLookup.trim()) return true
-    const haystack = `${ticket.notaNumber} ${ticket.vehicleDescription ?? ''} ${ticket.serviceTypeName} ${ticket.vehicleSizeName} ${ticket.assignments.map((a) => a.employeeName).join(' ')}`
+    const haystack = `${ticket.notaNumber} ${ticket.internalRef ?? ''} ${ticket.vehicleDescription ?? ''} ${ticket.serviceTypeName} ${ticket.vehicleSizeName} ${ticket.assignments.map((a) => a.employeeName).join(' ')}`
       .toLowerCase()
     return haystack.includes(query.toLowerCase())
   })
@@ -4139,6 +4351,7 @@ function TicketsBrowser() {
           <thead className="">
             <tr>
               <th>Nota</th>
+              <th>Control</th>
               <th>Vehiculo</th>
               <th>Servicio</th>
               <th>Lavadores</th>
@@ -4152,6 +4365,7 @@ function TicketsBrowser() {
             {filtered.map((ticket) => (
               <tr key={ticket.id}>
                 <td className="font-semibold">{ticket.notaNumber}</td>
+                <td className="text-ink-500">{ticket.internalRef || '-'}</td>
                 <td>{ticket.vehicleDescription || '-'}</td>
                 <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
                 <td>{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
@@ -4159,7 +4373,7 @@ function TicketsBrowser() {
                 <td>
                   {!ticket.courtesy && (
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : ticket.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Deposito' : 'Efectivo'}
+                      {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
                     </span>
                   )}
                 </td>
@@ -4176,7 +4390,7 @@ function TicketsBrowser() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-gray-400">No hay tickets para estos filtros.</td>
+                <td colSpan={9} className="px-4 py-10 text-center text-gray-400">No hay tickets para estos filtros.</td>
               </tr>
             )}
           </tbody>
@@ -4189,7 +4403,7 @@ function TicketsBrowser() {
             mode="edit"
             ticket={selected}
             onSaved={() => setSelected(null)}
-            readOnly={!(data.shifts.data ?? []).some((s) => s.id === selected.shiftId && s.status === 'OPEN')}
+            readOnly={!hasRole('GERENTE')}
           />
         </Modal>
       )}

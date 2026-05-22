@@ -95,11 +95,11 @@ class ExcelOperationFlowsIntegrationTest extends AbstractIntegrationTest {
     // Maps to: cortesías column — comps to owner/family, $0 revenue.
 
     @Test
-    void should_require_courtesy_reason_and_set_price_to_zero() throws Exception {
+    void should_create_courtesy_ticket_with_or_without_reason() throws Exception {
         LocalDate date = LocalDate.of(2027, 3, 2);
         Fixture f = fixture("EF2", date);
 
-        // No courtesy reason → 400
+        // No reason → still allowed, price $0
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -114,10 +114,11 @@ class ExcelOperationFlowsIntegrationTest extends AbstractIntegrationTest {
                                   "employeeIds": [%d]
                                 }
                                 """.formatted(f.bdId(), f.shiftId(), f.svcId(), f.sizeId(), f.emp1())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("courtesyReason is required for courtesy tickets"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.priceAmount").value(0))
+                .andExpect(jsonPath("$.courtesy").value(true));
 
-        // With reason → price is $0
+        // With reason → price is $0 and reason stored
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ticketJson(f, true, "Dueno del negocio", f.emp1())))

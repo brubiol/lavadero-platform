@@ -148,9 +148,6 @@ public class TicketService {
         if (ticket.getStatus() == TicketStatus.VOIDED) {
             throw new IllegalArgumentException("Voided tickets cannot be edited");
         }
-        if (ticket.getShift().getStatus() != ShiftStatus.OPEN) {
-            throw new IllegalArgumentException("Ticket can only be edited while shift is OPEN");
-        }
 
         ServiceType serviceType = request.serviceTypeId() == null
                 ? ticket.getServiceType()
@@ -232,9 +229,6 @@ public class TicketService {
     private BigDecimal[] resolvePrice(Long serviceTypeId, Long vehicleSizeId, TicketCurrency currency,
             BusinessDay businessDay, boolean courtesy, String courtesyReason, BigDecimal discountPercent) {
         if (courtesy) {
-            if (courtesyReason == null || courtesyReason.isBlank()) {
-                throw new IllegalArgumentException("courtesyReason is required for courtesy tickets");
-            }
             return new BigDecimal[]{ZERO, ZERO};
         }
         BigDecimal base = servicePrices.findCurrentPrices(serviceTypeId, vehicleSizeId, currency.name(),

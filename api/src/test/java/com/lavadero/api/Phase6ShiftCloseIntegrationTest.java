@@ -87,7 +87,7 @@ class Phase6ShiftCloseIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_close_faltante_with_reason_and_block_ticket_edits() throws Exception {
+    void should_close_faltante_with_reason_and_allow_ticket_edits() throws Exception {
         Fixture fixture = fixture("P6D", LocalDate.of(2026, 10, 4));
         Long ticketId = createTicket(fixture);
         createExpense(fixture, "25.00");
@@ -108,8 +108,8 @@ class Phase6ShiftCloseIntegrationTest extends AbstractIntegrationTest {
                         .content("""
                                 {"vehicleDescription":"Edit after close"}
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Ticket can only be edited while shift is OPEN"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.vehicleDescription").value("Edit after close"));
 
         mvc.perform(get("/api/v1/reports/daily-summary?date=2026-10-04"))
                 .andExpect(status().isOk())

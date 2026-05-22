@@ -52,7 +52,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/ai/**").hasRole("DUENO")
                         .requestMatchers("/api/v1/audit-events/**", "/api/v1/corrections/**").hasRole("DUENO")
                         .requestMatchers(HttpMethod.GET, "/api/v1/reports/**").hasRole("DUENO")
-                        .requestMatchers("/api/v1/payroll/**").hasRole("GERENTE")
+                        .requestMatchers("/api/v1/payroll/**").hasRole("PAYROLL_ACCESS")
                         .requestMatchers("/api/v1/products/**", "/api/v1/inventory/**").hasRole("GERENTE")
                         .requestMatchers(HttpMethod.POST, "/api/v1/withdrawals/**", "/api/v1/employee-advances/**").hasRole("GERENTE")
                         .requestMatchers(HttpMethod.POST, "/api/v1/cash-counts/**").hasRole("OPERADOR")
@@ -70,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/attendance/**").hasRole("GERENTE")
                         .requestMatchers("/api/v1/employees/**", "/api/v1/service-types/**",
                                 "/api/v1/vehicle-sizes/**", "/api/v1/service-prices/**").hasRole("GERENTE")
+                        .requestMatchers("/api/v1/prepaid-packages/**").hasRole("OPERADOR")
                         .requestMatchers("/api/v1/business-days/**", "/api/v1/shifts/**",
                                 "/api/v1/expenses/**").hasRole("OPERADOR")
                         .anyRequest().authenticated())
@@ -103,22 +104,29 @@ public class SecurityConfig {
             String role = jwt.getClaimAsString("role");
             return users.findByUsernameIgnoreCase(username)
                     .filter(user -> user.isActive() && user.getRole().name().equals(role))
-                    .map(user -> new UsernamePasswordAuthenticationToken(username, jwt, authoritiesFor(role)))
+                    .map(user -> new UsernamePasswordAuthenticationToken(username, jwt, authoritiesFor(user)))
                     .orElseGet(() -> new UsernamePasswordAuthenticationToken(username, jwt, List.of()));
         };
     }
 
-    private Collection<GrantedAuthority> authoritiesFor(String role) {
+    private Collection<GrantedAuthority> authoritiesFor(com.lavadero.api.auth.domain.AppUser user) {
+        String role = user.getRole().name();
+        java.util.List<GrantedAuthority> authorities = new java.util.ArrayList<>();
         if ("DUENO".equals(role)) {
-            return List.of(new SimpleGrantedAuthority("ROLE_DUENO"),
-                    new SimpleGrantedAuthority("ROLE_GERENTE"),
-                    new SimpleGrantedAuthority("ROLE_OPERADOR"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_DUENO"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_GERENTE"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_OPERADOR"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_PAYROLL_ACCESS"));
+        } else if ("GERENTE".equals(role)) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_GERENTE"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_OPERADOR"));
+            if (user.isPayrollAccess()) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_PAYROLL_ACCESS"));
+            }
+        } else {
+            authorities.add(new SimpleGrantedAuthority("ROLE_OPERADOR"));
         }
-        if ("GERENTE".equals(role)) {
-            return List.of(new SimpleGrantedAuthority("ROLE_GERENTE"),
-                    new SimpleGrantedAuthority("ROLE_OPERADOR"));
-        }
-        return List.of(new SimpleGrantedAuthority("ROLE_OPERADOR"));
+        return authorities;
     }
 
     @Bean

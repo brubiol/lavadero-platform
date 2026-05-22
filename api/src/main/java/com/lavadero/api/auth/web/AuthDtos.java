@@ -22,9 +22,9 @@ public final class AuthDtos {
     public record AuthResponse(String accessToken, String refreshToken, long expiresInSeconds, UserResponse user) {
     }
 
-    public record UserResponse(Long id, String username, String fullName, AuthRole role) {
+    public record UserResponse(Long id, String username, String fullName, AuthRole role, boolean payrollAccess) {
         public static UserResponse from(AppUser user) {
-            return new UserResponse(user.getId(), user.getUsername(), user.getFullName(), user.getRole());
+            return new UserResponse(user.getId(), user.getUsername(), user.getFullName(), user.getRole(), user.isPayrollAccess());
         }
     }
 

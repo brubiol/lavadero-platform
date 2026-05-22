@@ -5,6 +5,7 @@ import com.lavadero.api.operations.domain.BusinessDayStatus;
 import com.lavadero.api.operations.domain.Shift;
 import com.lavadero.api.operations.repository.ShiftRepository;
 import com.lavadero.api.operations.web.ShiftDtos.OpenShiftRequest;
+import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,11 @@ public class ShiftService {
             throw new IllegalArgumentException("Shift already exists for business day and type");
         }
         return shifts.save(new Shift(businessDay, request.shiftType()));
+    }
+
+    @Transactional(readOnly = true)
+    public Shift get(Long id) {
+        return shifts.findById(id).orElseThrow(() -> new EntityNotFoundException("Shift not found"));
     }
 
     @Transactional(readOnly = true)

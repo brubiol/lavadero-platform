@@ -27,6 +27,7 @@ const NAV_OPS: NavItem[] = [
   { id: 'gastos',    to: '/gastos',        label: 'Gastos',        icon: <IMoney />,     roles: ['OPERADOR','GERENTE','DUENO'] },
   { id: 'cierre',    to: '/cierre-dia',    label: 'Cierre del día',icon: <ICut />,       roles: ['OPERADOR','GERENTE','DUENO'] },
   { id: 'corte',     to: '/corte',         label: 'Corte',         icon: <ICut />,       roles: ['OPERADOR','GERENTE','DUENO'] },
+  { id: 'paquetes',  to: '/paquetes',      label: 'Paquetes',      icon: <IMoney />,     roles: ['OPERADOR','GERENTE','DUENO'] },
 ]
 
 const NAV_MGMT: NavItem[] = [
@@ -58,14 +59,16 @@ function initialsOf(name: string) {
 export function Sidebar({
   role,
   userName,
+  payrollAccess = true,
   onLogout,
 }: {
   role: NavRole
   userName: string
+  payrollAccess?: boolean
   onLogout: () => void
 }) {
   const ops    = NAV_OPS.filter(it => inRole(role, it.roles))
-  const mgmt   = NAV_MGMT.filter(it => inRole(role, it.roles))
+  const mgmt   = NAV_MGMT.filter(it => inRole(role, it.roles) && (it.id !== 'nomina' || payrollAccess))
   const owner  = NAV_OWNER.filter(it => inRole(role, it.roles))
   return (
     <aside className="tl-sidebar">

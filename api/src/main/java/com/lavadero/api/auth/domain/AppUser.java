@@ -33,6 +33,9 @@ public class AppUser extends AuditedEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "payroll_access", nullable = false)
+    private boolean payrollAccess = true;
+
     protected AppUser() {
     }
 
@@ -65,5 +68,9 @@ public class AppUser extends AuditedEntity {
 
     public boolean isActive() {
         return active;
+    }
+
+    public boolean isPayrollAccess() {
+        return payrollAccess;
     }
 }

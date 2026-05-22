@@ -44,14 +44,15 @@ class Phase2TicketIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_require_courtesy_reason_for_courtesy_ticket() throws Exception {
+    void should_allow_courtesy_ticket_without_reason() throws Exception {
         Fixture fixture = fixture("T2B", LocalDate.of(2026, 7, 2), "MXN", "160.00");
 
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ticketJson(fixture, true, null, fixture.employeeOneId())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("courtesyReason is required for courtesy tickets"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.priceAmount").value(0))
+                .andExpect(jsonPath("$.courtesy").value(true));
     }
 
     @Test
@@ -92,7 +93,7 @@ class Phase2TicketIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_reject_ticket_edit_when_shift_is_closed() throws Exception {
+    void should_allow_ticket_edit_when_shift_is_closed() throws Exception {
         Fixture fixture = fixture("T2E", LocalDate.of(2026, 7, 5), "MXN", "180.00");
         Long ticketId = createTicket(fixture, false, null, fixture.employeeOneId());
         var shift = shifts.findById(fixture.shiftId()).orElseThrow();
@@ -104,8 +105,8 @@ class Phase2TicketIntegrationTest extends AbstractIntegrationTest {
                         .content("""
                                 {"vehicleDescription":"Sentra blanco"}
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Ticket can only be edited while shift is OPEN"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.vehicleDescription").value("Sentra blanco"));
     }
 
     private Fixture fixture(String prefix, LocalDate businessDate, String currency, String amount) throws Exception {
