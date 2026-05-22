@@ -1748,19 +1748,14 @@ function TicketWorkspace({
                   ))}
                 </select>
               </SelectField>
+              <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
+                <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+              </TextField>
               <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
                 <select {...form.register('serviceTypeId')}>
                   <option value={0}>Selecciona servicio</option>
                   {(data.services.data ?? []).map((service) => (
                     <option key={service.id} value={service.id}>{service.name}</option>
-                  ))}
-                </select>
-              </SelectField>
-              <SelectField label="Tamano de vehiculo" error={form.formState.errors.vehicleSizeId?.message}>
-                <select {...form.register('vehicleSizeId')}>
-                  <option value={0}>Selecciona tamano</option>
-                  {(data.sizes.data ?? []).map((size) => (
-                    <option key={size.id} value={size.id}>{size.name}</option>
                   ))}
                 </select>
               </SelectField>
@@ -1776,11 +1771,16 @@ function TicketWorkspace({
               <TextField label="Vehiculo" error={form.formState.errors.vehicleDescription?.message}>
                 <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
               </TextField>
+              <SelectField label="Tamano de vehiculo" error={form.formState.errors.vehicleSizeId?.message}>
+                <select {...form.register('vehicleSizeId')}>
+                  <option value={0}>Selecciona tamano</option>
+                  {(data.sizes.data ?? []).map((size) => (
+                    <option key={size.id} value={size.id}>{size.name}</option>
+                  ))}
+                </select>
+              </SelectField>
               <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
                 <input type="time" {...form.register('occurredAt')} />
-              </TextField>
-              <TextField label="No. de Nota de Control" error={form.formState.errors.internalRef?.message}>
-                <input placeholder="Ej. 41703" {...form.register('internalRef')} />
               </TextField>
             </div>
           </Panel>
