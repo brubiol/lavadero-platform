@@ -201,16 +201,18 @@ export function Frame({ sidebar, children }: { sidebar: ReactNode; children: Rea
 }
 
 // ─── MobileTopbar ───────────────────────────────────────────────────────
-export function MobileTopbar({ userName }: { userName: string }) {
+export function MobileTopbar({ userName, pageTitle }: { userName: string; pageTitle?: string }) {
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border-soft bg-white/95 px-4 backdrop-blur lg:hidden">
-      <div className="flex items-center gap-2.5">
-        <div className="tl-sb-logo" style={{ width: 30, height: 30 }}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="tl-sb-logo" style={{ width: 30, height: 30, flexShrink: 0 }}>
           <img src="/logo.png" alt="" />
         </div>
-        <span className="text-sm font-bold tracking-tight text-ink-900">Turbo Lavado</span>
+        <span className="text-sm font-bold tracking-tight text-ink-900 truncate">Turbo Lavado</span>
       </div>
-      <span className="text-xs text-ink-500 truncate max-w-[40%]">{userName}</span>
+      {pageTitle && (
+        <span className="tl-mob-page-label">{pageTitle}</span>
+      )}
     </header>
   )
 }

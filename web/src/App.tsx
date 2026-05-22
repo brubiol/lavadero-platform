@@ -905,7 +905,7 @@ function AppShell() {
         userName={auth.user.fullName}
         role={role}
       />
-      <MobileTopbar userName={auth.user.fullName} />
+      <MobileTopbar userName={auth.user.fullName} pageTitle={meta.title} />
 
       <main className="tl-page px-4 pb-24 lg:px-6 lg:pb-8">
         <Routes>
@@ -1136,22 +1136,22 @@ function DayStatusCard() {
     return (
       <>
         {toast && <Toast message={toast} />}
-        <div className="flex items-center justify-between gap-4 rounded-2xl border-l-4 border-amber-400 bg-amber-50 px-5 py-4 shadow-sm">
-          <div>
-            <p className="font-bold text-amber-900">Sin dia de trabajo abierto</p>
-            <p className="text-sm text-amber-700 mt-0.5">Hoy es {today}. Abre el dia para poder capturar tickets.</p>
-          </div>
-          {canAct && (
-            <button
+        <Banner
+          tone="warn"
+          title="Sin dia de trabajo abierto"
+          text={`Hoy es ${today}. Abre el dia para poder capturar tickets.`}
+          cta={canAct ? (
+            <Button
+              kind="go"
+              size="sm"
               onClick={() => openDayMutation.mutate()}
               disabled={openDayMutation.isPending}
-              className="shrink-0 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-amber-600 active:scale-[0.98] disabled:bg-amber-300"
             >
               {openDayMutation.isPending ? 'Abriendo...' : 'Abrir dia de hoy'}
-            </button>
-          )}
-          {openDayMutation.error && <p className="text-sm text-red-700">{openDayMutation.error.message}</p>}
-        </div>
+            </Button>
+          ) : undefined}
+        />
+        {openDayMutation.error && <p className="text-sm" style={{ color: 'var(--bad-700)' }}>{openDayMutation.error.message}</p>}
       </>
     )
   }
@@ -1162,39 +1162,26 @@ function DayStatusCard() {
     return (
       <>
         {toast && <Toast message={toast} />}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border-l-4 border-violet-400 bg-violet-50 px-5 py-4 shadow-sm">
-          <div>
-            <p className="font-bold text-violet-900">Dia abierto — sin turno activo</p>
-            <p className="text-sm text-violet-700 mt-0.5">
-              {allShifts.length === 0
-                ? 'Abre el turno para empezar a capturar tickets.'
-                : 'Todos los turnos de hoy estan cerrados.'}
-            </p>
-          </div>
-          {canAct && (
+        <Banner
+          tone="info"
+          title="Dia abierto — sin turno activo"
+          text={allShifts.length === 0 ? 'Abre el turno para empezar a capturar tickets.' : 'Todos los turnos de hoy estan cerrados.'}
+          cta={canAct ? (
             <div className="flex gap-2">
               {!matiExists && (
-                <button
-                  onClick={() => openShiftMutation.mutate('MATUTINO')}
-                  disabled={openShiftMutation.isPending}
-                  className="tl-btn tl-btn-primary disabled:bg-violet-300"
-                >
+                <Button kind="primary" size="sm" onClick={() => openShiftMutation.mutate('MATUTINO')} disabled={openShiftMutation.isPending}>
                   {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Matutino'}
-                </button>
+                </Button>
               )}
               {!vespeExists && (
-                <button
-                  onClick={() => openShiftMutation.mutate('VESPERTINO')}
-                  disabled={openShiftMutation.isPending}
-                  className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition-all hover:bg-violet-50 active:scale-[0.98]"
-                >
+                <Button kind="secondary" size="sm" onClick={() => openShiftMutation.mutate('VESPERTINO')} disabled={openShiftMutation.isPending}>
                   {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Vespertino'}
-                </button>
+                </Button>
               )}
             </div>
-          )}
-          {openShiftMutation.error && <p className="w-full text-sm text-red-700">{openShiftMutation.error.message}</p>}
-        </div>
+          ) : undefined}
+        />
+        {openShiftMutation.error && <p className="text-sm" style={{ color: 'var(--bad-700)' }}>{openShiftMutation.error.message}</p>}
       </>
     )
   }
@@ -1202,30 +1189,25 @@ function DayStatusCard() {
   return (
     <>
       {toast && <Toast message={toast} />}
-      <div className="flex items-center justify-between gap-4 rounded-2xl border-l-4 border-emerald-400 bg-emerald-50 px-5 py-4 shadow-sm">
-        <div>
-          <p className="font-bold text-emerald-900">En operacion — {today}</p>
-          <p className="text-sm text-emerald-700 mt-0.5">
-            {openShifts.map((s) => s.shiftType === 'MATUTINO' ? 'Turno Matutino' : 'Turno Vespertino').join(' + ')} activo
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {openShifts.map((s) => (
-            <span key={s.id} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
-              {s.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'} activo
-            </span>
-          ))}
-          {canAct && !allShifts.some((s) => s.shiftType === 'VESPERTINO') && (
-            <button
-              onClick={() => openShiftMutation.mutate('VESPERTINO')}
-              disabled={openShiftMutation.isPending}
-              className="rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-50 active:scale-[0.98]"
-            >
-              + Turno Vespertino
-            </button>
-          )}
-        </div>
-      </div>
+      <Banner
+        tone="good"
+        title={`En operacion — ${today}`}
+        text={`${openShifts.map((s) => s.shiftType === 'MATUTINO' ? 'Turno Matutino' : 'Turno Vespertino').join(' + ')} activo`}
+        cta={
+          <div className="flex items-center gap-2">
+            {openShifts.map((s) => (
+              <Pill key={s.id} tone="good">
+                {s.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}
+              </Pill>
+            ))}
+            {canAct && !allShifts.some((s) => s.shiftType === 'VESPERTINO') && (
+              <Button kind="secondary" size="sm" onClick={() => openShiftMutation.mutate('VESPERTINO')} disabled={openShiftMutation.isPending}>
+                {openShiftMutation.isPending ? 'Abriendo...' : '+ Vespertino'}
+              </Button>
+            )}
+          </div>
+        }
+      />
     </>
   )
 }
@@ -1253,6 +1235,10 @@ function Dashboard() {
   })
   const pendingFlagged = flagged.data ?? []
 
+  const isLoading = summary.isLoading
+  const MetricVal = ({ v, wide }: { v?: string; wide?: boolean }) =>
+    isLoading ? <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} /> : <>{v}</>
+
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1260,59 +1246,54 @@ function Dashboard() {
           <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Dashboard</h2>
           <p className="text-[13.5px] text-ink-500 mt-0.5">Resumen del dia — ventas, carros, estado del turno.</p>
         </div>
-        <label className="w-full max-w-48">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-        </label>
+        <div className="w-full max-w-48">
+          <Field label="Fecha">
+            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </Field>
+        </div>
       </div>
 
       {isOwner && pendingFlagged.length > 0 && (
-        <NavLink
-          to="/auditoria"
-          className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 transition-colors hover:bg-amber-100"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-200 text-base font-bold text-amber-800">!</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-900">
-                {pendingFlagged.length} cambio{pendingFlagged.length === 1 ? '' : 's'} irregular{pendingFlagged.length === 1 ? '' : 'es'} por revisar
-              </p>
-              <p className="text-xs text-amber-700">Cambios grandes de nomina o de pago del personal. Toca para revisar.</p>
-            </div>
-          </div>
-          <span className="shrink-0 text-sm font-semibold text-amber-700">Revisar</span>
+        <NavLink to="/auditoria" className="block no-underline">
+          <Banner
+            tone="warn"
+            title={`${pendingFlagged.length} cambio${pendingFlagged.length === 1 ? '' : 's'} irregular${pendingFlagged.length === 1 ? '' : 'es'} por revisar`}
+            text="Cambios grandes de nomina o de pago del personal. Toca para revisar."
+            cta={<span className="tl-btn tl-btn-sm tl-btn-secondary" style={{ pointerEvents: 'none' }}>Revisar</span>}
+          />
         </NavLink>
       )}
 
       <DayStatusCard />
 
       {monthHist.data && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Este mes</span>
-          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-100">
-            {monthHist.data.totalCars} carros
-          </span>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-100">
-            ${Number(monthHist.data.totalRevenue).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ingresos
-          </span>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ${monthHist.data.totalResultado >= 0 ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-red-50 text-red-700 ring-red-100'}`}>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3" style={{ background: 'var(--ink-50)', borderColor: 'var(--border-soft)' }}>
+          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>Este mes</span>
+          <Pill tone="gray" dot={false}>{monthHist.data.totalCars} carros</Pill>
+          <Pill tone="good" dot={false}>${Number(monthHist.data.totalRevenue).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ingresos</Pill>
+          <Pill tone={monthHist.data.totalResultado >= 0 ? 'good' : 'bad'} dot={false}>
             ${Number(monthHist.data.totalResultado).toLocaleString('es-MX', { maximumFractionDigits: 0 })} resultado
-          </span>
+          </Pill>
         </div>
       )}
 
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-8">
-        <Metric label="Carros lavados" value={data ? String(data.carsWashed) : '...'} />
-        <Metric label="Ingresos autos" value={data ? money(data.ticketRevenue, 'MXN') : '...'} variant="feature" />
-        <Metric label="Efectivo" value={data ? money(data.cashRevenue, 'MXN') : '...'} variant="success" />
-        <Metric label="Tarjeta" value={data ? money(data.cardRevenue, 'MXN') : '...'} variant="info" />
-        <Metric label="Deposito" value={data ? money(data.transferRevenue, 'MXN') : '...'} variant="warn" />
-        <Metric label="Miscelanea" value={data ? money(data.inventorySalesRevenue, 'MXN') : '...'} />
-        <Metric label="Gastos" value={data ? money(data.expensesTotal, 'MXN') : '...'} variant="danger" />
-        <Metric label="Resultado" value={data ? money(data.result, 'MXN') : '...'} variant="info" />
-        <Metric label="Sobrante/Faltante" value={data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN')} variant={data?.cashVariance == null ? 'default' : data.cashVariance >= 0 ? 'success' : 'warn'} />
+      {/* 9 metrics: 3 cols → 3 rows (mobile) | 3 cols → 3 rows (md) | auto-fit 3 rows (xl) */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        <Metric label="Carros lavados" value={<MetricVal v={data ? String(data.carsWashed) : undefined} />} />
+        <Metric label="Ingresos autos" value={<MetricVal v={data ? money(data.ticketRevenue, 'MXN') : undefined} wide />} variant="feature" />
+        <Metric label="Resultado" value={<MetricVal v={data ? money(data.result, 'MXN') : undefined} wide />} variant="info" />
+        <Metric label="Efectivo" value={<MetricVal v={data ? money(data.cashRevenue, 'MXN') : undefined} wide />} variant="success" />
+        <Metric label="Tarjeta" value={<MetricVal v={data ? money(data.cardRevenue, 'MXN') : undefined} wide />} variant="info" />
+        <Metric label="Deposito" value={<MetricVal v={data ? money(data.transferRevenue, 'MXN') : undefined} wide />} variant="warn" />
+        <Metric label="Miscelanea" value={<MetricVal v={data ? money(data.inventorySalesRevenue, 'MXN') : undefined} wide />} />
+        <Metric label="Gastos" value={<MetricVal v={data ? money(data.expensesTotal, 'MXN') : undefined} wide />} variant="danger" />
+        <Metric
+          label="Sobrante/Faltante"
+          value={isLoading ? <span className="tl-metric-skeleton wide" /> : (data?.cashVariance == null ? 'Pendiente' : money(data.cashVariance, 'MXN'))}
+          variant={data?.cashVariance == null ? 'default' : data.cashVariance >= 0 ? 'success' : 'warn'}
+        />
       </div>
 
       <Panel title="Tickets recientes">
@@ -1340,22 +1321,21 @@ function Dashboard() {
                   <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
                   <td>{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
                   <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
-                  <td>
-                    {!ticket.courtesy && (
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : ticket.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
-                      </span>
-                    )}
-                  </td>
+                  <td><PaymentPill ticket={ticket} /></td>
                   <td>
                     <TicketStatusPill ticket={ticket} />
                   </td>
                 </tr>
               ))}
               {!summary.isLoading && (data?.recentTickets.length ?? 0) === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                    No hay tickets para esta fecha. Crea tickets desde Nuevo ticket para ver el resumen.
+                <tr className="tl-empty-row">
+                  <td colSpan={7}>
+                    <div className="tl-empty-icon">
+                      <div className="icon-wrap">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                      </div>
+                      <p>Sin tickets para esta fecha. Crea tickets desde Nuevo ticket.</p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -1421,27 +1401,21 @@ function EndOfDayScreen() {
           <Panel title="Turnos">
             <div className="grid gap-3 md:grid-cols-2">
               {shifts.map((shift) => (
-                <div key={shift.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <strong>{shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}</strong>
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${shift.status === 'OPEN' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {shift.status === 'OPEN' ? 'Abierto' : 'Cerrado'}
-                    </span>
+                <div key={shift.id} className="tl-panel" style={{ padding: '14px 16px' }}>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <strong className="text-sm">{shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}</strong>
+                    <StatusPill kind={shift.status === 'OPEN' ? 'Abierto' : 'Cerrado'} />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/corte')}
-                    className="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
-                  >
+                  <Button kind="secondary" size="sm" onClick={() => navigate('/corte')}>
                     {shift.status === 'OPEN' ? 'Hacer corte' : 'Ver corte'}
-                  </button>
+                  </Button>
                 </div>
               ))}
               {!data.currentBusinessDay && (
-                <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Abre el dia para comenzar.</p>
+                <Banner tone="warn" title="Abre el dia para comenzar." />
               )}
               {data.currentBusinessDay && shifts.length === 0 && (
-                <p className="rounded-lg bg-violet-50 p-3 text-sm text-violet-800">Abre un turno para capturar tickets.</p>
+                <Banner tone="info" title="Abre un turno para capturar tickets." />
               )}
             </div>
           </Panel>
@@ -1453,14 +1427,9 @@ function EndOfDayScreen() {
             <SummaryRow label="Turnos cerrados" value={String(closedShifts.length)} />
             <SummaryRow label="Resultado" value={daily ? money(daily.result, 'MXN') : '...'} />
             <SummaryRow label="Diferencia caja" value={daily?.cashVariance == null ? 'Pendiente' : money(daily.cashVariance, 'MXN')} />
-            <button
-              type="button"
-              onClick={() => navigate('/corte')}
-              disabled={openShifts.length === 0}
-              className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-slate-800 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
-            >
+            <Button kind="primary" size="lg" block disabled={openShifts.length === 0} onClick={() => navigate('/corte')}>
               Cerrar turno abierto
-            </button>
+            </Button>
           </Panel>
         </aside>
       </div>
@@ -1509,17 +1478,14 @@ function AiScreen() {
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">Dueno</p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-950">AI Command Center</h2>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario.
-          </p>
+      <div className="tl-page-head">
+        <div className="tl-page-title">
+          <h1>AI Command Center</h1>
+          <p>Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario.</p>
         </div>
-        <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
-          Asesor operativo
-        </span>
+        <div className="tl-page-head-actions">
+          <Pill tone="purple" dot={false}>Asesor operativo</Pill>
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -1767,9 +1733,7 @@ function TicketWorkspace({
       </div>
 
       {disabledReason && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          {disabledReason} Abre el dia y el turno desde Catalogos antes de capturar tickets.
-        </div>
+        <Banner tone="warn" title={disabledReason} text="Abre el dia y el turno desde Catalogos antes de capturar tickets." />
       )}
 
       <form className="grid gap-5 xl:grid-cols-[1fr_360px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
@@ -1852,7 +1816,7 @@ function TicketWorkspace({
                     placeholder="Buscar lavador..."
                     value={washerSearch}
                     onChange={(e) => setWasherSearch(e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                    className="tl-input"
                   />
                   {washerSearch && (
                     <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-100 bg-white">
@@ -1946,18 +1910,19 @@ function TicketWorkspace({
             </div>
             {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
             {readOnly ? (
-              <p className="mt-5 rounded-xl bg-amber-50 p-3 text-center text-sm text-amber-700 ring-1 ring-amber-200">
-                Turno cerrado — solo lectura
-              </p>
+              <Banner tone="warn" title="Turno cerrado — solo lectura" />
             ) : (
-              <button
+              <Button
+                kind="go"
+                size="lg"
                 type="submit"
+                block
                 disabled={save.isPending || Boolean(disabledReason)}
-                data-testid="ticket-submit"
-                className="mt-5 w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+                testId="ticket-submit"
+                className="mt-5"
               >
                 {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
-              </button>
+              </Button>
             )}
           </Panel>
         </aside>
@@ -2633,14 +2598,10 @@ function ShiftCloseScreen() {
       </div>
 
       {!data.currentBusinessDay && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          No hay dia abierto para hoy. Ve al Dashboard y abre el dia antes de hacer corte.
-        </div>
+        <Banner tone="warn" title="No hay dia abierto para hoy." text="Ve al Dashboard y abre el dia antes de hacer corte." />
       )}
       {data.currentBusinessDay && shifts.length === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          No hay turnos para hoy. Ve al Dashboard y abre un turno.
-        </div>
+        <Banner tone="warn" title="No hay turnos para hoy." text="Ve al Dashboard y abre un turno." />
       )}
       {closeSummary.error && <ErrorMessage message={closeSummary.error.message} />}
 
@@ -2686,19 +2647,10 @@ function ShiftCloseScreen() {
               <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
               <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
             </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                <span className="text-gray-500">Efectivo</span>
-                <strong>{summary ? money(summary.cashRevenue, 'MXN') : '...'}</strong>
-              </div>
-              <div className="flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-sm">
-                <span className="text-blue-600">Tarjeta</span>
-                <strong className="text-blue-700">{summary ? money(summary.cardRevenue, 'MXN') : '...'}</strong>
-              </div>
-              <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm">
-                <span className="text-amber-600">Deposito</span>
-                <strong className="text-amber-700">{summary ? money(summary.transferRevenue, 'MXN') : '...'}</strong>
-              </div>
+            <div className="mt-3">
+              <SummaryRow k="Efectivo" v={summary ? money(summary.cashRevenue, 'MXN') : '…'} />
+              <SummaryRow k="Tarjeta" v={summary ? money(summary.cardRevenue, 'MXN') : '…'} />
+              <SummaryRow k="Deposito" v={summary ? money(summary.transferRevenue, 'MXN') : '…'} />
             </div>
             <p className="mt-3 text-sm text-gray-500">
               Efectivo esperado = ingresos en efectivo - gastos - retiros. Tarjeta y depositos no cuentan para el conteo de caja.
@@ -2712,14 +2664,10 @@ function ShiftCloseScreen() {
               <Metric label="Diferencia" value={variance == null ? 'Pendiente' : money(variance, 'MXN')} />
             </div>
             {isShort && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                Hay faltante. El sistema exige motivo antes de cerrar el turno.
-              </div>
+              <Banner tone="bad" title="Hay faltante." text="El sistema exige motivo antes de cerrar el turno." />
             )}
             {variance != null && variance > 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                Hay sobrante. Puedes cerrar sin motivo obligatorio.
-              </div>
+              <Banner tone="good" title="Hay sobrante." text="Puedes cerrar sin motivo obligatorio." />
             )}
           </Panel>
         </div>
@@ -2737,26 +2685,29 @@ function ShiftCloseScreen() {
               )}
               {closeMutation.error && <ErrorMessage message={closeMutation.error.message} />}
               {reopenMutation.error && <ErrorMessage message={reopenMutation.error.message} />}
-              <button
+              <Button
+                kind="primary"
+                size="lg"
                 type="submit"
+                block
                 disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
-                data-testid="corte-close-shift"
-                className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400"
+                testId="corte-close-shift"
               >
                 {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? 'Turno cerrado' : 'Cerrar turno'}
-              </button>
+              </Button>
               {hasRole('DUENO') && summary?.closed && (
-                <button
-                  type="button"
+                <Button
+                  kind="secondary"
+                  size="lg"
+                  block
                   disabled={reopenMutation.isPending}
                   onClick={() => {
                     const reason = window.prompt('Motivo para reabrir el turno cerrado')
                     if (reason?.trim()) reopenMutation.mutate(reason.trim())
                   }}
-                  className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-[0.98] disabled:text-amber-300"
                 >
                   {reopenMutation.isPending ? 'Reabriendo...' : 'Reabrir turno'}
-                </button>
+                </Button>
               )}
             </form>
           </Panel>
@@ -3025,14 +2976,9 @@ function ReportsScreen() {
             </select>
           </SelectField>
           <div className="flex items-end">
-            <button
-              type="button"
-              onClick={downloadExport}
-              data-testid="reports-export"
-              className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
-            >
+            <Button kind="primary" onClick={downloadExport} testId="reports-export" block>
               Descargar Excel
-            </button>
+            </Button>
           </div>
         </div>
         {downloadError && <ErrorMessage message={downloadError} />}
@@ -3853,16 +3799,16 @@ function PayrollScreen() {
                   Bloquear
                 </button>
                 {hasRole('DUENO') && locked && (
-                  <button
+                  <Button
+                    kind="secondary"
                     disabled={unlock.isPending}
-                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-[0.98] disabled:text-amber-300"
                     onClick={() => {
                       const reason = window.prompt('Motivo para desbloquear la nomina')
                       if (reason?.trim()) unlock.mutate(reason.trim())
                     }}
                   >
                     Desbloquear
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -4228,14 +4174,10 @@ function PrepaidPackageScreen() {
             <TextField label="Notas (opcional)" error={form.formState.errors.notes?.message}>
               <input placeholder="Ej. Cliente VIP, 10+3" {...form.register('notes')} />
             </TextField>
-            {save.error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
-            <button
-              type="submit"
-              disabled={save.isPending || Boolean(disabledReason)}
-              className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow transition-all hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
-            >
+            {save.error && <ErrorMessage message={save.error.message} />}
+            <Button kind="go" size="lg" type="submit" block disabled={save.isPending || Boolean(disabledReason)}>
               {save.isPending ? 'Guardando...' : 'Registrar venta'}
-            </button>
+            </Button>
           </form>
         </Panel>
 
@@ -4263,9 +4205,12 @@ function PrepaidPackageScreen() {
                       <td className="font-semibold">{pkg.washesIncluded}</td>
                       <td className="r font-semibold text-violet-700">{money(pkg.amount, 'MXN')}</td>
                       <td>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${pkg.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : pkg.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {pkg.paymentMethod === 'CARD' ? 'Tarjeta' : pkg.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
-                        </span>
+                        {pkg.paymentMethod === 'CARD'
+                          ? <Pill tone="info" dot={false}>Tarjeta</Pill>
+                          : pkg.paymentMethod === 'TRANSFER'
+                            ? <Pill tone="warn" dot={false}>Windows</Pill>
+                            : <Pill tone="gray" dot={false}>Efectivo</Pill>
+                        }
                       </td>
                       <td className="text-ink-500">{pkg.notes || '-'}</td>
                     </tr>
@@ -4327,19 +4272,19 @@ function TicketsBrowser() {
       <Panel title="Filtros">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px]">
           <input
-            className="field"
+            className="tl-input"
             value={notaLookup}
             onChange={(event) => { setNotaLookup(event.target.value); setQuery('') }}
             placeholder="Buscar por nota de control (ej. 20260521-0042)"
           />
           <input
-            className="field"
+            className="tl-input"
             value={query}
             onChange={(event) => { setQuery(event.target.value); setNotaLookup('') }}
             placeholder="Buscar por vehiculo, servicio o lavador"
             disabled={Boolean(notaLookup.trim())}
           />
-          <select className="field" value={status} onChange={(event) => setStatus(event.target.value as TicketStatus)} disabled={Boolean(notaLookup.trim())}>
+          <select className="tl-select" value={status} onChange={(event) => setStatus(event.target.value as TicketStatus)} disabled={Boolean(notaLookup.trim())}>
             <option value="ACTIVE">Activos</option>
             <option value="VOIDED">Cancelados</option>
           </select>
@@ -4370,13 +4315,7 @@ function TicketsBrowser() {
                 <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
                 <td>{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
                 <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
-                <td>
-                  {!ticket.courtesy && (
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ticket.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-700' : ticket.paymentMethod === 'TRANSFER' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {ticket.paymentMethod === 'CARD' ? 'Tarjeta' : ticket.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
-                    </span>
-                  )}
-                </td>
+                <td><PaymentPill ticket={ticket} /></td>
                 <td>
                   <TicketStatusPill ticket={ticket} />
                 </td>
@@ -4438,12 +4377,10 @@ function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: ()
         <TextField label="Motivo" error={form.formState.errors.reason?.message}>
           <textarea rows={4} placeholder="Ej. Capturado por error" {...form.register('reason')} />
         </TextField>
-        {mutation.error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{mutation.error.message}</p>}
+        {mutation.error && <ErrorMessage message={mutation.error.message} />}
         <div className="flex justify-end gap-2">
-          <button type="button" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={onClose}>Volver</button>
-          <button type="submit" className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow transition-all hover:bg-red-700 active:scale-[0.98]">
-            Confirmar cancelacion
-          </button>
+          <Button kind="ghost" onClick={onClose}>Volver</Button>
+          <Button kind="danger" type="submit">Confirmar cancelacion</Button>
         </div>
       </form>
     </Modal>
@@ -4832,13 +4769,9 @@ function AiAnalystSection({
           <textarea rows={4} placeholder="Ej. Por que esta semana estuvo mas baja?" {...chatForm.register('message')} />
         </TextField>
         {chat.error && <ErrorMessage message={chat.error.message} />}
-        <button
-          type="submit"
-          disabled={chat.isPending}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400"
-        >
+        <Button kind="primary" type="submit" disabled={chat.isPending}>
           {chat.isPending ? 'Analizando...' : 'Preguntar al analista'}
-        </button>
+        </Button>
       </form>
 
       {chat.data && (
@@ -4895,13 +4828,9 @@ function AiInvestigationSection({ from, to }: { from: string; to: string }) {
           <textarea rows={4} placeholder="Ej. Que explica la diferencia de efectivo de este rango?" {...investigationForm.register('question')} />
         </TextField>
         {investigation.error && <ErrorMessage message={investigation.error.message} />}
-        <button
-          type="submit"
-          disabled={investigation.isPending}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400"
-        >
+        <Button kind="go" type="submit" disabled={investigation.isPending}>
           {investigation.isPending ? 'Investigando...' : 'Investigar'}
-        </button>
+        </Button>
       </form>
 
       {investigation.data && (
@@ -5130,10 +5059,8 @@ function MoneyTable({
 function ModalActions({ onClose, submitLabel }: { onClose: () => void; submitLabel: string }) {
   return (
     <div className="flex justify-end gap-2">
-      <button type="button" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98]" onClick={onClose}>Volver</button>
-      <button type="submit" className="tl-btn tl-btn-primary">
-        {submitLabel}
-      </button>
+      <Button kind="ghost" onClick={onClose}>Volver</Button>
+      <Button kind="primary" type="submit">{submitLabel}</Button>
     </div>
   )
 }
@@ -5291,12 +5218,10 @@ function EmployeeEditModal({
               <p className="text-xs text-gray-500">Motivo anterior: {employee.deactivationReason}</p>
             )}
           </div>
-          {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {error && <ErrorMessage message={error} />}
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {saving ? 'Guardando...' : 'Guardar'}
-            </button>
+            <Button kind="ghost" onClick={onClose}>Cancelar</Button>
+            <Button kind="primary" type="submit" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
           </div>
         </form>
       </div>
@@ -5415,6 +5340,13 @@ function TicketStatusPill({ ticket }: { ticket: Ticket }) {
   if (ticket.status === 'VOIDED') return <Pill tone="bad">Cancelado</Pill>
   if (ticket.courtesy) return <Pill tone="warn">Cortesia</Pill>
   return <Pill tone="good">Activo</Pill>
+}
+
+function PaymentPill({ ticket }: { ticket: Ticket }) {
+  if (ticket.courtesy) return null
+  if (ticket.paymentMethod === 'CARD') return <Pill tone="info" dot={false}>Tarjeta</Pill>
+  if (ticket.paymentMethod === 'TRANSFER') return <Pill tone="warn" dot={false}>Windows</Pill>
+  return <Pill tone="gray" dot={false}>Efectivo</Pill>
 }
 
 function Modal({ title, children, onClose, narrow = false }: { title: string; children: React.ReactNode; onClose: () => void; narrow?: boolean }) {
@@ -5565,10 +5497,11 @@ function AttendanceScreen() {
           <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Asistencia</h2>
           <p className="text-[13.5px] text-ink-500 mt-0.5">Entradas, salidas y faltas del personal.</p>
         </div>
-        <label className="w-full max-w-48">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
+        <div className="w-full max-w-48">
+          <Field label="Fecha">
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </Field>
+        </div>
       </div>
 
       {records.error && <ErrorMessage message={records.error.message} />}
@@ -5632,22 +5565,8 @@ function AttendanceScreen() {
               <div key={emp.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
                 <span className="text-sm font-medium">{emp.fullName}</span>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={clockIn.isPending}
-                    onClick={() => clockIn.mutate(emp.id)}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    Entrada
-                  </button>
-                  <button
-                    type="button"
-                    disabled={markAbsent.isPending}
-                    onClick={() => markAbsent.mutate(emp.id)}
-                    className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-                  >
-                    Falta
-                  </button>
+                  <Button kind="go" size="sm" disabled={clockIn.isPending} onClick={() => clockIn.mutate(emp.id)}>Entrada</Button>
+                  <Button kind="danger" size="sm" disabled={markAbsent.isPending} onClick={() => markAbsent.mutate(emp.id)}>Falta</Button>
                 </div>
               </div>
             ))}
@@ -5670,21 +5589,10 @@ function AttendanceScreen() {
             </label>
             {clockOut.error && <p className="mt-2 text-sm text-red-600">{clockOut.error.message}</p>}
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => { setClockOutId(null); setClockOutTime('') }}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={!clockOutTime || clockOut.isPending}
-                onClick={submitClockOut}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
+              <Button kind="ghost" onClick={() => { setClockOutId(null); setClockOutTime('') }}>Cancelar</Button>
+              <Button kind="primary" disabled={!clockOutTime || clockOut.isPending} onClick={submitClockOut}>
                 {clockOut.isPending ? 'Guardando...' : 'Guardar'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
