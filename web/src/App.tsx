@@ -921,7 +921,7 @@ function AppShell() {
           <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
           <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
           <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
-          <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
+          <Route path="/catalogos" element={<RequireRole role="DUENO"><CatalogsScreen /></RequireRole>} />
           <Route path="/asistencia" element={<RequireRole role="GERENTE"><AttendanceScreen /></RequireRole>} />
         </Routes>
       </main>
