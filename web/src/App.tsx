@@ -1247,9 +1247,10 @@ function Dashboard() {
           <p className="text-[13.5px] text-ink-500 mt-0.5">Resumen del dia — ventas, carros, estado del turno.</p>
         </div>
         <div className="w-full max-w-48">
-          <Field label="Fecha">
-            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          </Field>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
+            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="tl-input" />
+          </label>
         </div>
       </div>
 
@@ -5498,9 +5499,10 @@ function AttendanceScreen() {
           <p className="text-[13.5px] text-ink-500 mt-0.5">Entradas, salidas y faltas del personal.</p>
         </div>
         <div className="w-full max-w-48">
-          <Field label="Fecha">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </Field>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="tl-input" />
+          </label>
         </div>
       </div>
 
