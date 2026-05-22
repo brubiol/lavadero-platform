@@ -13,10 +13,8 @@ async function fillBaseTicket(page: Page, catalog: Catalog, description: string)
   await expect(page.getByLabel('Turno')).not.toHaveValue('0', { timeout: 15_000 })
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
   await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
+  await page.getByPlaceholder('Ej. Tsuru rojo, Tacoma blanca').fill(description)
   await page.getByTestId('ticket-advanced-toggle').click()
-  await page.getByLabel('Descripcion del vehiculo').fill(description)
-  await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
-  await expect(page.locator('button').filter({ hasText: catalog.employeeName }).first()).toBeVisible({ timeout: 10_000 })
   await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
 
@@ -61,20 +59,15 @@ test('invalid discount values are rejected by the API contract', async ({ reques
   }
 })
 
-test('courtesy ticket requires reason and stays at zero when reason is provided', async ({ page, request }) => {
+test('courtesy ticket is free and submits without a reason', async ({ page, request }) => {
   const fixture = await seedDiscountFixture(request)
 
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
   await fillBaseTicket(page, fixture.catalog, `Courtesy E2E ${Date.now()}`)
-  await page.getByLabel('Descuento (%)').fill('50')
   await page.getByLabel('Marcar como cortesia').check()
 
   await expect(page.getByTestId('summary-precio-preview-value')).toContainText('$0.00')
-  await page.getByTestId('ticket-submit').click()
-  await expect(page.getByText('La cortesia requiere motivo')).toBeVisible()
-
-  await page.getByLabel('Motivo de cortesia').fill('Cliente autorizado')
   await page.getByTestId('ticket-submit').click()
   await page.waitForURL('**/tickets', { timeout: 10_000 })
 })

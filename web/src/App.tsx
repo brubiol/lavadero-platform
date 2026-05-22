@@ -1801,8 +1801,26 @@ function TicketWorkspace({
               }
               return (
                 <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {filtered.map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => { toggle(e.id); setWasherSearch('') }}
+                        className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800"
+                      >
+                        {e.fullName}
+                      </button>
+                    ))}
+                    {filtered.length === 0 && washerSearch && (
+                      <p className="text-xs text-gray-400">Sin resultados para "{washerSearch}"</p>
+                    )}
+                    {allActive.length === 0 && (
+                      <p className="text-xs text-gray-400">No hay lavadores registrados</p>
+                    )}
+                  </div>
                   {selectedEmployees.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                       {selectedEmployees.map((e) => (
                         <span key={e.id} className="flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-800">
                           {e.fullName}
@@ -1811,32 +1829,14 @@ function TicketWorkspace({
                       ))}
                     </div>
                   )}
-                  <input
-                    type="text"
-                    placeholder="Buscar lavador..."
-                    value={washerSearch}
-                    onChange={(e) => setWasherSearch(e.target.value)}
-                    className="tl-input"
-                  />
-                  {washerSearch && (
-                    <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-100 bg-white">
-                      {filtered.length === 0 && (
-                        <p className="px-3 py-2 text-sm text-gray-400">Sin resultados</p>
-                      )}
-                      {filtered.map((e) => (
-                        <button
-                          key={e.id}
-                          type="button"
-                          onClick={() => { toggle(e.id); setWasherSearch('') }}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-violet-50"
-                        >
-                          {e.fullName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {!washerSearch && selectedEmployees.length === 0 && (
-                    <p className="text-xs text-gray-400">Escribe el nombre para buscar</p>
+                  {allActive.length > 6 && (
+                    <input
+                      type="text"
+                      placeholder="Buscar lavador..."
+                      value={washerSearch}
+                      onChange={(e) => setWasherSearch(e.target.value)}
+                      className="tl-input"
+                    />
                   )}
                 </div>
               )
