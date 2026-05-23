@@ -138,6 +138,7 @@ type ShiftCloseSummary = {
   closedAt?: string | null
   cashCount?: CashCount | null
   closed: boolean
+  prepaidPackagesTotal?: number | null
 }
 
 type TicketAssignment = {
@@ -1594,18 +1595,20 @@ function TicketWorkspace({
 }) {
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
-  const [washerSearch, setWasherSearch] = useState('')
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([])
   const [showAdvanced, setShowAdvanced] = useState(() =>
     Boolean(
       ticket && (
         (ticket.discountPercent ?? 0) > 0 ||
         ticket.courtesy ||
-        ticket.priceOverride != null ||
-        ticket.notes?.trim() ||
-        ticket.vehicleDescription?.trim()
+        ticket.priceOverride != null
       ),
     ),
   )
+  const products = useQuery({
+    queryKey: ['products', 'active'],
+    queryFn: () => api<Product[]>('/api/v1/products?active=true'),
+  })
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
   const defaultShift = openShifts[0]
@@ -1687,7 +1690,10 @@ function TicketWorkspace({
         occurredAt: values.occurredAt ? localTimeToIso(values.occurredAt, baseDate) : undefined,
         internalRef: values.internalRef?.trim() || undefined,
         priceOverride: override,
-        notes: values.notes?.trim() || undefined,
+        notes: [
+          values.notes?.trim(),
+          selectedExtras.length > 0 ? `Extras: ${selectedExtras.join(', ')}` : '',
+        ].filter(Boolean).join(' | ') || undefined,
       }
       if (mode === 'edit' && ticket) {
         return api<Ticket>(`/api/v1/tickets/${ticket.id}`, {
@@ -1703,6 +1709,7 @@ function TicketWorkspace({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tickets'] })
       setToast(mode === 'edit' ? 'Ticket actualizado' : 'Ticket guardado')
+      setSelectedExtras([])
       setTimeout(onSaved, 500)
     },
   })
@@ -1715,21 +1722,25 @@ function TicketWorkspace({
         : null
   )
 
-  const hasAdvancedError = (['priceOverride', 'notes', 'discountPercent', 'courtesyReason'] as const)
+  const hasAdvancedError = (['priceOverride', 'discountPercent'] as const)
     .some((field) => form.formState.errors[field])
   const effectiveShowAdvanced = showAdvanced || hasAdvancedError
 
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+
+      {/* Page header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">{mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Captura rapida para operacion de mostrador.</p>
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">
+            {mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}
+          </h2>
+          <p className="mt-0.5 text-[13.5px] text-ink-500">Captura rapida para operacion de mostrador.</p>
         </div>
-        <div className="rounded-lg border border-gray-100 bg-white px-4 py-2 text-sm">
-          <span className="text-gray-400">Dia: </span>
-          <strong>{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</strong>
+        <div className="flex items-center gap-2 rounded-xl border border-border-soft bg-white px-4 py-2 shadow-xs">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 7px rgba(52,211,153,0.85)' }} />
+          <span className="text-[13px] font-semibold text-ink-700">{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</span>
         </div>
       </div>
 
@@ -1737,195 +1748,319 @@ function TicketWorkspace({
         <Banner tone="warn" title={disabledReason} text="Abre el dia y el turno desde Catalogos antes de capturar tickets." />
       )}
 
-      <form className="grid gap-5 xl:grid-cols-[1fr_360px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
-        <div className="space-y-5">
-          <Panel title="Datos del servicio">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <SelectField label="Turno" error={form.formState.errors.shiftId?.message}>
-                <select {...form.register('shiftId')} disabled={Boolean(disabledReason)}>
-                  <option value={0}>Selecciona turno</option>
-                  {openShifts.map((shift) => (
-                    <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
-                  ))}
-                </select>
-              </SelectField>
-              <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
-                <input placeholder="Ej. 41703" {...form.register('internalRef')} />
-              </TextField>
-              <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
-                <select {...form.register('serviceTypeId')}>
-                  <option value={0}>Selecciona servicio</option>
-                  {(data.services.data ?? []).map((service) => (
-                    <option key={service.id} value={service.id}>{service.name}</option>
-                  ))}
-                </select>
-              </SelectField>
-              <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
-                <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
-                  <option value="CASH">Efectivo</option>
-                  <option value="CARD">Tarjeta</option>
-                  <option value="TRANSFER">Windows</option>
-                </select>
-              </SelectField>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <TextField label="Vehiculo" error={form.formState.errors.vehicleDescription?.message}>
-                <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-              </TextField>
-              <SelectField label="Tamano de vehiculo" error={form.formState.errors.vehicleSizeId?.message}>
-                <select {...form.register('vehicleSizeId')}>
-                  <option value={0}>Selecciona tamano</option>
-                  {(data.sizes.data ?? []).map((size) => (
-                    <option key={size.id} value={size.id}>{size.name}</option>
-                  ))}
-                </select>
-              </SelectField>
-              <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
-                <input type="time" {...form.register('occurredAt')} />
-              </TextField>
-            </div>
-          </Panel>
+      <form className="grid gap-5 xl:grid-cols-[1fr_340px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
+        <div className="space-y-4">
 
-          <Panel title="Lavadores">
-            {(() => {
-              const allActive = (data.employees.data ?? []).filter((e) => e.active)
-              const selectedIds = (form.watch('employeeIds') ?? []).map(Number)
-              const selectedEmployees = allActive.filter((e) => selectedIds.includes(e.id))
-              const query = washerSearch.toLowerCase()
-              const filtered = allActive.filter(
-                (e) => !selectedIds.includes(e.id) && e.fullName.toLowerCase().includes(query)
-              )
-              const toggle = (id: number) => {
-                const current = selectedIds
-                const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
-                form.setValue('employeeIds', next, { shouldValidate: true })
-              }
-              return (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {filtered.map((e) => (
-                      <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => { toggle(e.id); setWasherSearch('') }}
-                        className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800"
-                      >
-                        {e.fullName}
-                      </button>
+          {/* ── Datos del servicio ───────────────────────────────── */}
+          <div className="tl-panel overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-violet-700" />
+                <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Datos del servicio</h3>
+              </div>
+              {/* Cortesia pill toggle */}
+              <label className={`flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+                watched.courtesy
+                  ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]'
+                  : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
+              }`}>
+                <input type="checkbox" {...form.register('courtesy')} className="sr-only" />
+                <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
+                Cortesia
+              </label>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <SelectField label="Turno" error={form.formState.errors.shiftId?.message}>
+                  <select {...form.register('shiftId')} disabled={Boolean(disabledReason)}>
+                    <option value={0}>Selecciona turno</option>
+                    {openShifts.map((shift) => (
+                      <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
                     ))}
-                    {filtered.length === 0 && washerSearch && (
-                      <p className="text-xs text-gray-400">Sin resultados para "{washerSearch}"</p>
-                    )}
-                    {allActive.length === 0 && (
-                      <p className="text-xs text-gray-400">No hay lavadores registrados</p>
+                  </select>
+                </SelectField>
+                <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
+                  <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+                </TextField>
+                <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
+                  <select {...form.register('serviceTypeId')}>
+                    <option value={0}>Selecciona servicio</option>
+                    {(data.services.data ?? []).map((service) => (
+                      <option key={service.id} value={service.id}>{service.name}</option>
+                    ))}
+                  </select>
+                </SelectField>
+                <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
+                  <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
+                    <option value="CASH">Efectivo</option>
+                    <option value="CARD">Tarjeta</option>
+                    <option value="TRANSFER">Windows</option>
+                  </select>
+                </SelectField>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <TextField label="Vehiculo" error={form.formState.errors.vehicleDescription?.message}>
+                  <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
+                </TextField>
+                <SelectField label="Tamano de vehiculo" error={form.formState.errors.vehicleSizeId?.message}>
+                  <select {...form.register('vehicleSizeId')}>
+                    <option value={0}>Selecciona tamano</option>
+                    {(data.sizes.data ?? []).map((size) => (
+                      <option key={size.id} value={size.id}>{size.name}</option>
+                    ))}
+                  </select>
+                </SelectField>
+                <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
+                  <input type="time" {...form.register('occurredAt')} />
+                </TextField>
+              </div>
+
+              {/* Lavadores — avatar chips */}
+              {(() => {
+                const allLavadores = (data.employees.data ?? [])
+                  .filter((e) => e.active)
+                  .filter((e) => !/tia\s*gabi/i.test(e.fullName))
+                const selectedIds = (watched.employeeIds ?? []).map(Number)
+                const toggle = (id: number) => {
+                  const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
+                  form.setValue('employeeIds', next, { shouldValidate: true })
+                }
+                return (
+                  <div className="rounded-xl border border-border-soft bg-ink-50/50 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Lavadores</span>
+                      {selectedIds.length > 0 && (
+                        <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">
+                          {selectedIds.length} seleccionado{selectedIds.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {allLavadores.map((e) => {
+                        const active = selectedIds.includes(e.id)
+                        const initials = e.fullName.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
+                        return (
+                          <button
+                            key={e.id}
+                            type="button"
+                            onClick={() => toggle(e.id)}
+                            className={`flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-[12.5px] font-semibold transition-all duration-150 ${
+                              active
+                                ? 'border-violet-400 bg-violet-600 text-white shadow-[0_2px_10px_rgba(124,58,237,0.32)]'
+                                : 'border-border-soft bg-white text-ink-700 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'
+                            }`}
+                          >
+                            <span className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                              active ? 'bg-white/25 text-white' : 'bg-ink-100 text-ink-500'
+                            }`}>
+                              {initials}
+                            </span>
+                            {e.fullName.split(' ')[0]}
+                          </button>
+                        )
+                      })}
+                      {allLavadores.length === 0 && (
+                        <p className="text-xs text-ink-400">No hay lavadores registrados</p>
+                      )}
+                    </div>
+                    {form.formState.errors.employeeIds?.message && (
+                      <p className="mt-2 text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
                     )}
                   </div>
-                  {selectedEmployees.length > 0 && (
-                    <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-                      {selectedEmployees.map((e) => (
-                        <span key={e.id} className="flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-800">
-                          {e.fullName}
-                          <button type="button" onClick={() => toggle(e.id)} className="ml-0.5 text-violet-500 hover:text-violet-900">✕</button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {allActive.length > 6 && (
-                    <input
-                      type="text"
-                      placeholder="Buscar lavador..."
-                      value={washerSearch}
-                      onChange={(e) => setWasherSearch(e.target.value)}
-                      className="tl-input"
-                    />
-                  )}
-                </div>
-              )
-            })()}
-            {form.formState.errors.employeeIds?.message && <p className="mt-2 text-sm text-red-600">{form.formState.errors.employeeIds.message}</p>}
-          </Panel>
+                )
+              })()}
+            </div>
+          </div>
 
+          {/* ── Notas ────────────────────────────────────────────── */}
+          <div className="tl-panel overflow-hidden">
+            <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+              <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Notas</h3>
+            </div>
+            <div className="p-5">
+              <textarea
+                rows={3}
+                placeholder="Ej. cliente frecuente, pago con billete grande, lavar con cuidado..."
+                {...form.register('notes')}
+                className="tl-input resize-none"
+              />
+            </div>
+          </div>
+
+          {/* ── Mas opciones toggle ───────────────────────────────── */}
           <button
             type="button"
             onClick={() => setShowAdvanced((v) => !v)}
             data-testid="ticket-advanced-toggle"
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition-all hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 active:scale-[0.99]"
+            className={`flex w-full items-center justify-between rounded-xl border px-5 py-3.5 text-[13.5px] font-semibold transition-all duration-150 ${
+              effectiveShowAdvanced
+                ? 'border-violet-200 bg-violet-50 text-violet-800'
+                : 'border-border-soft bg-white text-ink-500 hover:border-violet-200 hover:bg-violet-50/70 hover:text-violet-700'
+            }`}
           >
-            {effectiveShowAdvanced ? 'Menos opciones' : 'Mas opciones — descripcion, descuento, cortesia, notas'}
+            <span>{effectiveShowAdvanced ? 'Ocultar opciones avanzadas' : 'Mas opciones — precio especial, descuento, extras'}</span>
+            <svg
+              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${effectiveShowAdvanced ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
 
+          {/* ── Opciones avanzadas ────────────────────────────────── */}
           {effectiveShowAdvanced && (
-            <>
-              <Panel title="Mas opciones">
-                <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
-                  <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
-                </TextField>
-                <TextField label="Notas internas" error={form.formState.errors.notes?.message}>
-                  <textarea rows={2} placeholder="Notas visibles solo en esta pantalla por ahora" {...form.register('notes')} />
-                </TextField>
-              </Panel>
+            <div className="tl-panel overflow-hidden">
+              <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+                <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-amber-400 to-amber-600" />
+                <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Opciones avanzadas</h3>
+              </div>
+              <div className="space-y-5 p-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
+                    <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
+                  </TextField>
+                  <div>
+                    <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        placeholder="0"
+                        disabled={watched.courtesy}
+                        {...form.register('discountPercent')}
+                      />
+                    </TextField>
+                    {watched.discountPercent > 0 && !watched.courtesy && (
+                      <p className="mt-1.5 text-xs font-medium text-amber-700">Precio final reducido {watched.discountPercent}%</p>
+                    )}
+                  </div>
+                </div>
 
-              <Panel title="Descuento">
-                <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    placeholder="0"
-                    disabled={watched.courtesy}
-                    {...form.register('discountPercent')}
-                  />
-                </TextField>
-                {watched.discountPercent > 0 && !watched.courtesy && (
-                  <p className="mt-1 text-xs text-amber-700">Precio final reducido {watched.discountPercent}%</p>
-                )}
-              </Panel>
-
-              <Panel title="Cortesia">
-                <label className="flex items-center gap-3 text-sm font-medium">
-                  <input type="checkbox" {...form.register('courtesy')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
-                  Marcar como cortesia
-                </label>
-              </Panel>
-            </>
+                {/* Extras */}
+                <div>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Extras del inventario</p>
+                  {(() => {
+                    const all = (products.data ?? []).filter((p) => p.active)
+                    const toggle = (label: string) =>
+                      setSelectedExtras((prev) =>
+                        prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]
+                      )
+                    if (products.isLoading) return <p className="text-xs text-ink-400">Cargando productos...</p>
+                    if (all.length === 0) return <p className="text-xs text-ink-400">No hay productos activos en el inventario.</p>
+                    return (
+                      <>
+                        <div className="flex flex-wrap gap-2">
+                          {all.map((p) => {
+                            const active = selectedExtras.includes(p.name)
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => toggle(p.name)}
+                                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-150 ${
+                                  active
+                                    ? 'border-violet-400 bg-violet-600 text-white shadow-[0_2px_10px_rgba(124,58,237,0.30)]'
+                                    : 'border-border-soft bg-white text-ink-700 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'
+                                }`}
+                              >
+                                {active && (
+                                  <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                                {p.name}
+                                {p.currentUnitPrice > 0 && (
+                                  <span className={`text-[10px] font-normal ${active ? 'text-white/60' : 'text-ink-400'}`}>{money(p.currentUnitPrice, 'MXN')}</span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {selectedExtras.length > 0 && (
+                          <p className="mt-2.5 text-xs text-ink-400">Se agregaran a las notas: <span className="font-medium text-ink-600">{selectedExtras.join(', ')}</span></p>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
-        <aside className="space-y-4">
-          <Panel title="Resumen">
-            <div className="space-y-3 text-sm">
-              <SummaryRow
-                label="Precio preview"
-                value={
-                  livePrice === undefined ? 'Sin precio' : (
-                    watched.discountPercent > 0 && !watched.courtesy
-                      ? `${money(livePrice, 'MXN')} (-${watched.discountPercent}%)`
-                      : money(livePrice, 'MXN')
-                  )
-                }
-              />
-              <SummaryRow label="Lavadores" value={String(watched.employeeIds?.length ?? 0)} />
-              <SummaryRow label="Tipo" value={watched.courtesy ? 'Cortesia' : 'Venta'} />
-              <SummaryRow label="Pago" value={watched.courtesy ? 'Cortesia' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'} />
+        {/* ── Sidebar: precio + submit ──────────────────────────── */}
+        <aside>
+          <div className="sticky top-[72px] overflow-hidden rounded-2xl border border-border-soft bg-white shadow-md">
+            {/* Price hero */}
+            <div
+              className="relative px-6 py-6 text-center"
+              style={{ background: 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(140deg, #1a0f2e 0%, #3b1d5c 50%, #1f8a3d 130%)' }}
+            >
+              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">
+                {watched.courtesy ? 'Cortesia' : 'Total a cobrar'}
+              </p>
+              <p className="font-display text-[48px] font-black leading-none tracking-[-0.03em] text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {livePrice === undefined ? '—' : watched.courtesy ? 'GRATIS' : money(livePrice, 'MXN')}
+              </p>
+              {watched.discountPercent > 0 && !watched.courtesy && (
+                <span className="mt-2.5 inline-block rounded-full border border-amber-400/30 bg-amber-400/20 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
+                  -{watched.discountPercent}% descuento aplicado
+                </span>
+              )}
             </div>
-            {save.error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-100">{save.error.message}</p>}
-            {readOnly ? (
-              <Banner tone="warn" title="Turno cerrado — solo lectura" />
-            ) : (
-              <Button
-                kind="go"
-                size="lg"
-                type="submit"
-                block
-                disabled={save.isPending || Boolean(disabledReason)}
-                testId="ticket-submit"
-                className="mt-5"
-              >
-                {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
-              </Button>
-            )}
-          </Panel>
+
+            {/* Receipt details */}
+            <div className="divide-y divide-dashed divide-border-soft px-5 py-1 font-mono text-[12.5px]">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-ink-400">Lavadores</span>
+                <span className="font-semibold text-ink-800">
+                  {(watched.employeeIds ?? []).length > 0
+                    ? (data.employees.data ?? [])
+                        .filter((e) => (watched.employeeIds ?? []).map(Number).includes(e.id))
+                        .map((e) => e.fullName.split(' ')[0])
+                        .join(', ')
+                    : <em className="font-normal not-italic text-ink-300">Ninguno</em>}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-ink-400">Tipo</span>
+                <span className={`font-semibold ${watched.courtesy ? 'text-amber-600' : 'text-ink-800'}`}>
+                  {watched.courtesy ? 'Cortesia' : 'Venta'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-ink-400">Pago</span>
+                <span className="font-semibold text-ink-800">
+                  {watched.courtesy ? 'N/A' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
+                </span>
+              </div>
+            </div>
+
+            {/* Submit */}
+            <div className="px-5 pb-5 pt-3">
+              {save.error && (
+                <p className="mb-3 rounded-lg bg-bad-50 p-3 text-[12.5px] text-bad-700 ring-1 ring-bad-100">{save.error.message}</p>
+              )}
+              {readOnly ? (
+                <Banner tone="warn" title="Turno cerrado — solo lectura" />
+              ) : (
+                <Button
+                  kind="go"
+                  size="lg"
+                  type="submit"
+                  block
+                  disabled={save.isPending || Boolean(disabledReason)}
+                  testId="ticket-submit"
+                >
+                  {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
+                </Button>
+              )}
+            </div>
+          </div>
         </aside>
       </form>
     </section>
@@ -2644,17 +2779,20 @@ function ShiftCloseScreen() {
 
           <Panel title="2. Gastos y retiros del turno">
             <div className="grid gap-4 md:grid-cols-3">
-              <Metric label="Ingresos totales" value={summary ? money(summary.ticketRevenue, 'MXN') : '...'} />
+              <Metric label="Ingresos tickets" value={summary ? money(summary.ticketRevenue, 'MXN') : '...'} />
               <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
               <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
             </div>
             <div className="mt-3">
-              <SummaryRow k="Efectivo" v={summary ? money(summary.cashRevenue, 'MXN') : '…'} />
+              <SummaryRow k="Efectivo (tickets)" v={summary ? money(summary.cashRevenue, 'MXN') : '…'} />
               <SummaryRow k="Tarjeta" v={summary ? money(summary.cardRevenue, 'MXN') : '…'} />
               <SummaryRow k="Deposito" v={summary ? money(summary.transferRevenue, 'MXN') : '…'} />
+              {summary?.prepaidPackagesTotal != null && summary.prepaidPackagesTotal > 0 && (
+                <SummaryRow k="Paquetes prepagados" v={money(summary.prepaidPackagesTotal, 'MXN')} />
+              )}
             </div>
             <p className="mt-3 text-sm text-gray-500">
-              Efectivo esperado = ingresos en efectivo - gastos - retiros. Tarjeta y depositos no cuentan para el conteo de caja.
+              Efectivo esperado = efectivo de tickets + efectivo de paquetes - gastos - retiros.
             </p>
           </Panel>
 
@@ -4083,6 +4221,8 @@ type PackageFormValues = z.infer<typeof packageSchema>
 function PrepaidPackageScreen() {
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
+  const [calcServiceId, setCalcServiceId] = useState(0)
+  const [calcSizeId, setCalcSizeId] = useState(0)
   const data = usePhaseData()
   const effectiveBusinessDay = data.currentBusinessDay ?? data.businessDays.data?.[0]
   const openShifts = (data.shifts.data ?? []).filter((s) => s.status === 'OPEN')
@@ -4091,6 +4231,14 @@ function PrepaidPackageScreen() {
     resolver: zodResolver(packageSchema) as Resolver<PackageFormValues>,
     defaultValues: { shiftId: 0, washesIncluded: 10, amount: 0, paymentMethod: 'CASH', notes: '' },
   })
+
+  const watchedWashes = form.watch('washesIncluded')
+  const services = data.services.data ?? []
+  const vehicleSizes = data.sizes.data ?? []
+  const matchedPrice = (data.prices.data ?? []).find(
+    (p) => p.serviceTypeId === calcServiceId && p.vehicleSizeId === calcSizeId,
+  )
+  const suggestedAmount = matchedPrice ? Math.round(matchedPrice.amount * Number(watchedWashes) * 100) / 100 : null
 
   useEffect(() => {
     if (openShifts[0]?.id && !form.getValues('shiftId')) {
@@ -4157,6 +4305,47 @@ function PrepaidPackageScreen() {
                 ))}
               </select>
             </SelectField>
+
+            <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3 space-y-2">
+              <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Calculadora rapida</p>
+              <div className="grid grid-cols-2 gap-2">
+                <SelectField label="Servicio">
+                  <select value={calcServiceId} onChange={(e) => setCalcServiceId(Number(e.target.value))}>
+                    <option value={0}>Selecciona...</option>
+                    {services.filter((s) => s.active).map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </SelectField>
+                <SelectField label="Tamano">
+                  <select value={calcSizeId} onChange={(e) => setCalcSizeId(Number(e.target.value))}>
+                    <option value={0}>Selecciona...</option>
+                    {vehicleSizes.filter((s) => s.active).map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </SelectField>
+              </div>
+              {matchedPrice && (
+                <div className="flex items-center justify-between rounded-lg bg-white border border-violet-200 px-3 py-2">
+                  <span className="text-sm text-violet-700">
+                    {watchedWashes} × {money(matchedPrice.amount, 'MXN')} =
+                    <strong className="ml-1 text-violet-900">{money(suggestedAmount!, 'MXN')}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-violet-700 hover:text-violet-900 underline underline-offset-2"
+                    onClick={() => form.setValue('amount', suggestedAmount!)}
+                  >
+                    Usar precio
+                  </button>
+                </div>
+              )}
+              {calcServiceId > 0 && calcSizeId > 0 && !matchedPrice && (
+                <p className="text-xs text-amber-600">Sin precio configurado para esta combinacion.</p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <TextField label="Lavadas incluidas" error={form.formState.errors.washesIncluded?.message}>
                 <input type="number" min={1} {...form.register('washesIncluded')} />
@@ -4994,7 +5183,7 @@ function AiEmptyState({ text }: { text: string }) {
 function AiDetailRows({ details }: { details: Record<string, unknown> | null }) {
   if (!details) return null
   const rows = Object.entries(details)
-    .filter(([, value]) => value !== null && value !== undefined)
+    .filter(([, value]) => value !== null && value !== undefined && !Array.isArray(value) && typeof value !== 'object')
     .slice(0, 8)
   if (rows.length === 0) return null
 
@@ -5002,7 +5191,7 @@ function AiDetailRows({ details }: { details: Record<string, unknown> | null }) 
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
       {rows.map(([key, value]) => (
         <div key={key} className="rounded-lg bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5">
-          <span className="block font-semibold uppercase tracking-wide text-gray-400">{key}</span>
+          <span className="block font-semibold uppercase tracking-wide text-gray-400">{key.replace(/_/g, ' ')}</span>
           <span className="mt-1 block break-words text-gray-700">{formatAiDetailValue(value)}</span>
         </div>
       ))}

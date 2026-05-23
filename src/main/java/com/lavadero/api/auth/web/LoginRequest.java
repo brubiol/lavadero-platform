@@ -1,4 +1,4 @@
-package com.lavadero.api.common.auth.web;
+package com.lavadero.api.auth.web;
 
 import jakarta.validation.constraints.NotBlank;
 

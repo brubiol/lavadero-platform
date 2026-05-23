@@ -1,4 +1,4 @@
-package com.lavadero.api.common.auth.domain;
+package com.lavadero.api.auth.domain;
 
 public enum Role {
     OPERADOR,

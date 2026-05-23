@@ -1,4 +1,4 @@
-package com.lavadero.api.common.auth.web;
+package com.lavadero.api.auth.web;
 
 public record AuthResponse(
         String accessToken,

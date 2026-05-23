@@ -14,7 +14,7 @@ class HealthControllerTest extends AbstractIntegrationTest {
     MockMvc mvc;
 
     @Test
-    void healthReturnsOk() throws Exception {
+    void should_return_ok_when_health_endpoint_is_called() throws Exception {
         mvc.perform(get("/api/v1/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ok"));

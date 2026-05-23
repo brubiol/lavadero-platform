@@ -14,6 +14,7 @@ import com.lavadero.api.operations.domain.PaymentMethod;
 import com.lavadero.api.operations.domain.Shift;
 import com.lavadero.api.operations.domain.ShiftStatus;
 import com.lavadero.api.operations.domain.TicketStatus;
+import com.lavadero.api.operations.repository.PrepaidPackageRepository;
 import com.lavadero.api.operations.repository.ShiftRepository;
 import com.lavadero.api.operations.repository.TicketRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -30,11 +31,12 @@ public class ShiftCloseService {
     private final EmployeeAdvanceRepository advances;
     private final CashCountRepository cashCounts;
     private final ShiftCloseSummaryRepository closeSummaries;
+    private final PrepaidPackageRepository prepaidPackages;
     private final AuditService audit;
 
     public ShiftCloseService(ShiftRepository shifts, TicketRepository tickets, ExpenseRepository expenses,
             WithdrawalRepository withdrawals, EmployeeAdvanceRepository advances, CashCountRepository cashCounts,
-            ShiftCloseSummaryRepository closeSummaries, AuditService audit) {
+            ShiftCloseSummaryRepository closeSummaries, PrepaidPackageRepository prepaidPackages, AuditService audit) {
         this.shifts = shifts;
         this.tickets = tickets;
         this.expenses = expenses;
@@ -42,17 +44,20 @@ public class ShiftCloseService {
         this.advances = advances;
         this.cashCounts = cashCounts;
         this.closeSummaries = closeSummaries;
+        this.prepaidPackages = prepaidPackages;
         this.audit = audit;
     }
 
     @Transactional(readOnly = true)
     public ShiftCloseSummaryResponse summary(Long shiftId) {
+        BigDecimal prepaidTotal = prepaidPackages.sumAmountForShift(shiftId);
+        BigDecimal prepaidCash = prepaidPackages.sumAmountForShiftByPaymentMethod(shiftId, PaymentMethod.CASH);
         if (closeSummaries.existsByShiftId(shiftId)) {
             ShiftCloseSummary existing = closeSummaries.findByShiftId(shiftId).get();
             BigDecimal cashRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CASH);
             BigDecimal cardRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CARD);
             BigDecimal transferRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.TRANSFER);
-            return ShiftCloseSummaryResponse.closed(existing, cashRevenue, cardRevenue, transferRevenue);
+            return ShiftCloseSummaryResponse.closed(existing, cashRevenue, cardRevenue, transferRevenue, prepaidTotal);
         }
         Shift shift = getShift(shiftId);
         CashCount latestCount = cashCounts.findByShiftIdOrderByCreatedAtDesc(shiftId).stream()
@@ -65,10 +70,10 @@ public class ShiftCloseService {
         BigDecimal expensesTotal = expenses.sumForShift(shiftId);
         BigDecimal withdrawalsTotal = withdrawals.sumForShift(shiftId);
         BigDecimal advancesTotal = advances.sumForShift(shiftId);
-        // expected cash only counts cash payments; card and transfer go elsewhere and are excluded from the drawer count
-        BigDecimal expectedCash = cashRevenue.subtract(expensesTotal).subtract(withdrawalsTotal).subtract(advancesTotal);
+        // expected cash = ticket cash + prepaid package cash - expenses - withdrawals - advances
+        BigDecimal expectedCash = cashRevenue.add(prepaidCash).subtract(expensesTotal).subtract(withdrawalsTotal).subtract(advancesTotal);
         return ShiftCloseSummaryResponse.open(shift, ticketRevenue, cashRevenue, cardRevenue, transferRevenue,
-                expensesTotal, withdrawalsTotal, advancesTotal, expectedCash, latestCount);
+                expensesTotal, withdrawalsTotal, advancesTotal, expectedCash, latestCount, prepaidTotal);
     }
 
     @Transactional
@@ -86,6 +91,8 @@ public class ShiftCloseService {
             throw new IllegalArgumentException("Cash count does not belong to shift");
         }
 
+        BigDecimal prepaidTotal = prepaidPackages.sumAmountForShift(shiftId);
+        BigDecimal prepaidCash = prepaidPackages.sumAmountForShiftByPaymentMethod(shiftId, PaymentMethod.CASH);
         BigDecimal ticketRevenue = tickets.sumRevenueForShift(shiftId, TicketStatus.ACTIVE);
         BigDecimal cashRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CASH);
         BigDecimal cardRevenue = tickets.sumRevenueForShiftByPaymentMethod(shiftId, TicketStatus.ACTIVE, PaymentMethod.CARD);
@@ -93,7 +100,7 @@ public class ShiftCloseService {
         BigDecimal expensesTotal = expenses.sumForShift(shiftId);
         BigDecimal withdrawalsTotal = withdrawals.sumForShift(shiftId);
         BigDecimal advancesTotal = advances.sumForShift(shiftId);
-        BigDecimal expectedCash = cashRevenue.subtract(expensesTotal).subtract(withdrawalsTotal).subtract(advancesTotal);
+        BigDecimal expectedCash = cashRevenue.add(prepaidCash).subtract(expensesTotal).subtract(withdrawalsTotal).subtract(advancesTotal);
         BigDecimal variance = cashCount.getTotalCounted().subtract(expectedCash);
         String closingReason = normalize(request.closingReason());
         if (variance.signum() < 0 && closingReason == null) {
@@ -107,7 +114,7 @@ public class ShiftCloseService {
                 closingReason));
         audit.record("SHIFT_CLOSED", "SHIFT", shiftId, closingReason,
                 "expected " + expectedCash + " counted " + cashCount.getTotalCounted() + " variance " + variance);
-        return ShiftCloseSummaryResponse.closed(saved, cashRevenue, cardRevenue, transferRevenue);
+        return ShiftCloseSummaryResponse.closed(saved, cashRevenue, cardRevenue, transferRevenue, prepaidTotal);
     }
 
     private Shift getShift(Long shiftId) {

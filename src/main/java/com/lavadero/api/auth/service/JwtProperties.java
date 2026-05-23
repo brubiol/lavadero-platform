@@ -1,4 +1,4 @@
-package com.lavadero.api.common.auth.service;
+package com.lavadero.api.auth.service;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

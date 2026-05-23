@@ -1,10 +1,10 @@
-package com.lavadero.api.common.auth.service;
+package com.lavadero.api.auth.service;
 
-import com.lavadero.api.common.auth.domain.RefreshToken;
-import com.lavadero.api.common.auth.domain.User;
-import com.lavadero.api.common.auth.repository.RefreshTokenRepository;
-import com.lavadero.api.common.auth.repository.UserRepository;
-import com.lavadero.api.common.auth.web.AuthResponse;
+import com.lavadero.api.auth.domain.RefreshToken;
+import com.lavadero.api.auth.domain.User;
+import com.lavadero.api.auth.repository.RefreshTokenRepository;
+import com.lavadero.api.auth.repository.UserRepository;
+import com.lavadero.api.auth.web.AuthResponse;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;

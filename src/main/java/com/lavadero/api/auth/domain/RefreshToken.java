@@ -1,16 +1,12 @@
-package com.lavadero.api.common.auth.domain;
+package com.lavadero.api.auth.domain;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.time.Instant;
 import java.util.Objects;
 
 @Entity
 @Table(name = "refresh_tokens")
-@Getter
-@Setter
 public class RefreshToken {
 
     @Id
@@ -37,6 +33,22 @@ public class RefreshToken {
     public boolean isRevoked() {
         return revokedAt != null;
     }
+
+    public Long getId() { return id; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    public String getTokenHash() { return tokenHash; }
+    public void setTokenHash(String tokenHash) { this.tokenHash = tokenHash; }
+
+    public Instant getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
+
+    public Instant getRevokedAt() { return revokedAt; }
+    public void setRevokedAt(Instant revokedAt) { this.revokedAt = revokedAt; }
+
+    public Instant getCreatedAt() { return createdAt; }
 
     @Override
     public boolean equals(Object o) {

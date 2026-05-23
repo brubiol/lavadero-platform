@@ -1,6 +1,6 @@
-package com.lavadero.api.common.auth.web;
+package com.lavadero.api.auth.web;
 
-import com.lavadero.api.common.auth.service.AuthService;
+import com.lavadero.api.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

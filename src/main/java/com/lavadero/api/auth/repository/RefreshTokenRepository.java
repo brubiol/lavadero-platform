@@ -1,7 +1,7 @@
-package com.lavadero.api.common.auth.repository;
+package com.lavadero.api.auth.repository;
 
-import com.lavadero.api.common.auth.domain.RefreshToken;
-import com.lavadero.api.common.auth.domain.User;
+import com.lavadero.api.auth.domain.RefreshToken;
+import com.lavadero.api.auth.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

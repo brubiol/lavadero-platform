@@ -1,16 +1,12 @@
-package com.lavadero.api.common.auth.domain;
+package com.lavadero.api.auth.domain;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.time.Instant;
 import java.util.Objects;
 
 @Entity
 @Table(name = "app_users")
-@Getter
-@Setter
 public class User {
 
     @Id
@@ -46,6 +42,29 @@ public class User {
     void onUpdate() {
         updatedAt = Instant.now();
     }
+
+    public Long getId() { return id; }
+
+    public Long getTenantId() { return tenantId; }
+    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+
+    public Role getRole() { return role; }
+    public void setRole(Role role) { this.role = role; }
+
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 
     @Override
     public boolean equals(Object o) {
