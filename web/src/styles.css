@@ -760,6 +760,13 @@ html, body, #root { height: 100%; }
 .tl-modal-backdrop { animation: tl-modal-fade-in 0.16s ease both; }
 .tl-modal-content  { animation: tl-modal-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* Toast slide-in from top-right */
+@keyframes tl-toast-in {
+  from { opacity: 0; transform: translate(20px, -8px) scale(0.96); }
+  to   { opacity: 1; transform: translate(0, 0) scale(1); }
+}
+.tl-toast { animation: tl-toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* Counter — used to suggest a number is "live" via subtle tabular shift on update */
 .tl-counter { font-variant-numeric: tabular-nums; transition: color 0.2s ease; }
 

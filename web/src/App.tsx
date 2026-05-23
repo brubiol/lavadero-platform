@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { useForm, type Resolver, type UseFormReturn } from 'react-hook-form'
@@ -2626,7 +2626,7 @@ function CatalogsScreen() {
   }
 
   const employeeForm = useForm<EmployeeFormValues>({
-    resolver: zodResolver(employeeSchema),
+    resolver: zodResolver(employeeSchema) as Resolver<EmployeeFormValues>,
     defaultValues: {
       fullName: '',
       phone: '',
@@ -2637,19 +2637,19 @@ function CatalogsScreen() {
     },
   })
   const serviceForm = useForm<ServiceTypeFormValues>({
-    resolver: zodResolver(serviceTypeSchema),
+    resolver: zodResolver(serviceTypeSchema) as Resolver<ServiceTypeFormValues>,
     defaultValues: { code: '', name: '', description: '' },
   })
   const sizeForm = useForm<VehicleSizeFormValues>({
-    resolver: zodResolver(vehicleSizeSchema),
+    resolver: zodResolver(vehicleSizeSchema) as Resolver<VehicleSizeFormValues>,
     defaultValues: { code: '', name: '', sortOrder: 0 },
   })
   const priceForm = useForm<ServicePriceFormValues>({
-    resolver: zodResolver(servicePriceSchema),
+    resolver: zodResolver(servicePriceSchema) as Resolver<ServicePriceFormValues>,
     defaultValues: { serviceTypeId: 0, vehicleSizeId: 0, amount: 0, effectiveFrom: today },
   })
   const operationsForm = useForm<OperationsFormValues>({
-    resolver: zodResolver(operationsSchema),
+    resolver: zodResolver(operationsSchema) as Resolver<OperationsFormValues>,
     defaultValues: { businessDate: today, shiftType: 'MATUTINO' },
   })
 
@@ -3062,6 +3062,10 @@ function ExpenseLedgerScreen() {
     advances: (advances.data ?? []).reduce((sum, row) => sum + row.amount, 0),
   }
   const combinedTotal = totals.expenses + totals.withdrawals + totals.advances
+  const animCombined = useCountUp(combinedTotal)
+  const animExpenses = useCountUp(totals.expenses)
+  const animWithdrawals = useCountUp(totals.withdrawals)
+  const animAdvances = useCountUp(totals.advances)
   const counts = {
     expenses: (expenses.data ?? []).length,
     withdrawals: (withdrawals.data ?? []).length,
@@ -3094,27 +3098,27 @@ function ExpenseLedgerScreen() {
           <div>
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Total salida</p>
             <p className="font-display mt-2 text-[40px] font-black leading-none tracking-[-0.03em] text-rose-300 tabular-nums">
-              {money(combinedTotal, 'MXN')}
+              {money(animCombined, 'MXN')}
             </p>
           </div>
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Gastos</p>
             <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
-              {money(totals.expenses, 'MXN')}
+              {money(animExpenses, 'MXN')}
             </p>
             <p className="mt-1.5 text-[11px] text-white/40">{counts.expenses} registro{counts.expenses === 1 ? '' : 's'}</p>
           </div>
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Retiros</p>
             <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
-              {money(totals.withdrawals, 'MXN')}
+              {money(animWithdrawals, 'MXN')}
             </p>
             <p className="mt-1.5 text-[11px] text-white/40">{counts.withdrawals} registro{counts.withdrawals === 1 ? '' : 's'}</p>
           </div>
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Préstamos</p>
             <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
-              {money(totals.advances, 'MXN')}
+              {money(animAdvances, 'MXN')}
             </p>
             <p className="mt-1.5 text-[11px] text-white/40">{counts.advances} registro{counts.advances === 1 ? '' : 's'}</p>
           </div>
@@ -3231,7 +3235,7 @@ function ShiftCloseScreen() {
   const isShort = variance != null && variance < 0
 
   const cashForm = useForm<CashCountFormValues>({
-    resolver: zodResolver(cashCountSchema),
+    resolver: zodResolver(cashCountSchema) as Resolver<CashCountFormValues>,
     values: {
       shiftId: effectiveShiftId,
       bills1000: 0,
@@ -3249,7 +3253,7 @@ function ShiftCloseScreen() {
     },
   })
   const closeForm = useForm<CloseShiftFormValues>({
-    resolver: zodResolver(closeShiftSchema),
+    resolver: zodResolver(closeShiftSchema) as Resolver<CloseShiftFormValues>,
     defaultValues: { closingReason: '' },
   })
 
@@ -3306,6 +3310,11 @@ function ShiftCloseScreen() {
   const watchedCount = cashForm.watch()
   const localCountPreview = calculateCashCount(watchedCount)
   const selectedShift = shifts.find((s) => s.id === Number(effectiveShiftId))
+
+  // Animated count-up for the variance hero
+  const animExpected = useCountUp(summary?.expectedCash ?? 0)
+  const animCounted = useCountUp(counted ?? 0)
+  const animVariance = useCountUp(variance ?? 0)
 
   return (
     <section className="space-y-5">
@@ -3392,14 +3401,14 @@ function ShiftCloseScreen() {
             <div>
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Esperado</p>
               <p className="font-display mt-2 text-[36px] font-black leading-none tracking-[-0.03em] text-white tabular-nums sm:text-[44px]">
-                {money(summary.expectedCash, 'MXN')}
+                {money(animExpected, 'MXN')}
               </p>
             </div>
             <div className="text-center text-white/30 text-[18px] sm:text-[22px] font-light">vs</div>
             <div className="text-right">
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Contado</p>
               <p className="font-display mt-2 text-[36px] font-black leading-none tracking-[-0.03em] text-white tabular-nums sm:text-[44px]">
-                {counted == null ? '—' : money(counted, 'MXN')}
+                {counted == null ? <span className="tl-skeleton-dark md" /> : money(animCounted, 'MXN')}
               </p>
             </div>
           </div>
@@ -3411,7 +3420,7 @@ function ShiftCloseScreen() {
                 <p className={`font-display mt-1 text-[24px] font-black leading-none tabular-nums ${
                   variance >= 0 ? 'text-emerald-300' : 'text-rose-300'
                 }`}>
-                  {variance >= 0 ? '+' : ''}{money(variance, 'MXN')}
+                  {animVariance >= 0 ? '+' : ''}{money(animVariance, 'MXN')}
                 </p>
               </div>
               <span className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold ${
@@ -4327,7 +4336,7 @@ function InventoryScreen() {
 function ProductModal({ product, onClose }: { product?: Product | null; onClose: () => void }) {
   const queryClient = useQueryClient()
   const form = useForm<ProductFormValues>({
-    resolver: zodResolver(productSchema),
+    resolver: zodResolver(productSchema) as Resolver<ProductFormValues>,
     defaultValues: product
       ? {
           name: product.name,
@@ -4396,7 +4405,7 @@ function InventorySaleModal({ products, employees, onClose }: { products: Produc
   const phaseData = usePhaseData()
   const openShiftId = phaseData.shifts.data?.find((s) => s.status === 'OPEN')?.id ?? null
   const form = useForm<InventorySaleFormValues>({
-    resolver: zodResolver(inventorySaleSchema),
+    resolver: zodResolver(inventorySaleSchema) as Resolver<InventorySaleFormValues>,
     defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '', fiado: false, employeeId: 0 },
   })
   const product = products.find((item) => item.id === Number(form.watch('productId')))
@@ -4450,7 +4459,7 @@ function InventorySaleModal({ products, employees, onClose }: { products: Produc
 function InventoryPurchaseModal({ products, onClose }: { products: Product[]; onClose: () => void }) {
   const queryClient = useQueryClient()
   const form = useForm<InventoryPurchaseFormValues>({
-    resolver: zodResolver(inventoryPurchaseSchema),
+    resolver: zodResolver(inventoryPurchaseSchema) as Resolver<InventoryPurchaseFormValues>,
     defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '' },
   })
   const mutation = useMutation({
@@ -4484,7 +4493,7 @@ function InventoryPurchaseModal({ products, onClose }: { products: Product[]; on
 function InventoryAdjustmentModal({ products, onClose }: { products: Product[]; onClose: () => void }) {
   const queryClient = useQueryClient()
   const form = useForm<InventoryAdjustmentFormValues>({
-    resolver: zodResolver(inventoryAdjustmentSchema),
+    resolver: zodResolver(inventoryAdjustmentSchema) as Resolver<InventoryAdjustmentFormValues>,
     defaultValues: { productId: 0, quantity: 0, reason: '', movementDate: '' },
   })
   const mutation = useMutation({
@@ -4540,18 +4549,22 @@ function InventoryMovementModal<T extends InventorySaleFormValues | InventoryPur
   submitLabel: string
   children?: React.ReactNode
 }) {
+  // T is constrained to two concrete shapes that both have quantity/unitPrice/
+  // movementDate, but TypeScript's Path<T> can't narrow across the union.
+  // Alias the form as one of the concrete shapes for field access only.
+  const f = form as unknown as UseFormReturn<InventorySaleFormValues>
   return (
     <Modal title={title} onClose={onClose} narrow>
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <ProductSelect products={products} form={form} />
-        <TextField label="Cantidad" error={form.formState.errors.quantity?.message}>
-          <input type="number" min={0} step="0.01" {...form.register('quantity')} />
+        <TextField label="Cantidad" error={f.formState.errors.quantity?.message}>
+          <input type="number" min={0} step="0.01" {...f.register('quantity')} />
         </TextField>
-        <TextField label="Precio unitario" error={form.formState.errors.unitPrice?.message}>
-          <input type="number" min={0} step="0.01" placeholder="0 usa precio del producto en venta" {...form.register('unitPrice')} />
+        <TextField label="Precio unitario" error={f.formState.errors.unitPrice?.message}>
+          <input type="number" min={0} step="0.01" placeholder="0 usa precio del producto en venta" {...f.register('unitPrice')} />
         </TextField>
         <TextField label="Fecha y hora">
-          <input type="datetime-local" {...form.register('movementDate')} />
+          <input type="datetime-local" {...f.register('movementDate')} />
         </TextField>
         {children}
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
@@ -4589,11 +4602,11 @@ function PayrollScreen() {
   const [toast, setToast] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const form = useForm<PayrollPeriodFormValues>({
-    resolver: zodResolver(payrollPeriodSchema),
+    resolver: zodResolver(payrollPeriodSchema) as Resolver<PayrollPeriodFormValues>,
     defaultValues: { startDate: previousSunday(today) },
   })
   const adjustmentForm = useForm<PayrollAdjustmentFormValues>({
-    resolver: zodResolver(payrollAdjustmentSchema),
+    resolver: zodResolver(payrollAdjustmentSchema) as Resolver<PayrollAdjustmentFormValues>,
     defaultValues: { employeeId: 0, type: 'EARNING', amount: 0, concept: 'extra', note: '' },
   })
 
@@ -5650,7 +5663,7 @@ function TicketsBrowser() {
 }
 
 function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: () => void; onVoided: () => void }) {
-  const form = useForm<VoidFormValues>({ resolver: zodResolver(voidSchema), defaultValues: { reason: '' } })
+  const form = useForm<VoidFormValues>({ resolver: zodResolver(voidSchema) as Resolver<VoidFormValues>, defaultValues: { reason: '' } })
   const mutation = useMutation({
     mutationFn: (values: VoidFormValues) => api<Ticket>(`/api/v1/tickets/${ticket.id}/void`, {
       method: 'POST',
@@ -5680,7 +5693,7 @@ function ExpenseModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>
   const queryClient = useQueryClient()
   const openShift = (data.shifts.data ?? []).find((shift) => shift.status === 'OPEN')
   const form = useForm<ExpenseFormValues>({
-    resolver: zodResolver(expenseSchema),
+    resolver: zodResolver(expenseSchema) as Resolver<ExpenseFormValues>,
     defaultValues: { expenseDate: today, category: 'MATERIAL', amount: 0, description: '' },
   })
   const mutation = useMutation({
@@ -5731,7 +5744,7 @@ function WithdrawalModal({ data, onClose }: { data: ReturnType<typeof usePhaseDa
   const queryClient = useQueryClient()
   const openShift = (data.shifts.data ?? []).find((shift) => shift.status === 'OPEN')
   const form = useForm<WithdrawalFormValues>({
-    resolver: zodResolver(withdrawalSchema),
+    resolver: zodResolver(withdrawalSchema) as Resolver<WithdrawalFormValues>,
     defaultValues: { withdrawalDate: today, amount: 0, reason: '' },
   })
   const mutation = useMutation({
@@ -5774,7 +5787,7 @@ function AdvanceModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>
   const queryClient = useQueryClient()
   const openShift = (data.shifts.data ?? []).find((shift) => shift.status === 'OPEN')
   const form = useForm<AdvanceFormValues>({
-    resolver: zodResolver(advanceSchema),
+    resolver: zodResolver(advanceSchema) as Resolver<AdvanceFormValues>,
     defaultValues: { advanceDate: today, employeeId: 0, amount: 0, reason: '' },
   })
   const mutation = useMutation({
@@ -5990,7 +6003,7 @@ function AiAnalystSection({
 }) {
   const queryClient = useQueryClient()
   const chatForm = useForm<AnalystChatFormValues>({
-    resolver: zodResolver(analystChatSchema),
+    resolver: zodResolver(analystChatSchema) as Resolver<AnalystChatFormValues>,
     defaultValues: { message: '' },
   })
   const chat = useMutation({
@@ -6055,7 +6068,7 @@ function AiAnalystSection({
 function AiInvestigationSection({ from, to }: { from: string; to: string }) {
   const queryClient = useQueryClient()
   const investigationForm = useForm<InvestigationFormValues>({
-    resolver: zodResolver(investigationSchema),
+    resolver: zodResolver(investigationSchema) as Resolver<InvestigationFormValues>,
     defaultValues: { question: '' },
   })
   const investigation = useMutation({
@@ -6360,7 +6373,7 @@ function EmployeeEditModal({
   error?: string
 }) {
   const form = useForm<EmployeeEditFormValues>({
-    resolver: zodResolver(employeeEditSchema),
+    resolver: zodResolver(employeeEditSchema) as Resolver<EmployeeEditFormValues>,
     defaultValues: {
       fullName: employee.fullName,
       phone: employee.phone ?? '',
@@ -6610,7 +6623,7 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
 function Toast({ message }: { message: string }) {
   return (
     <div
-      className="fixed right-4 top-4 z-50 flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-semibold text-white"
+      className="tl-toast fixed right-4 top-4 z-50 flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-semibold text-white"
       style={{ background: 'var(--ink-900)', boxShadow: 'var(--shadow-lg)' }}
     >
       <span
