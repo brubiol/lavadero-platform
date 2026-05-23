@@ -1574,42 +1574,38 @@ function EndOfDayScreen() {
   const closedShifts = shifts.filter((shift) => shift.status === 'CLOSED')
   const daily = summary.data
 
+  const result = daily ? Number(daily.result) : null
+  const cashVar = daily?.cashVariance == null ? null : Number(daily.cashVariance)
+
   return (
     <section className="space-y-5">
-      <div>
-        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Cierre del dia</h2>
-        <p className="text-[13.5px] text-ink-500 mt-0.5">Ruta rapida para terminar el dia sin brincar entre pantallas.</p>
-      </div>
+      <PageHead
+        tone="hero"
+        title="Cierre del día"
+        subtitle="Ruta rápida para terminar el día sin brincar entre pantallas."
+      />
 
       <DayStatusCard />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           <Panel title="Trabajo de hoy">
-            <div className="grid gap-4 md:grid-cols-4">
-              <Metric label="Tickets" value={String(daily?.recentTickets.length ?? 0)} />
-              <Metric label="Carros" value={String(daily?.carsWashed ?? 0)} />
-              <Metric label="Efectivo" value={daily ? money(daily.cashRevenue, 'MXN') : '...'} variant="success" />
-              <Metric label="Tarjeta" value={daily ? money(daily.cardRevenue, 'MXN') : '...'} variant="info" />
-              <Metric label="Deposito" value={daily ? money(daily.transferRevenue, 'MXN') : '...'} variant="warn" />
-              <Metric label="Miscelanea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : '...'} />
-              <Metric label="Gastos" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} variant="danger" />
+            <div className="tl-stagger grid gap-4 md:grid-cols-4">
+              <Metric label="Tickets" tone="info" value={String(daily?.recentTickets.length ?? 0)} />
+              <Metric label="Carros" tone="info" value={String(daily?.carsWashed ?? 0)} />
+              <Metric label="Efectivo" tone="good" value={daily ? money(daily.cashRevenue, 'MXN') : '...'} />
+              <Metric label="Tarjeta" tone="info" value={daily ? money(daily.cardRevenue, 'MXN') : '...'} />
+              <Metric label="Depósito" tone="warn" value={daily ? money(daily.transferRevenue, 'MXN') : '...'} />
+              <Metric label="Miscelánea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : '...'} />
+              <Metric label="Gastos" tone="bad" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => navigate('/tickets/nuevo')}
-                className="tl-btn tl-btn-primary"
-              >
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button kind="primary" onClick={() => navigate('/tickets/nuevo')}>
                 Agregar ticket
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/gastos')}
-                className="tl-btn tl-btn-secondary"
-              >
+              </Button>
+              <Button kind="secondary" onClick={() => navigate('/gastos')}>
                 Revisar salidas
-              </button>
+              </Button>
             </div>
           </Panel>
 
@@ -1627,7 +1623,7 @@ function EndOfDayScreen() {
                 </div>
               ))}
               {!data.currentBusinessDay && (
-                <Banner tone="warn" title="Abre el dia para comenzar." />
+                <Banner tone="warn" title="Abre el día para comenzar." />
               )}
               {data.currentBusinessDay && shifts.length === 0 && (
                 <Banner tone="info" title="Abre un turno para capturar tickets." />
@@ -1637,14 +1633,24 @@ function EndOfDayScreen() {
         </div>
 
         <aside>
-          <Panel title="Resumen final">
+          <Panel tone="feature" title="Resumen final">
             <SummaryRow label="Turnos abiertos" value={String(openShifts.length)} />
             <SummaryRow label="Turnos cerrados" value={String(closedShifts.length)} />
-            <SummaryRow label="Resultado" value={daily ? money(daily.result, 'MXN') : '...'} />
-            <SummaryRow label="Diferencia caja" value={daily?.cashVariance == null ? 'Pendiente' : money(daily.cashVariance, 'MXN')} />
-            <Button kind="primary" size="lg" block disabled={openShifts.length === 0} onClick={() => navigate('/corte')}>
-              Cerrar turno abierto
-            </Button>
+            <SummaryRow
+              label="Resultado"
+              value={daily ? money(daily.result, 'MXN') : '...'}
+              vTone={result == null ? undefined : result >= 0 ? 'good' : 'bad'}
+            />
+            <SummaryRow
+              label="Diferencia caja"
+              value={cashVar == null ? 'Pendiente' : money(daily!.cashVariance, 'MXN')}
+              vTone={cashVar == null ? undefined : cashVar >= 0 ? 'good' : 'bad'}
+            />
+            <div className="mt-4">
+              <Button kind="primary" size="lg" block disabled={openShifts.length === 0} onClick={() => navigate('/corte')}>
+                Cerrar turno abierto
+              </Button>
+            </div>
           </Panel>
         </aside>
       </div>

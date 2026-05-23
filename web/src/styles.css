@@ -429,6 +429,12 @@ html, body, #root { height: 100%; }
 .tl-panel.feature .tl-panel-head h3 { color: #fff; }
 .tl-panel.feature .tl-panel-head p { color: rgba(255,255,255,0.72); }
 .tl-panel.feature .tl-panel-foot { background: rgba(0,0,0,0.18); border-top-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
+.tl-panel.feature .tl-srow { border-bottom-color: rgba(255,255,255,0.10); }
+.tl-panel.feature .tl-srow .k { color: rgba(255,255,255,0.65); }
+.tl-panel.feature .tl-srow .v { color: #fff; }
+.tl-panel.feature .tl-srow .v[style*="good-700"] { color: var(--good-500) !important; }
+.tl-panel.feature .tl-srow .v[style*="bad-700"]  { color: #fca5a5 !important; }
+.tl-panel.feature .tl-srow .v[style*="warn-700"] { color: #fcd34d !important; }
 
 /* Metric */
 .tl-metric {
