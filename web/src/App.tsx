@@ -992,16 +992,16 @@ function LoginScreen() {
             </p>
           </div>
 
-          {/* Stat blocks */}
+          {/* Brand pillars — honest value props, not fake live data */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { k: 'Hoy',       v: 'Domingo',     sub: 'cierre 8 pm' },
-              { k: 'Turno',     v: 'Vespertino',  sub: 'activo' },
-              { k: 'Lavadores', v: '16',          sub: 'en piso' },
+              { k: 'Tickets',    v: 'al instante',  sub: 'sin Excel, sin papel' },
+              { k: 'Nómina',     v: 'automática',   sub: 'domingo a sábado' },
+              { k: 'Inventario', v: 'auditable',    sub: 'cada movimiento' },
             ].map(s => (
-              <div key={s.k} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur">
+              <div key={s.k} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur transition hover:border-white/20 hover:bg-white/[0.06]">
                 <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/50">{s.k}</div>
-                <div className="mt-1 text-lg font-bold tracking-tight text-white">{s.v}</div>
+                <div className="mt-1 text-[15px] font-bold tracking-tight text-white">{s.v}</div>
                 <div className="mt-0.5 text-[11px] text-white/40">{s.sub}</div>
               </div>
             ))}
@@ -1015,53 +1015,58 @@ function LoginScreen() {
 
       {/* ── Right form panel ── */}
       <div className="relative flex items-center justify-center p-6 lg:p-10">
-        <div className="w-full max-w-[380px] rounded-[18px] bg-white p-8 shadow-lg">
-          <div className="mb-7">
-            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 ring-1 ring-primary-100">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-primary-700">
-                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
+        <div className="tl-login-card w-full max-w-[400px]">
+          <div className="tl-login-card-brand-bar" aria-hidden />
+          <div className="p-8">
+            <div className="mb-7">
+              <div className="tl-login-lock">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+              </div>
+              <h1 className="text-[22px] font-bold tracking-tight text-ink-900" style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.025em' }}>
+                Bienvenido de vuelta
+              </h1>
+              <p className="mt-1 text-[13px] text-ink-500">Inicia sesión para continuar la operación.</p>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-ink-900">Iniciar sesión</h1>
-            <p className="mt-1 text-[13px] text-ink-500">Sistema de operación diaria</p>
-          </div>
 
-          <form className="space-y-4" onSubmit={submit} data-testid="login-form">
-            <Field label="Usuario">
-              <input
-                className="tl-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                data-testid="login-username"
-              />
-            </Field>
-            <Field label="Contraseña">
-              <input
-                type="password"
-                className="tl-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                data-testid="login-password"
-              />
-            </Field>
-            {error && <ErrorMessage message={error} />}
-            <Button kind="primary" size="lg" type="submit" block disabled={loading} testId="login-submit">
-              {loading ? 'Entrando…' : 'Iniciar sesión'}
-            </Button>
-          </form>
+            <form className="space-y-4" onSubmit={submit} data-testid="login-form">
+              <Field label="Usuario">
+                <input
+                  className="tl-input"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  data-testid="login-username"
+                />
+              </Field>
+              <Field label="Contraseña">
+                <input
+                  type="password"
+                  className="tl-input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  data-testid="login-password"
+                />
+              </Field>
+              {error && <ErrorMessage message={error} />}
+              <Button kind="primary" size="lg" type="submit" block disabled={loading} testId="login-submit">
+                {loading ? 'Entrando…' : 'Iniciar sesión'}
+              </Button>
+            </form>
 
-          <div className="my-6 flex items-center gap-3 text-[11px] text-ink-400">
-            <div className="h-px flex-1 bg-border-soft" />
-            <span>roles disponibles</span>
-            <div className="h-px flex-1 bg-border-soft" />
-          </div>
+            <div className="my-6 flex items-center gap-3 text-[11px] text-ink-400">
+              <div className="h-px flex-1 bg-border-soft" />
+              <span className="font-semibold uppercase tracking-wider">roles disponibles</span>
+              <div className="h-px flex-1 bg-border-soft" />
+            </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Pill tone="gray">OPERADOR</Pill>
-            <Pill tone="purple">GERENTE</Pill>
-            <Pill tone="good">DUEÑO</Pill>
+            <div className="flex flex-wrap gap-2">
+              <Pill tone="gray">OPERADOR</Pill>
+              <Pill tone="purple">GERENTE</Pill>
+              <Pill tone="good">DUEÑO</Pill>
+            </div>
           </div>
         </div>
       </div>
@@ -2703,13 +2708,14 @@ function CatalogsScreen() {
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Catalogos</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Datos base para que el dueno configure tickets sin usar la base de datos.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Configuración · datos base</p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Catálogos</h2>
+          <p className="mt-1 text-[12.5px] text-ink-500">Lavadores, servicios, tamaños y precios — la base que alimenta los tickets.</p>
         </div>
         <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary">
-          Ir a nuevo ticket
+          + Nuevo ticket
         </NavLink>
       </div>
 
