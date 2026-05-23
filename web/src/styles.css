@@ -733,6 +733,15 @@ html, body, #root { height: 100%; }
 .tl-lift { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform; }
 .tl-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
+/* Modal entrance — backdrop fades, content scales+fades up */
+@keyframes tl-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tl-modal-scale-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tl-modal-backdrop { animation: tl-modal-fade-in 0.16s ease both; }
+.tl-modal-content  { animation: tl-modal-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* Counter — used to suggest a number is "live" via subtle tabular shift on update */
 .tl-counter { font-variant-numeric: tabular-nums; transition: color 0.2s ease; }
 

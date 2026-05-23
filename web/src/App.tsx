@@ -1111,7 +1111,6 @@ function DayStatusCard() {
   const { hasRole } = useAuth()
   const queryClient = useQueryClient()
   const data = usePhaseData()
-  const [shiftType, setShiftType] = useState<'MATUTINO' | 'VESPERTINO'>('MATUTINO')
   const [toast, setToast] = useState<string | null>(null)
 
   const openShifts = (data.shifts.data ?? []).filter((s) => s.status === 'OPEN')
@@ -1126,7 +1125,7 @@ function DayStatusCard() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['business-days'] })
       await queryClient.invalidateQueries({ queryKey: ['daily-summary'] })
-      setToast('Dia abierto')
+      setToast('Día abierto')
       setTimeout(() => setToast(null), 2000)
     },
   })
@@ -1146,82 +1145,128 @@ function DayStatusCard() {
 
   const canAct = hasRole('GERENTE')
 
+  // ── State 1: No day open ────────────────────────────────────
   if (!day) {
     return (
       <>
         {toast && <Toast message={toast} />}
-        <Banner
-          tone="warn"
-          title="Sin dia de trabajo abierto"
-          text={`Hoy es ${today}. Abre el dia para poder capturar tickets.`}
-          cta={canAct ? (
-            <Button
-              kind="go"
-              size="sm"
-              onClick={() => openDayMutation.mutate()}
-              disabled={openDayMutation.isPending}
-            >
-              {openDayMutation.isPending ? 'Abriendo...' : 'Abrir dia de hoy'}
-            </Button>
-          ) : undefined}
-        />
-        {openDayMutation.error && <p className="text-sm" style={{ color: 'var(--bad-700)' }}>{openDayMutation.error.message}</p>}
+        <div className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-amber-50/60 p-5">
+          <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-300/30 blur-2xl" />
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-700">Sin día abierto</p>
+                <p className="mt-0.5 text-[15px] font-semibold text-ink-900">Hoy es <span className="font-mono tabular-nums">{today}</span></p>
+                <p className="text-[12.5px] text-ink-500">Abre el día para poder capturar tickets.</p>
+              </div>
+            </div>
+            {canAct && (
+              <Button
+                kind="go"
+                size="sm"
+                onClick={() => openDayMutation.mutate()}
+                disabled={openDayMutation.isPending}
+              >
+                {openDayMutation.isPending ? 'Abriendo...' : 'Abrir día'}
+              </Button>
+            )}
+          </div>
+        </div>
+        {openDayMutation.error && <p className="mt-2 text-sm text-rose-700">{openDayMutation.error.message}</p>}
       </>
     )
   }
 
+  // ── State 2: Day open but no active shift ────────────────────
   if (openShifts.length === 0) {
     const matiExists = allShifts.some((s) => s.shiftType === 'MATUTINO')
     const vespeExists = allShifts.some((s) => s.shiftType === 'VESPERTINO')
     return (
       <>
         {toast && <Toast message={toast} />}
-        <Banner
-          tone="info"
-          title="Dia abierto — sin turno activo"
-          text={allShifts.length === 0 ? 'Abre el turno para empezar a capturar tickets.' : 'Todos los turnos de hoy estan cerrados.'}
-          cta={canAct ? (
-            <div className="flex gap-2">
-              {!matiExists && (
-                <Button kind="primary" size="sm" onClick={() => openShiftMutation.mutate('MATUTINO')} disabled={openShiftMutation.isPending}>
-                  {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Matutino'}
-                </Button>
-              )}
-              {!vespeExists && (
-                <Button kind="secondary" size="sm" onClick={() => openShiftMutation.mutate('VESPERTINO')} disabled={openShiftMutation.isPending}>
-                  {openShiftMutation.isPending ? 'Abriendo...' : 'Turno Vespertino'}
-                </Button>
-              )}
+        <div className="relative overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-white to-violet-50/60 p-5">
+          <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-violet-300/30 blur-2xl" />
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-violet-700">Día abierto · sin turno activo</p>
+                <p className="mt-0.5 text-[15px] font-semibold text-ink-900">
+                  {allShifts.length === 0 ? 'Abre un turno para capturar tickets.' : 'Todos los turnos están cerrados.'}
+                </p>
+                <p className="text-[12.5px] text-ink-500">Día <span className="font-mono tabular-nums">{day.businessDate}</span></p>
+              </div>
             </div>
-          ) : undefined}
-        />
-        {openShiftMutation.error && <p className="text-sm" style={{ color: 'var(--bad-700)' }}>{openShiftMutation.error.message}</p>}
+            {canAct && (
+              <div className="flex gap-2">
+                {!matiExists && (
+                  <Button kind="primary" size="sm" onClick={() => openShiftMutation.mutate('MATUTINO')} disabled={openShiftMutation.isPending}>
+                    {openShiftMutation.isPending ? 'Abriendo...' : '+ Matutino'}
+                  </Button>
+                )}
+                {!vespeExists && (
+                  <Button kind="secondary" size="sm" onClick={() => openShiftMutation.mutate('VESPERTINO')} disabled={openShiftMutation.isPending}>
+                    {openShiftMutation.isPending ? 'Abriendo...' : '+ Vespertino'}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {openShiftMutation.error && <p className="mt-2 text-sm text-rose-700">{openShiftMutation.error.message}</p>}
       </>
     )
   }
 
+  // ── State 3: Day + shifts active ─────────────────────────────
   return (
     <>
       {toast && <Toast message={toast} />}
-      <Banner
-        tone="good"
-        title={`En operacion — ${today}`}
-        text={`${openShifts.map((s) => s.shiftType === 'MATUTINO' ? 'Turno Matutino' : 'Turno Vespertino').join(' + ')} activo`}
-        cta={
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-white to-emerald-50/40 p-5">
+        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-emerald-300/25 blur-2xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+              <span className="absolute inset-0 rounded-xl bg-emerald-400/30 animate-ping" />
+              <svg className="relative h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-700">En operación</p>
+              <p className="mt-0.5 text-[15px] font-semibold text-ink-900">
+                Día <span className="font-mono tabular-nums">{day.businessDate}</span>
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {openShifts.map((s) => (
+                  <span key={s.id} className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {s.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            {openShifts.map((s) => (
-              <Pill key={s.id} tone="good">
-                {s.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}
-              </Pill>
-            ))}
             {canAct && !allShifts.some((s) => s.shiftType === 'VESPERTINO') && (
               <Button kind="secondary" size="sm" onClick={() => openShiftMutation.mutate('VESPERTINO')} disabled={openShiftMutation.isPending}>
                 {openShiftMutation.isPending ? 'Abriendo...' : '+ Vespertino'}
               </Button>
             )}
           </div>
-        }
-      />
+        </div>
+      </div>
     </>
   )
 }
@@ -6504,14 +6549,14 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
   const titleId = `modal-${slug}-title`
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto px-4 py-8"
+      className="tl-modal-backdrop fixed inset-0 z-40 flex items-start justify-center overflow-y-auto px-4 py-8"
       style={{ background: 'rgba(15,23,42,0.40)', backdropFilter: 'blur(6px)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       data-testid={`modal-${slug}`}
     >
-      <div className={`flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-5xl'}`}>
+      <div className={`tl-modal-content flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-5xl'}`}>
         <div className="flex items-start gap-3 border-b border-border-soft px-6 py-4">
           <div>
             <h3 id={titleId} className="text-base font-bold tracking-tight text-ink-900">{title}</h3>
