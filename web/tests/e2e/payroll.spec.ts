@@ -23,7 +23,7 @@ test('payroll period lifecycle supports compute, adjustment, lock, and export', 
 
   await page.getByTestId('payroll-start-date').fill(startDate)
   await page.getByTestId('payroll-create-period').click()
-  await expect(page.getByText('Periodo creado')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByText('Período creado')).toBeVisible({ timeout: 8_000 })
 
   await page.getByTestId('payroll-compute').click()
   await expect(page.getByText('Nomina calculada')).toBeVisible({ timeout: 8_000 })

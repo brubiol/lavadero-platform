@@ -34,7 +34,7 @@ test('can create gasto, retiro, and prestamo from the UI', async ({ page }) => {
   await modal.getByLabel('Fecha').fill(todayIso())
   await modal.locator('select[name="category"]').selectOption('MATERIAL')
   await modal.getByLabel('Monto').fill('150')
-  await modal.getByLabel('Descripcion').fill(expenseText)
+  await modal.getByLabel('Descripción').fill(expenseText)
   await modal.getByRole('button', { name: 'Guardar gasto' }).click()
   await expect(page.locator('tr').filter({ hasText: expenseText })).toBeVisible({ timeout: 8_000 })
 
