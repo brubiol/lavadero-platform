@@ -4885,10 +4885,31 @@ function TicketsBrowser() {
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [voiding, setVoiding] = useState<Ticket | null>(null)
 
+  // Live clock for header
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  const clockStr = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const openShifts = (data.shifts.data ?? []).filter((s) => s.status === 'OPEN')
+
   const tickets = useQuery({
     queryKey: ['tickets', effectiveBusinessDay?.id, status],
     enabled: Boolean(effectiveBusinessDay?.id) && !notaLookup.trim(),
     queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${effectiveBusinessDay!.id}&status=${status}`),
+  })
+
+  // Fetch counters for both statuses so the tab badges + snapshot strip stay live
+  const activeCount = useQuery({
+    queryKey: ['tickets', effectiveBusinessDay?.id, 'ACTIVE'],
+    enabled: Boolean(effectiveBusinessDay?.id),
+    queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${effectiveBusinessDay!.id}&status=ACTIVE`),
+  })
+  const voidedCount = useQuery({
+    queryKey: ['tickets', effectiveBusinessDay?.id, 'VOIDED'],
+    enabled: Boolean(effectiveBusinessDay?.id),
+    queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${effectiveBusinessDay!.id}&status=VOIDED`),
   })
 
   const notaResult = useQuery({
@@ -4906,83 +4927,218 @@ function TicketsBrowser() {
     return haystack.includes(query.toLowerCase())
   })
 
+  const activeList = activeCount.data ?? []
+  const voidedList = voidedCount.data ?? []
+  const totalCobrado = activeList.reduce((sum, t) => sum + t.priceAmount, 0)
+
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Tickets</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Busqueda y revision de tickets capturados.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            Operación · {effectiveBusinessDay?.businessDate ?? 'sin día abierto'}
+          </p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Tickets</h2>
         </div>
-        <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary">
-          Nuevo ticket
-        </NavLink>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 rounded-2xl border border-border-soft bg-white px-4 py-2.5 shadow-xs">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </span>
+            <div className="leading-tight">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">
+                {openShifts[0]?.shiftType === 'MATUTINO' ? 'Matutino' : openShifts[0]?.shiftType === 'VESPERTINO' ? 'Vespertino' : 'Sin turno'}
+              </p>
+              <p className="font-mono text-[13.5px] font-semibold tabular-nums text-ink-900">{clockStr}</p>
+            </div>
+          </div>
+          <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary">
+            + Nuevo ticket
+          </NavLink>
+        </div>
       </div>
 
-      <Panel title="Filtros">
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px]">
-          <input
-            className="tl-input"
-            value={notaLookup}
-            onChange={(event) => { setNotaLookup(event.target.value); setQuery('') }}
-            placeholder="Buscar por nota de control (ej. 20260521-0042)"
-          />
-          <input
-            className="tl-input"
-            value={query}
-            onChange={(event) => { setQuery(event.target.value); setNotaLookup('') }}
-            placeholder="Buscar por vehiculo, servicio o lavador"
-            disabled={Boolean(notaLookup.trim())}
-          />
-          <select className="tl-select" value={status} onChange={(event) => setStatus(event.target.value as TicketStatus)} disabled={Boolean(notaLookup.trim())}>
-            <option value="ACTIVE">Activos</option>
-            <option value="VOIDED">Cancelados</option>
-          </select>
+      {/* ─── Snapshot strip ───────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Activos</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{activeList.length}</p>
         </div>
-      </Panel>
+        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-rose-50/60 to-white px-4 py-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Cancelados</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{voidedList.length}</p>
+        </div>
+        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Total cobrado</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totalCobrado, 'MXN')}</p>
+        </div>
+      </div>
 
+      {/* ─── Filters: status tabs + search inputs ─────────────────── */}
       <div className="tl-panel overflow-hidden">
-        <table className="tl-tbl zebra">
-          <thead className="">
-            <tr>
-              <th>Nota</th>
-              <th>Control</th>
-              <th>Vehiculo</th>
-              <th>Servicio</th>
-              <th>Lavadores</th>
-              <th className="r">Importe</th>
-              <th>Pago</th>
-              <th>Estado</th>
-              <th className="r">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="">
-            {filtered.map((ticket) => (
-              <tr key={ticket.id}>
-                <td className="font-semibold">{ticket.notaNumber}</td>
-                <td className="text-ink-500">{ticket.internalRef || '-'}</td>
-                <td>{ticket.vehicleDescription || '-'}</td>
-                <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
-                <td>{ticket.assignments.map((a) => a.employeeName).join(', ')}</td>
-                <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
-                <td><PaymentPill ticket={ticket} /></td>
-                <td>
-                  <TicketStatusPill ticket={ticket} />
-                </td>
-                <td className="r">
-                  <button className="text-sm font-semibold text-blue-700 hover:text-blue-900" onClick={() => setSelected(ticket)}>Ver</button>
-                  {ticket.status === 'ACTIVE' && (
-                    <button className="ml-3 text-sm font-semibold text-red-700 hover:text-red-900" onClick={() => setVoiding(ticket)}>Cancelar</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border-soft px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setStatus('ACTIVE')}
+            disabled={Boolean(notaLookup.trim())}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-all duration-150 ${
+              status === 'ACTIVE'
+                ? 'bg-ink-900 text-white shadow-sm'
+                : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
+            } disabled:opacity-50`}
+          >
+            Activos
+            <span className={`inline-flex h-4 min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
+              status === 'ACTIVE' ? 'bg-white/20 text-white' : 'bg-white text-ink-500'
+            }`}>{activeList.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatus('VOIDED')}
+            disabled={Boolean(notaLookup.trim())}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-all duration-150 ${
+              status === 'VOIDED'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'bg-ink-50 text-ink-600 hover:bg-rose-50 hover:text-rose-700'
+            } disabled:opacity-50`}
+          >
+            Cancelados
+            <span className={`inline-flex h-4 min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
+              status === 'VOIDED' ? 'bg-white/20 text-white' : 'bg-white text-ink-500'
+            }`}>{voidedList.length}</span>
+          </button>
+        </div>
+        <div className="grid gap-3 p-4 md:grid-cols-[2fr_1.4fr]">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+            <input
+              className="tl-input pl-9"
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setNotaLookup('') }}
+              placeholder="Buscar por vehículo, servicio o lavador…"
+              disabled={Boolean(notaLookup.trim())}
+            />
+          </div>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[12px] font-bold text-ink-400">#</span>
+            <input
+              className="tl-input pl-7 font-mono text-[12.5px]"
+              value={notaLookup}
+              onChange={(event) => { setNotaLookup(event.target.value); setQuery('') }}
+              placeholder="Buscar por nota (ej. 20260521-0042)"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Tickets table ────────────────────────────────────────── */}
+      <div className="tl-panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="tl-tbl zebra">
+            <thead>
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-gray-400">No hay tickets para estos filtros.</td>
+                <th className="w-16">Hora</th>
+                <th>Nota</th>
+                <th>Vehículo</th>
+                <th>Servicio</th>
+                <th>Lavadores</th>
+                <th className="r">Importe</th>
+                <th>Pago</th>
+                <th>Estado</th>
+                <th className="r">Acciones</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((ticket) => {
+                const occurred = ticket.occurredAt ?? ticket.createdAt
+                const timeStr = new Date(occurred).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+                return (
+                  <tr key={ticket.id}>
+                    <td className="font-mono text-[12px] text-ink-500 tabular-nums">{timeStr}</td>
+                    <td className="font-semibold">
+                      {ticket.internalRef || ticket.notaNumber}
+                      {ticket.internalRef && (
+                        <p className="mt-0.5 font-mono text-[11px] font-normal text-ink-400">{ticket.notaNumber}</p>
+                      )}
+                    </td>
+                    <td>
+                      <span>{ticket.vehicleDescription || '-'}</span>
+                      {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
+                    </td>
+                    <td className="text-[12.5px]">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {ticket.assignments.map((a) => (
+                          <span key={a.employeeId} className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                            {a.employeeName.split(' ')[0]}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="r font-semibold tabular-nums">{money(ticket.priceAmount, ticket.currency)}</td>
+                    <td><PaymentPill ticket={ticket} /></td>
+                    <td><TicketStatusPill ticket={ticket} /></td>
+                    <td className="r">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          title="Ver / editar"
+                          onClick={() => setSelected(ticket)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                            <path d="M1.5 12s4-7.5 10.5-7.5S22.5 12 22.5 12s-4 7.5-10.5 7.5S1.5 12 1.5 12z" />
+                            <circle cx="12" cy="12" r="2.5" />
+                          </svg>
+                        </button>
+                        {ticket.status === 'ACTIVE' && (
+                          <button
+                            type="button"
+                            title="Cancelar"
+                            aria-label="Cancelar"
+                            onClick={() => setVoiding(ticket)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path d="M6 6l12 12M6 18L18 6" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={9}>
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-50">
+                        <svg className="h-5 w-5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <p className="text-[14px] font-semibold text-ink-700">No hay tickets para estos filtros.</p>
+                      <p className="mt-1 text-[12.5px] text-ink-400">
+                        {notaLookup.trim() ? 'Revisa el número de nota e intenta de nuevo.' : query ? 'Ajusta la búsqueda o cambia el estado.' : 'Captura el primer ticket del turno.'}
+                      </p>
+                      {!notaLookup.trim() && !query && (
+                        <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary tl-btn-sm mt-4">
+                          + Nuevo ticket
+                        </NavLink>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {selected && (
