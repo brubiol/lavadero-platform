@@ -4087,47 +4087,74 @@ function InventoryScreen() {
   const totalValue = rows.reduce((sum, row) => sum + row.quantityOnHand * row.product.currentUnitPrice, 0)
   const lowCount = rows.filter((row) => row.product.trackInventory && row.quantityOnHand <= 5).length
 
+  const totalProducts = products.data?.length ?? 0
+
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Inventario</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Productos y movimientos. El stock se calcula desde entradas y salidas.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Misceláneas · stock vivo</p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Inventario</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="tl-btn tl-btn-primary" onClick={() => setModal('product')}>Nuevo producto</button>
-          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('sale')}>Registrar venta</button>
-          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('purchase')}>Registrar compra</button>
+          <button className="tl-btn tl-btn-primary" onClick={() => setModal('product')}>+ Producto</button>
+          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('sale')}>Venta</button>
+          <button className="tl-btn tl-btn-secondary" onClick={() => setModal('purchase')}>Compra</button>
           <button className="tl-btn tl-btn-secondary" onClick={() => setModal('adjustment')}>Ajuste</button>
         </div>
       </div>
 
-      <Panel title="Corte de inventario">
-        <div className="grid gap-3 md:grid-cols-[260px_1fr]">
-          <TextField label="Ver hasta">
-            <input type="datetime-local" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
-          </TextField>
-          <div className="flex items-end text-sm text-gray-500">
-            Si lo dejas vacio, el snapshot usa la hora actual.
-          </div>
-        </div>
-      </Panel>
-
       {(products.error || snapshot.error) && <ErrorMessage message={(products.error || snapshot.error)!.message} />}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric label="Productos activos" value={String(products.data?.length ?? '...')} />
-        <Metric label="Valor estimado" value={money(totalValue, 'MXN')} />
-        <Metric label="Stock bajo" value={String(lowCount)} />
+      {/* ─── Hero stats ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Productos activos</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totalProducts}</p>
+        </div>
+        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Valor estimado</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totalValue, 'MXN')}</p>
+        </div>
+        <div className={`rounded-2xl border px-4 py-3.5 ${lowCount > 0 ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-white' : 'border-border-soft bg-white'}`}>
+          <p className={`text-[10.5px] font-semibold uppercase tracking-[0.12em] ${lowCount > 0 ? 'text-rose-700' : 'text-ink-400'}`}>Stock bajo</p>
+          <p className={`font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums ${lowCount > 0 ? 'text-rose-700' : 'text-ink-900'}`}>{lowCount}</p>
+        </div>
       </div>
 
+      {/* ─── Snapshot date control ────────────────────────────────── */}
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border-soft bg-white p-3">
+        <TextField label="Ver inventario hasta">
+          <input type="datetime-local" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
+        </TextField>
+        <p className="pb-2 text-[12px] text-ink-400">{asOf ? '' : 'Si lo dejas vacío, usa la hora actual.'}</p>
+      </div>
+
+      {/* ─── Category panels ──────────────────────────────────────── */}
       {(['AROMA', 'SNACK', 'OTRO'] as ProductCategory[]).map((cat) => {
         const catRows = rows.filter((row) => (row.product.category ?? 'OTRO') === cat)
         if (catRows.length === 0) return null
-        const catLabel = cat === 'AROMA' ? 'Aromas' : cat === 'SNACK' ? 'Snacks' : 'Otros'
+        const catMeta = cat === 'AROMA'
+          ? { label: 'Aromas', icon: '🌿', color: 'bg-gradient-to-b from-emerald-400 to-emerald-600', tint: 'bg-emerald-50/40' }
+          : cat === 'SNACK'
+          ? { label: 'Snacks', icon: '🍫', color: 'bg-gradient-to-b from-amber-400 to-amber-600', tint: 'bg-amber-50/40' }
+          : { label: 'Otros', icon: '📦', color: 'bg-gradient-to-b from-ink-500 to-ink-700', tint: 'bg-ink-50/40' }
+        const catValue = catRows.reduce((sum, r) => sum + r.quantityOnHand * r.product.currentUnitPrice, 0)
         return (
-          <Panel key={cat} title={catLabel}>
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+          <div key={cat} className="tl-panel overflow-hidden">
+            <div className={`flex items-center justify-between border-b border-border-soft px-5 py-3.5 ${catMeta.tint}`}>
+              <div className="flex items-center gap-3">
+                <span className={`flex h-7 w-7 items-center justify-center rounded-md text-[14px] text-white shadow-sm ${catMeta.color}`}>
+                  {catMeta.icon}
+                </span>
+                <div>
+                  <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{catMeta.label}</h3>
+                  <p className="text-[10.5px] text-ink-500">{catRows.length} producto{catRows.length === 1 ? '' : 's'} · {money(catValue, 'MXN')}</p>
+                </div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               <table className="tl-tbl zebra">
                 <thead>
                   <tr>
@@ -4135,7 +4162,7 @@ function InventoryScreen() {
                     <th>SKU</th>
                     <th className="r">Stock</th>
                     <th className="r">Precio</th>
-                    <th>Ultimo movimiento</th>
+                    <th>Último movimiento</th>
                     <th>Indicador</th>
                     <th className="r">Acciones</th>
                   </tr>
@@ -4147,10 +4174,10 @@ function InventoryScreen() {
                     return (
                       <tr key={row.product.id}>
                         <td className="font-semibold">{row.product.name}</td>
-                        <td>{row.product.sku || '-'}</td>
-                        <td className="r">{row.quantityOnHand.toFixed(2)}</td>
-                        <td className="r">{money(row.product.currentUnitPrice, 'MXN')}</td>
-                        <td>
+                        <td className="font-mono text-[12px] text-ink-500">{row.product.sku || '-'}</td>
+                        <td className="r tabular-nums font-semibold">{row.quantityOnHand.toFixed(2)}</td>
+                        <td className="r tabular-nums">{money(row.product.currentUnitPrice, 'MXN')}</td>
+                        <td className="text-[12.5px] text-ink-500">
                           {latest ? `${movementLabel(latest.movementType)} / ${latest.quantity}` : 'Sin movimientos'}
                         </td>
                         <td>
@@ -4158,13 +4185,18 @@ function InventoryScreen() {
                         </td>
                         <td className="r">
                           <button
-                            className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                            type="button"
+                            title="Editar"
                             onClick={() => {
                               setEditingProduct(row.product)
                               setModal('product')
                             }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
                           >
-                            Editar
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
                           </button>
                         </td>
                       </tr>
@@ -4173,13 +4205,21 @@ function InventoryScreen() {
                 </tbody>
               </table>
             </div>
-          </Panel>
+          </div>
         )
       })}
       {!snapshot.isLoading && rows.length === 0 && (
-        <Panel title="Productos">
-          <p className="px-4 py-10 text-center text-gray-400">No hay productos todavia. Crea un producto y registra una compra inicial.</p>
-        </Panel>
+        <div className="rounded-2xl border border-border-soft bg-white p-10 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-50">
+            <svg className="h-5 w-5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+              <rect x="4" y="7" width="16" height="13" rx="2" />
+              <path d="M9 7V5a3 3 0 016 0v2" />
+            </svg>
+          </div>
+          <p className="text-[14px] font-semibold text-ink-700">No hay productos todavía.</p>
+          <p className="mt-1 text-[12.5px] text-ink-400">Crea un producto y registra una compra inicial para empezar el inventario.</p>
+          <button className="tl-btn tl-btn-primary tl-btn-sm mt-4" onClick={() => setModal('product')}>+ Nuevo producto</button>
+        </div>
       )}
 
       {modal === 'product' && (
