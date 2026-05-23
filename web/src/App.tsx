@@ -1857,7 +1857,7 @@ function TicketWorkspace({
                             }`}>
                               {initials}
                             </span>
-                            {e.fullName.split(' ')[0]}
+                            {e.fullName}
                           </button>
                         )
                       })}
