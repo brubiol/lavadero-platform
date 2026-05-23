@@ -5770,31 +5770,31 @@ function AiWorkflowSection({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
-        <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">{eyebrow}</p>
-          <h3 className="mt-1 text-lg font-bold text-slate-950">{title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
-        </div>
-        {action && <div className="flex flex-wrap items-end gap-2">{action}</div>}
-      </div>
-      <div className="mt-4 space-y-4">{children}</div>
-    </section>
+    <Panel
+      title={(
+        <>
+          <span className="tl-eyebrow">{eyebrow}</span>
+          <span className="block text-[16px] font-bold text-ink-900 tracking-[-0.012em]" style={{ fontFamily: 'var(--font-display)' }}>{title}</span>
+        </>
+      )}
+      subtitle={description}
+      actions={action}
+    >
+      <div className="space-y-4">{children}</div>
+    </Panel>
   )
 }
 
 function AiDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-      {label}
+    <Field label={label}>
       <input
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 shadow-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+        style={{ width: 'auto', minWidth: 160 }}
       />
-    </label>
+    </Field>
   )
 }
 
@@ -5811,22 +5811,11 @@ function AiActionButton({
   onClick: () => void
   tone?: 'slate' | 'sky' | 'emerald' | 'amber'
 }) {
-  const toneClass = {
-    slate: 'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400',
-    sky: 'bg-violet-600 text-white hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400',
-    emerald: 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400',
-    amber: 'bg-amber-500 text-white hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400',
-  }[tone]
-
+  const kind = tone === 'emerald' ? 'go' : tone === 'sky' ? 'primary' : tone === 'amber' ? 'secondary' : 'secondary'
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] ${toneClass}`}
-    >
+    <Button kind={kind} onClick={onClick} disabled={loading}>
       {loading ? loadingLabel : label}
-    </button>
+    </Button>
   )
 }
 

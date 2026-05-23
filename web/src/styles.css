@@ -723,6 +723,26 @@ html, body, #root { height: 100%; }
 .tl-money-good { color: var(--good-700); font-weight: 600; }
 .tl-money-bad  { color: var(--bad-700);  font-weight: 600; }
 
+/* Eyebrow — small uppercase label above a section title (e.g. "1. Brief del día") */
+.tl-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--primary-700);
+  margin: 0 0 4px;
+}
+.tl-eyebrow::before {
+  content: "";
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--primary-600), transparent);
+  display: inline-block;
+}
+
 /* Progress bar */
 .tl-bar { height: 6px; border-radius: 999px; background: var(--ink-100); overflow: hidden; }
 .tl-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary-500), var(--primary-700)); border-radius: 999px; }
