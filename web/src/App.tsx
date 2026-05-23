@@ -1605,6 +1605,7 @@ function TicketWorkspace({
   const [toast, setToast] = useState<string | null>(null)
   const [selectedExtras, setSelectedExtras] = useState<string[]>([])
   const [lavadorQuery, setLavadorQuery] = useState('')
+  const [lavadorFocused, setLavadorFocused] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(() =>
     Boolean(
       ticket && (
@@ -1843,7 +1844,7 @@ function TicketWorkspace({
                 }
                 const filtered = lavadorQuery.trim()
                   ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
-                  : []
+                  : allLavadores
                 const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
                 return (
                   <div className="rounded-xl border border-border-soft bg-ink-50/50 p-4 space-y-3">
@@ -1872,30 +1873,26 @@ function TicketWorkspace({
                         type="text"
                         value={lavadorQuery}
                         onChange={(e) => setLavadorQuery(e.target.value)}
-                        placeholder="Escribe para buscar..."
+                        onFocus={() => setLavadorFocused(true)}
+                        onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
+                        placeholder="Buscar lavador..."
                         className="w-full"
                       />
-                      {filtered.length > 0 && (
+                      {lavadorFocused && filtered.length > 0 && (
                         <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
                           {filtered.map((e) => {
                             const active = selectedIds.includes(e.id)
-                            const initials = e.fullName.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
                             return (
                               <button
                                 key={e.id}
                                 type="button"
                                 onClick={() => toggle(e.id)}
-                                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors ${
+                                className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${
                                   active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
                                 }`}
                               >
-                                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                                  active ? 'bg-violet-200 text-violet-700' : 'bg-ink-100 text-ink-500'
-                                }`}>
-                                  {initials}
-                                </span>
                                 {e.fullName}
-                                {active && <span className="ml-auto text-[11px] text-violet-500">✓</span>}
+                                {active && <span className="text-[11px] text-violet-500">✓</span>}
                               </button>
                             )
                           })}
