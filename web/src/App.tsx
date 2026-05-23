@@ -2458,6 +2458,36 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
   )
 }
 
+// Shared right-rail card chrome. The three AI rail cards (Today, Alerts,
+// History) all share the same border-bottom header with a colored rail,
+// title, and optional right-side slot.
+function AiRailCard({
+  title,
+  rail,
+  action,
+  children,
+  className = '',
+}: {
+  title: string
+  rail: string
+  action?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`tl-panel overflow-hidden ${className}`.trim()}>
+      <div className="flex items-center justify-between gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className={`h-[18px] w-[3px] rounded-full bg-gradient-to-b ${rail}`} />
+          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{title}</h3>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 // ── Today / Brief rail card ─────────────────────────────────────
 function AiTodayCard({
   today,
@@ -2474,21 +2504,20 @@ function AiTodayCard({
 }) {
   const summaryLines = today?.brief ? aiSummaryLines(today.brief.summary) : []
   return (
-    <div className="tl-panel overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-violet-700" />
-          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Brief del día</h3>
-        </div>
+    <AiRailCard
+      title="Brief del día"
+      rail="from-violet-500 to-violet-700"
+      action={(
         <button
           type="button"
           onClick={onReloadBrief}
           disabled={reloading}
-          className="text-[11px] font-semibold text-violet-600 hover:text-violet-700 disabled:opacity-50"
+          className="text-[11px] font-semibold text-primary-600 hover:text-primary-700 disabled:opacity-50"
         >
           {reloading ? 'Generando…' : '↻ Recargar'}
         </button>
-      </div>
+      )}
+    >
       <div className="p-4 space-y-3">
         {loading && !today && (
           <>
@@ -2541,7 +2570,7 @@ function AiTodayCard({
           </>
         )}
       </div>
-    </div>
+    </AiRailCard>
   )
 }
 
@@ -2551,16 +2580,12 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
   if (loading && alerts.length === 0) return null
   if (!loading && alerts.length === 0) {
     return (
-      <div className="tl-panel overflow-hidden">
-        <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-          <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
-          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Alertas</h3>
-        </div>
-        <div className="p-4 flex items-center gap-2 text-[12.5px] text-emerald-700">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">✓</span>
+      <AiRailCard title="Alertas" rail="from-emerald-400 to-emerald-600">
+        <div className="p-4 flex items-center gap-2 text-[12.5px] text-good-700">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-good-100 text-good-700">✓</span>
           Sin alertas para hoy.
         </div>
-      </div>
+      </AiRailCard>
     )
   }
   const sorted = [...alerts].sort((a, b) => {
@@ -2580,16 +2605,15 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
     ? 'from-amber-400 to-amber-600'
     : 'from-violet-400 to-violet-600'
   return (
-    <div className="tl-panel overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`h-[18px] w-[3px] rounded-full bg-gradient-to-b ${colorMap}`} />
-          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Alertas</h3>
-        </div>
+    <AiRailCard
+      title="Alertas"
+      rail={colorMap}
+      action={(
         <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[10.5px] font-bold text-ink-700">
           {visible.length}{filter !== 'ALL' && `/${counts.ALL}`}
         </span>
-      </div>
+      )}
+    >
       {/* Severity filter tabs */}
       <div className="flex items-center gap-1 border-b border-border-soft px-4 py-2">
         {([
@@ -2619,7 +2643,7 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
           <p className="text-[12px] text-ink-400 text-center py-4">Sin alertas de este tipo.</p>
         )}
       </div>
-    </div>
+    </AiRailCard>
   )
 }
 
@@ -2627,15 +2651,11 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
 function AiHistoryCard({ rows, loading }: { rows: AiInsight[]; loading: boolean }) {
   if (loading || rows.length === 0) return null
   return (
-    <div className="tl-panel overflow-hidden">
-      <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-        <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-ink-400 to-ink-600" />
-        <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Bitácora reciente</h3>
-      </div>
+    <AiRailCard title="Bitácora reciente" rail="from-ink-400 to-ink-600">
       <div className="p-4 space-y-2 max-h-[360px] overflow-y-auto">
         {rows.slice(0, 8).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
       </div>
-    </div>
+    </AiRailCard>
   )
 }
 
