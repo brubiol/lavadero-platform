@@ -1874,6 +1874,51 @@ function AiScreen() {
     queryFn: () => api<QuickPromptsResponse>('/api/v1/ai/quick-prompts'),
   })
 
+  const deepPromptCategories: PromptCategory[] = [
+    {
+      key: 'caja',
+      name: 'Caja y diferencias',
+      icon: '🔍',
+      prompts: [
+        '¿Por qué hay diferencia de caja recurrente en el turno vespertino?',
+        '¿Hay un patrón en los días con faltante?',
+        '¿Qué turno tiene más inconsistencias de caja históricamente?',
+      ],
+    },
+    {
+      key: 'fraude',
+      name: 'Fraude y anomalías',
+      icon: '🚨',
+      prompts: [
+        '¿Hay lavadores con cortesías inusuales esta semana?',
+        '¿Hay concentración sospechosa de tickets anulados en algún turno?',
+        '¿Algún lavador tiene tickets de precio muy bajo comparado con los demás?',
+        '¿Hay tickets con descuentos altos que no tienen autorización clara?',
+      ],
+    },
+    {
+      key: 'ingresos',
+      name: 'Ingresos y tendencias',
+      icon: '📉',
+      prompts: [
+        '¿Qué explica la caída de ingresos comparando este mes con el anterior?',
+        '¿Por qué bajaron los carros lavados esta semana?',
+        'Investiga si los ingresos bajan en días específicos y por qué.',
+        '¿Hay servicios que se dejaron de vender o bajaron mucho?',
+      ],
+    },
+    {
+      key: 'lavadores',
+      name: 'Rendimiento de lavadores',
+      icon: '👤',
+      prompts: [
+        '¿Hay lavadores cuyo rendimiento bajó significativamente?',
+        '¿Qué lavador tiene más ausencias y cómo afecta los ingresos?',
+        'Compara el rendimiento por turno e identifica irregularidades.',
+      ],
+    },
+  ]
+
   const refreshBrief = useMutation({
     mutationFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}&force=true`, { method: 'POST' }),
     onSuccess: async () => {
@@ -2045,9 +2090,9 @@ function AiScreen() {
                   </p>
                 </div>
                 {/* Inline prompt categories */}
-                {prompts.data && (
+                {(chatMode === 'deep' ? deepPromptCategories : prompts.data?.categories) && (
                   <div className="space-y-3.5">
-                    {prompts.data.categories.map((cat) => (
+                    {(chatMode === 'deep' ? deepPromptCategories : prompts.data!.categories).map((cat) => (
                       <div key={cat.key}>
                         <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
                           <span className="mr-1">{cat.icon}</span>{cat.name}
@@ -2089,9 +2134,9 @@ function AiScreen() {
           </div>
 
           {/* Quick prompts (re-openable once chat has started) */}
-          {showPrompts && messages.length > 0 && prompts.data && (
+          {showPrompts && messages.length > 0 && (chatMode === 'deep' || prompts.data) && (
             <div className="border-t border-border-soft bg-ink-50/40 p-4 space-y-3 max-h-[260px] overflow-y-auto">
-              {prompts.data.categories.map((cat) => (
+              {(chatMode === 'deep' ? deepPromptCategories : prompts.data!.categories).map((cat) => (
                 <div key={cat.key}>
                   <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
                     <span className="mr-1">{cat.icon}</span>{cat.name}
