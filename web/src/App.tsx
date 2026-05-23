@@ -3596,7 +3596,7 @@ function CatalogsScreen() {
     }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['business-days'] })
-      showToast('Dia abierto')
+      showToast('DÃ­a abierto')
     },
   })
 
@@ -5946,7 +5946,7 @@ function PayrollScreen() {
     onSuccess: async (created) => {
       setSelectedPeriodId(created.id)
       await queryClient.invalidateQueries({ queryKey: ['payroll-periods'] })
-      setToast('Periodo creado')
+      setToast("PerÃ­odo creado")
     },
   })
   const compute = useMutation({
@@ -6069,7 +6069,7 @@ function PayrollScreen() {
             <input type="date" {...form.register('startDate')} data-testid="payroll-start-date" />
           </TextField>
           <button data-testid="payroll-create-period" className="tl-btn tl-btn-primary">
-            + Periodo
+            + PerÃ­odo
           </button>
         </form>
       </div>
@@ -6098,7 +6098,7 @@ function PayrollScreen() {
       )}
 
       <div className="grid gap-5 xl:grid-cols-[300px_1fr]">
-        <Panel title="Periodos">
+        <Panel title="PerÃ­odos">
           <SelectField label="Estado">
             <select value={status} onChange={(event) => setStatus(event.target.value as PayrollPeriodStatus | '')}>
               <option value="">Todos</option>
@@ -6130,7 +6130,7 @@ function PayrollScreen() {
               <EmptyState
                 icon={<IPayroll size={20} />}
                 title="Sin períodos de nómina"
-                description="Crea uno con la fecha de domingo del periodo a calcular."
+                description="Crea uno con la fecha del domingo del perÃ­odo a calcular."
                 tone="info"
               />
             )}
@@ -6141,7 +6141,7 @@ function PayrollScreen() {
           <Panel title="Resumen semanal">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-ink-400">Periodo</p>
+                <p className="text-sm text-ink-400">PerÃ­odo</p>
                 <p className="font-semibold">{selectedPeriod ? `${selectedPeriod.startDate} al ${selectedPeriod.endDate}` : 'Sin seleccionar'}</p>
               </div>
               <div className="flex gap-2">
@@ -6239,7 +6239,7 @@ function PayrollScreen() {
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
                     <tr>
                       <td colSpan={10} className="px-4 py-8 text-center text-ink-400">
-                        Crea o selecciona un periodo para calcular automaticamente.
+                        Crea o selecciona un perÃ­odo para calcular automÃ¡ticamente.
                       </td>
                     </tr>
                   )}
@@ -6364,7 +6364,7 @@ function PayrollScreen() {
                   <table className="tl-tbl zebra">
                     <thead className="">
                       <tr>
-                        <th>Dia</th>
+                        <th>DÃ­a</th>
                         <th className="r">Carros</th>
                         <th className="r">Revenue ref.</th>
                       </tr>
@@ -7464,7 +7464,7 @@ function EmployeeEditModal({
                 </TextField>
               </div>
               <p className="mt-2 text-xs text-ink-500">
-                Si trabaja los 7 dias de la semana se le paga el dia de descanso (tarifa diaria + premio).
+                Si trabaja los 7 dÃ­as de la semana se le paga el dia de descanso (tarifa diaria + premio).
                 Cada falta descuenta un dia de sueldo mas la penalizacion fija.
               </p>
             </div>
