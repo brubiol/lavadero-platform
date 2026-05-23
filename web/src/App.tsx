@@ -2954,6 +2954,7 @@ function ExpenseLedgerScreen() {
   const [to, setTo] = useState(today)
   const [category, setCategory] = useState<ExpenseCategory | ''>('')
   const [modal, setModal] = useState<'expense' | 'withdrawal' | 'advance' | null>(null)
+  const [tab, setTab] = useState<'expenses' | 'withdrawals' | 'advances'>('expenses')
   const data = usePhaseData()
 
   const expenses = useQuery({
@@ -2975,80 +2976,145 @@ function ExpenseLedgerScreen() {
     advances: (advances.data ?? []).reduce((sum, row) => sum + row.amount, 0),
   }
   const combinedTotal = totals.expenses + totals.withdrawals + totals.advances
+  const counts = {
+    expenses: (expenses.data ?? []).length,
+    withdrawals: (withdrawals.data ?? []).length,
+    advances: (advances.data ?? []).length,
+  }
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Gastos</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Registro de gastos, retiros y prestamos a lavadores.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            Salidas de caja · {from === to ? from : `${from} → ${to}`}
+          </p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Gastos</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button data-testid="gastos-new-expense" className="tl-btn tl-btn-primary" onClick={() => setModal('expense')}>Nuevo gasto</button>
-          <button data-testid="gastos-new-withdrawal" className="tl-btn tl-btn-secondary" onClick={() => setModal('withdrawal')}>Nuevo retiro</button>
-          <button data-testid="gastos-new-advance" className="tl-btn tl-btn-secondary" onClick={() => setModal('advance')}>Nuevo prestamo</button>
+          <button data-testid="gastos-new-expense" className="tl-btn tl-btn-primary" onClick={() => setModal('expense')}>+ Gasto</button>
+          <button data-testid="gastos-new-withdrawal" className="tl-btn tl-btn-secondary" onClick={() => setModal('withdrawal')}>+ Retiro</button>
+          <button data-testid="gastos-new-advance" className="tl-btn tl-btn-secondary" onClick={() => setModal('advance')}>+ Préstamo</button>
         </div>
       </div>
 
-      <Panel title="Filtros">
-        <div className="grid gap-3 md:grid-cols-[180px_180px_220px]">
-          <TextField label="Desde">
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-          </TextField>
-          <TextField label="Hasta">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-          </TextField>
-          <SelectField label="Categoria">
-            <select value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory | '')}>
-              <option value="">Todas</option>
-              {expenseCategories.map((item) => (
-                <option key={item} value={item}>{categoryLabel(item)}</option>
-              ))}
-            </select>
-          </SelectField>
+      {/* ─── Hero salida total ────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-ink-900 via-ink-800 to-ink-900 px-6 py-7 sm:px-9 sm:py-7 shadow-[0_24px_48px_-20px_rgba(15,23,42,0.45)]">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-rose-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute right-6 top-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Salidas</div>
+        <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-4 sm:gap-8">
+          <div>
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Total salida</p>
+            <p className="font-display mt-2 text-[40px] font-black leading-none tracking-[-0.03em] text-rose-300 tabular-nums">
+              {money(combinedTotal, 'MXN')}
+            </p>
+          </div>
+          <div className="sm:border-l sm:border-white/10 sm:pl-8">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Gastos</p>
+            <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+              {money(totals.expenses, 'MXN')}
+            </p>
+            <p className="mt-1.5 text-[11px] text-white/40">{counts.expenses} registro{counts.expenses === 1 ? '' : 's'}</p>
+          </div>
+          <div className="sm:border-l sm:border-white/10 sm:pl-8">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Retiros</p>
+            <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+              {money(totals.withdrawals, 'MXN')}
+            </p>
+            <p className="mt-1.5 text-[11px] text-white/40">{counts.withdrawals} registro{counts.withdrawals === 1 ? '' : 's'}</p>
+          </div>
+          <div className="sm:border-l sm:border-white/10 sm:pl-8">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Préstamos</p>
+            <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+              {money(totals.advances, 'MXN')}
+            </p>
+            <p className="mt-1.5 text-[11px] text-white/40">{counts.advances} registro{counts.advances === 1 ? '' : 's'}</p>
+          </div>
         </div>
-      </Panel>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Metric label="Gastos" value={money(totals.expenses, 'MXN')} />
-        <Metric label="Retiros" value={money(totals.withdrawals, 'MXN')} />
-        <Metric label="Prestamos" value={money(totals.advances, 'MXN')} />
-        <Metric label="Total salida" value={money(combinedTotal, 'MXN')} />
       </div>
 
-      <MoneyTable
-        title="Gastos"
-        rows={(expenses.data ?? []).map((row) => ({
-          id: row.id,
-          date: row.expenseDate,
-          concept: categoryLabel(row.category),
-          detail: row.description || '-',
-          amount: row.amount,
-        }))}
-        empty="No hay gastos en este rango."
-      />
-      <MoneyTable
-        title="Retiros"
-        rows={(withdrawals.data ?? []).map((row) => ({
-          id: row.id,
-          date: row.withdrawalDate,
-          concept: 'Retiro',
-          detail: row.reason || '-',
-          amount: row.amount,
-        }))}
-        empty="No hay retiros en este rango."
-      />
-      <MoneyTable
-        title="Prestamos a lavadores"
-        rows={(advances.data ?? []).map((row) => ({
-          id: row.id,
-          date: row.advanceDate,
-          concept: row.employeeName,
-          detail: row.reason || '-',
-          amount: row.amount,
-        }))}
-        empty="No hay prestamos en este rango."
-      />
+      {/* ─── Filter bar (inline, no panel) ────────────────────────── */}
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border-soft bg-white p-3">
+        <TextField label="Desde">
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        </TextField>
+        <TextField label="Hasta">
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        </TextField>
+        <SelectField label="Categoría">
+          <select value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory | '')}>
+            <option value="">Todas</option>
+            {expenseCategories.map((item) => (
+              <option key={item} value={item}>{categoryLabel(item)}</option>
+            ))}
+          </select>
+        </SelectField>
+      </div>
+
+      {/* ─── Tabbed ledger ────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { id: 'expenses' as const, label: 'Gastos', count: counts.expenses },
+          { id: 'withdrawals' as const, label: 'Retiros', count: counts.withdrawals },
+          { id: 'advances' as const, label: 'Préstamos', count: counts.advances },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-all duration-150 ${
+              tab === t.id ? 'bg-ink-900 text-white shadow-sm' : 'bg-white border border-border-soft text-ink-600 hover:bg-ink-50'
+            }`}
+          >
+            {t.label}
+            <span className={`inline-flex h-4 min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
+              tab === t.id ? 'bg-white/20 text-white' : 'bg-ink-100 text-ink-500'
+            }`}>{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === 'expenses' && (
+        <MoneyTable
+          title="Gastos"
+          rows={(expenses.data ?? []).map((row) => ({
+            id: row.id,
+            date: row.expenseDate,
+            concept: categoryLabel(row.category),
+            detail: row.description || '-',
+            amount: row.amount,
+          }))}
+          empty="No hay gastos en este rango."
+        />
+      )}
+      {tab === 'withdrawals' && (
+        <MoneyTable
+          title="Retiros"
+          rows={(withdrawals.data ?? []).map((row) => ({
+            id: row.id,
+            date: row.withdrawalDate,
+            concept: 'Retiro',
+            detail: row.reason || '-',
+            amount: row.amount,
+          }))}
+          empty="No hay retiros en este rango."
+        />
+      )}
+      {tab === 'advances' && (
+        <MoneyTable
+          title="Préstamos a lavadores"
+          rows={(advances.data ?? []).map((row) => ({
+            id: row.id,
+            date: row.advanceDate,
+            concept: row.employeeName,
+            detail: row.reason || '-',
+            amount: row.amount,
+          }))}
+          empty="No hay préstamos en este rango."
+        />
+      )}
 
       {modal === 'expense' && <ExpenseModal data={data} onClose={() => setModal(null)} />}
       {modal === 'withdrawal' && <WithdrawalModal data={data} onClose={() => setModal(null)} />}
