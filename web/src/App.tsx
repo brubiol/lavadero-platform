@@ -4115,11 +4115,11 @@ function InventoryScreen() {
 
       {/* ─── Hero stats ──────────────────────────────────────────── */}
       <div className="tl-stagger grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
+        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Productos activos</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totalProducts}</p>
         </div>
-        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
+        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Valor estimado</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totalValue, 'MXN')}</p>
         </div>
@@ -4681,15 +4681,15 @@ function PayrollScreen() {
       {/* ─── KPI strip ────────────────────────────────────────────── */}
       {selectedPeriod && (
         <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
+          <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Carros</p>
             <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totals.cars}</p>
           </div>
-          <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
+          <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Comisiones</p>
             <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totals.commissions, 'MXN')}</p>
           </div>
-          <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-amber-50/60 to-white px-4 py-3.5">
+          <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-amber-50/60 to-white px-4 py-3.5">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Préstamos descontados</p>
             <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totals.advances, 'MXN')}</p>
           </div>
@@ -5366,15 +5366,15 @@ function TicketsBrowser() {
 
       {/* ─── Snapshot strip ───────────────────────────────────────── */}
       <div className="tl-stagger grid grid-cols-3 gap-3">
-        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
+        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Activos</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{activeList.length}</p>
         </div>
-        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-rose-50/60 to-white px-4 py-3.5">
+        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-rose-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Cancelados</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{voidedList.length}</p>
         </div>
-        <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
+        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Total cobrado</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totalCobrado, 'MXN')}</p>
         </div>

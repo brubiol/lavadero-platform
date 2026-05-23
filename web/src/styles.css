@@ -723,6 +723,21 @@ html, body, #root { height: 100%; }
 .tl-money-good { color: var(--good-700); font-weight: 600; }
 .tl-money-bad  { color: var(--bad-700);  font-weight: 600; }
 
+/* Hover-lift utility for KPI tiles and hero cards */
+.tl-lift { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform; }
+.tl-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+/* Counter — used to suggest a number is "live" via subtle tabular shift on update */
+.tl-counter { font-variant-numeric: tabular-nums; transition: color 0.2s ease; }
+
+/* Glass surface — translucent card on a colored or imaged backdrop */
+.tl-glass {
+  background: rgba(255,255,255,0.06);
+  backdrop-filter: blur(10px) saturate(180%);
+  -webkit-backdrop-filter: blur(10px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
 /* Eyebrow — small uppercase label above a section title (e.g. "1. Brief del día") */
 .tl-eyebrow {
   display: inline-flex;
