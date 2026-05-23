@@ -103,7 +103,7 @@ test('can void a freshly seeded ticket without depending on another test', async
   await expect(row).toBeVisible({ timeout: 8_000 })
   await row.getByRole('button', { name: 'Cancelar' }).click()
   await page.getByLabel('Motivo').fill('Test E2E void reason')
-  await page.getByRole('button', { name: 'Confirmar cancelacion' }).click()
+  await page.getByRole('button', { name: 'Confirmar cancelación' }).click()
 
   await expect(row).not.toBeVisible({ timeout: 8_000 })
 })
