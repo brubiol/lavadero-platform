@@ -5,7 +5,7 @@ import { useForm, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Frame, MobileNav, MobileTopbar, Sidebar, Topbar, type NavRole } from './components/layout'
-import { IAudit, ICalendar, ICash, IPayroll, IReports } from './components/icons'
+import { IAudit, ICalendar, ICash, IMoney, IPayroll, IReports } from './components/icons'
 import {
   Avatars,
   Banner,
@@ -3296,7 +3296,7 @@ function TicketWorkspace({
               </p>
               {livePrice === undefined ? (
                 <p className="font-display text-[24px] font-bold leading-none tracking-tight text-white/40">
-                  Selecciona servicio y tamaño…
+                  Selecciona servicio y vehículo…
                 </p>
               ) : watched.discountPercent > 0 && !watched.courtesy ? (
                 <div className="relative">
@@ -3659,9 +3659,13 @@ function CatalogsScreen() {
                 {showInactiveEmployees ? 'Solo activos' : 'Ver todos'}
               </button>
             </div>
-            <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+            <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border-soft">
               {employees.filter(e => showInactiveEmployees || e.active).length === 0 && (
-                <p className="px-3 py-3 text-sm text-gray-400">No hay lavadores.</p>
+                <div className="rounded-xl bg-ink-50/60 px-4 py-5 text-center text-[13px] text-ink-500">
+                  {showInactiveEmployees
+                    ? 'No hay lavadores en el catálogo.'
+                    : 'No hay lavadores activos. Marca "Ver inactivos" para revisarlos.'}
+                </div>
               )}
               {employees.filter(e => showInactiveEmployees || e.active).map((employee) => (
                 <div key={employee.id} className={`flex items-center justify-between gap-4 px-3 py-2 text-sm ${!employee.active ? 'opacity-50' : ''}`}>
@@ -3806,7 +3810,14 @@ function CatalogsScreen() {
                   ))}
                   {prices.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400">No hay precios vigentes para hoy.</td>
+                      <td colSpan={4}>
+                        <EmptyState
+                          icon={<IMoney size={20} />}
+                          title="No hay precios vigentes para hoy"
+                          description="Captura un precio con la fecha 'Desde' de hoy o anterior."
+                          tone="info"
+                        />
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -5414,7 +5425,14 @@ function ReportsScreen() {
                 ))}
                 {!historical.isLoading && (historical.data?.days.length ?? 0) === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin datos historicos en este rango.</td>
+                    <td colSpan={6}>
+                      <EmptyState
+                        icon={<IReports size={20} />}
+                        title="Sin datos históricos en este rango"
+                        description="Ajusta las fechas para ver los días previos."
+                        tone="info"
+                      />
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -6089,7 +6107,12 @@ function PayrollScreen() {
               </button>
             ))}
             {!periods.isLoading && (periods.data ?? []).length === 0 && (
-              <p className="p-4 text-sm text-gray-400">No hay periodos de nomina.</p>
+              <EmptyState
+                icon={<IPayroll size={20} />}
+                title="Sin períodos de nómina"
+                description="Crea uno con la fecha de domingo del periodo a calcular."
+                tone="info"
+              />
             )}
           </div>
         </Panel>
@@ -7107,13 +7130,9 @@ function AdvanceModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>
 function FormButton({ label, loading }: { label: string; loading: boolean }) {
   return (
     <div className="flex items-end">
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
-      >
+      <Button kind="primary" type="submit" disabled={loading} block>
         {loading ? 'Guardando...' : label}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -7452,15 +7471,19 @@ function EmployeeEditModal({
 
 function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail: string }[]; empty: string }) {
   if (rows.length === 0) {
-    return <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">{empty}</p>
+    return (
+      <div className="rounded-xl border border-dashed border-border-soft bg-ink-50/60 px-4 py-5 text-center text-[13px] text-ink-500">
+        {empty}
+      </div>
+    )
   }
 
   return (
-    <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+    <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border-soft">
       {rows.map((row) => (
-        <div key={row.id} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
-          <span className="font-medium">{row.title}</span>
-          <span className="text-right text-gray-400">{row.detail}</span>
+        <div key={row.id} className="flex items-center justify-between gap-4 px-3 py-2.5 text-sm">
+          <span className="font-medium text-ink-900">{row.title}</span>
+          <span className="text-right text-ink-500">{row.detail}</span>
         </div>
       ))}
     </div>
@@ -7470,9 +7493,9 @@ function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail
 function SelectField({ label, error, children }: { label: string; error?: string; children: React.ReactElement }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
+      <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">{label}</span>
       {children}
-      {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
+      {error && <span className="mt-1 block text-[11.5px] text-bad-700">{error}</span>}
     </label>
   )
 }
@@ -7480,9 +7503,9 @@ function SelectField({ label, error, children }: { label: string; error?: string
 function TextField({ label, error, children }: { label: string; error?: string; children: React.ReactElement }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
+      <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">{label}</span>
       {children}
-      {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
+      {error && <span className="mt-1 block text-[11.5px] text-bad-700">{error}</span>}
     </label>
   )
 }
