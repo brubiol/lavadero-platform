@@ -313,10 +313,35 @@ html, body, #root { height: 100%; }
 
 /* Page */
 .tl-page { padding: 24px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.tl-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.tl-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
 .tl-page-title h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 4px; color: var(--ink-900); }
-.tl-page-title p { font-size: 13.5px; color: var(--ink-500); margin: 0; }
+.tl-page-title p { font-size: 13.5px; color: var(--ink-500); margin: 0; max-width: 70ch; }
 .tl-page-head-actions { display: flex; align-items: center; gap: 10px; }
+
+.tl-page-head.hero {
+  position: relative;
+  padding: 18px 20px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(124,58,237,0.18);
+  background:
+    radial-gradient(900px 220px at 0% 0%, rgba(124,58,237,0.10), transparent 60%),
+    radial-gradient(700px 200px at 100% 100%, rgba(34,197,94,0.10), transparent 60%),
+    linear-gradient(180deg, #ffffff, #fbfaff);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.tl-page-head.hero::after {
+  content: "";
+  position: absolute; left: 18px; right: 18px; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(124,58,237,0.35), rgba(34,197,94,0.35), transparent);
+  pointer-events: none;
+}
+.tl-page-head.hero .tl-page-title h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: -0.028em;
+}
 
 /* Buttons */
 .tl-btn {
@@ -364,7 +389,7 @@ html, body, #root { height: 100%; }
   box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.18s ease;
+  transition: box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 .tl-panel:hover { box-shadow: var(--shadow-sm); }
 .tl-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -374,6 +399,36 @@ html, body, #root { height: 100%; }
 .tl-panel-body { padding: 18px; }
 .tl-panel-body.flush { padding: 0; }
 .tl-panel-foot { padding: 12px 18px; border-top: 1px solid var(--border-soft); display: flex; align-items: center; gap: 10px; background: var(--ink-50); border-radius: 0 0 14px 14px; }
+
+/* Panel tones — opt-in modifier classes (default .tl-panel is untouched) */
+.tl-panel.accent {
+  background: linear-gradient(180deg, rgba(124,58,237,0.045), #fff 60%);
+  border-color: rgba(124,58,237,0.18);
+}
+.tl-panel.accent .tl-panel-head { border-bottom-color: rgba(124,58,237,0.12); }
+
+.tl-panel.warn {
+  background: linear-gradient(180deg, rgba(245,158,11,0.07), #fff 70%);
+  border-color: var(--warn-100);
+}
+.tl-panel.warn .tl-panel-head { border-bottom-color: var(--warn-100); }
+.tl-panel.warn .tl-panel-head h2,
+.tl-panel.warn .tl-panel-head h3 { color: var(--warn-700); }
+
+.tl-panel.feature {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34,197,94,0.28), transparent 55%),
+    linear-gradient(140deg, #1a0f2e 0%, #3b1d5c 50%, #1f8a3d 130%);
+  border-color: var(--brand-purple-deep);
+  color: #fff;
+  box-shadow: 0 8px 28px rgba(124,58,237,0.22), 0 2px 6px rgba(34,197,94,0.12);
+}
+.tl-panel.feature:hover { box-shadow: 0 12px 36px rgba(124,58,237,0.28), 0 2px 6px rgba(34,197,94,0.15); }
+.tl-panel.feature .tl-panel-head { border-bottom-color: rgba(255,255,255,0.10); }
+.tl-panel.feature .tl-panel-head h2,
+.tl-panel.feature .tl-panel-head h3 { color: #fff; }
+.tl-panel.feature .tl-panel-head p { color: rgba(255,255,255,0.72); }
+.tl-panel.feature .tl-panel-foot { background: rgba(0,0,0,0.18); border-top-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
 
 /* Metric */
 .tl-metric {
@@ -581,6 +636,92 @@ html, body, #root { height: 100%; }
   color: var(--ink-400);
 }
 .tl-empty-icon p { margin: 0; color: var(--ink-500); font-size: 13px; }
+
+/* Empty state primitive — for table rows and panel bodies alike */
+.tl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 36px 18px;
+  text-align: center;
+  color: var(--ink-500);
+}
+.tl-empty .ico {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--ink-100);
+  color: var(--ink-500);
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,0.04);
+}
+.tl-empty.good .ico { background: var(--good-100); color: var(--good-700); }
+.tl-empty.warn .ico { background: var(--warn-100); color: var(--warn-700); }
+.tl-empty.info .ico { background: var(--info-100); color: var(--info-700); }
+.tl-empty.purple .ico { background: var(--primary-100); color: var(--primary-700); }
+.tl-empty h4 { font-size: 13.5px; font-weight: 600; color: var(--ink-800); margin: 0; letter-spacing: -0.01em; }
+.tl-empty p { font-size: 12.5px; color: var(--ink-500); margin: 0; max-width: 48ch; }
+.tl-empty .cta { margin-top: 4px; }
+
+/* Stat strip — semantic status card with left accent rail (lighter than Metric) */
+.tl-stat-strip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--paper);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 14px 16px 14px 18px;
+  min-width: 0;
+  overflow: hidden;
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+.tl-stat-strip:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.tl-stat-strip::before {
+  content: "";
+  position: absolute; left: 0; top: 10px; bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ink-300);
+}
+.tl-stat-strip .label { font-size: 11px; font-weight: 600; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.06em; }
+.tl-stat-strip .value { font-size: 17px; font-weight: 700; color: var(--ink-900); letter-spacing: -0.015em; line-height: 1.15; font-variant-numeric: tabular-nums; word-break: break-word; }
+.tl-stat-strip .sub { font-size: 12px; color: var(--ink-500); }
+.tl-stat-strip.good::before { background: var(--good-500); box-shadow: 0 0 12px rgba(16,185,129,0.45); }
+.tl-stat-strip.warn::before { background: var(--warn-500); box-shadow: 0 0 12px rgba(245,158,11,0.45); }
+.tl-stat-strip.bad::before  { background: var(--bad-500);  box-shadow: 0 0 12px rgba(239,68,68,0.45); }
+.tl-stat-strip.info::before { background: var(--primary-500); box-shadow: 0 0 12px rgba(139,92,246,0.45); }
+.tl-stat-strip.purple::before { background: var(--brand-purple); box-shadow: 0 0 12px rgba(91,44,131,0.45); }
+.tl-stat-strip.good { background: linear-gradient(180deg, rgba(16,185,129,0.05), #fff 65%); border-color: var(--good-100); }
+.tl-stat-strip.warn { background: linear-gradient(180deg, rgba(245,158,11,0.06), #fff 65%); border-color: var(--warn-100); }
+.tl-stat-strip.bad  { background: linear-gradient(180deg, rgba(239,68,68,0.05), #fff 65%); border-color: var(--bad-100); }
+.tl-stat-strip.info { background: linear-gradient(180deg, rgba(124,58,237,0.05), #fff 65%); border-color: var(--info-100); }
+.tl-stat-strip.purple { background: linear-gradient(180deg, rgba(124,58,237,0.06), #fff 65%); border-color: #e9d5ff; }
+.tl-stat-strip .pulse {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 999px;
+  background: var(--warn-500);
+  margin-left: 6px;
+  animation: tl-pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(245,158,11,0.7);
+}
+
+/* Stagger — children of this container fade up in sequence (40ms steps) */
+.tl-stagger > * { animation: tl-fade-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tl-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.tl-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.tl-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.tl-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.tl-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.tl-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.tl-stagger > *:nth-child(n+7) { animation-delay: 240ms; }
+
+/* Money cell tone utilities for table cells (work alongside .r alignment) */
+.tl-money-good { color: var(--good-700); font-weight: 600; }
+.tl-money-bad  { color: var(--bad-700);  font-weight: 600; }
 
 /* Progress bar */
 .tl-bar { height: 6px; border-radius: 999px; background: var(--ink-100); overflow: hidden; }

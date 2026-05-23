@@ -4646,21 +4646,53 @@ function PayrollScreen() {
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Nomina</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Calculo semanal por sueldo, comision, bonos por carro y prestamos.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Cálculo semanal · domingo a sábado</p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Nómina</h2>
+          {selectedPeriod && (
+            <p className="mt-1 text-[12.5px] text-ink-500">
+              <span className="font-mono tabular-nums">{selectedPeriod.startDate}</span>
+              <span className="mx-1.5 text-ink-300">→</span>
+              <span className="font-mono tabular-nums">{selectedPeriod.endDate}</span>
+              {locked && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700">Bloqueada</span>}
+            </p>
+          )}
         </div>
-        <form className="flex flex-wrap items-end gap-2" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))} data-testid="payroll-period-form">
+        <form className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-soft bg-white p-3" onSubmit={form.handleSubmit((values) => createPeriod.mutate(values))} data-testid="payroll-period-form">
           <TextField label="Domingo" error={form.formState.errors.startDate?.message}>
             <input type="date" {...form.register('startDate')} data-testid="payroll-start-date" />
           </TextField>
           <button data-testid="payroll-create-period" className="tl-btn tl-btn-primary">
-            Crear periodo
+            + Periodo
           </button>
         </form>
       </div>
       {createPeriod.error && <ErrorMessage message={createPeriod.error.message} />}
+
+      {/* ─── KPI strip ────────────────────────────────────────────── */}
+      {selectedPeriod && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Carros</p>
+            <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totals.cars}</p>
+          </div>
+          <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Comisiones</p>
+            <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totals.commissions, 'MXN')}</p>
+          </div>
+          <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-amber-50/60 to-white px-4 py-3.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Préstamos descontados</p>
+            <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totals.advances, 'MXN')}</p>
+          </div>
+          <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-100/40 to-white px-4 py-3.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-violet-700">Total a pagar</p>
+            <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totals.net, 'MXN')}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[300px_1fr]">
         <Panel title="Periodos">
@@ -6636,17 +6668,16 @@ function AttendanceScreen() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Asistencia</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Entradas, salidas y faltas del personal.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Personal · {date}</p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Asistencia</h2>
+          <p className="mt-1 text-[12.5px] text-ink-500">Entradas, salidas y faltas del personal.</p>
         </div>
-        <div className="w-full max-w-48">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="tl-input" />
-          </label>
-        </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Fecha</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="tl-input" />
+        </label>
       </div>
 
       {records.error && <ErrorMessage message={records.error.message} />}

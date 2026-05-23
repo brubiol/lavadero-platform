@@ -9,6 +9,9 @@ import { IAlert, ICheck, IInfo } from './icons'
 export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'gray' | 'purple'
 export type MetricTone = 'default' | 'good' | 'warn' | 'bad' | 'info' | 'feature'
 export type BannerTone = 'good' | 'warn' | 'bad' | 'info'
+export type PanelTone = 'default' | 'accent' | 'warn' | 'feature'
+export type PageHeadTone = 'default' | 'hero'
+export type StatStripTone = 'default' | 'good' | 'warn' | 'bad' | 'info' | 'purple'
 
 /** Legacy alias kept so callers using the old `variant` names keep working. */
 export type MetricVariant = 'default' | 'success' | 'danger' | 'info' | 'feature' | 'warn'
@@ -36,6 +39,7 @@ export function Panel({
   foot,
   children,
   flush = false,
+  tone = 'default',
   className = '',
   style,
   testId,
@@ -46,13 +50,15 @@ export function Panel({
   foot?: ReactNode
   children?: ReactNode
   flush?: boolean
+  tone?: PanelTone
   className?: string
   style?: CSSProperties
   testId?: string
 }) {
   const slug = typeof title === 'string' ? slugify(title) : ''
+  const toneCls = tone !== 'default' ? tone : ''
   return (
-    <div className={`tl-panel ${className}`} style={style} data-testid={testId ?? (slug ? `panel-${slug}` : undefined)}>
+    <div className={`tl-panel ${toneCls} ${className}`.trim()} style={style} data-testid={testId ?? (slug ? `panel-${slug}` : undefined)}>
       {(title || actions) && (
         <div className="tl-panel-head">
           <div>
@@ -338,14 +344,75 @@ export function EcoBadge({ children = 'Ecológico' }: { children?: ReactNode }) 
 }
 
 // ─── PageHead / PageTitle wrappers ──────────────────────────────────────
-export function PageHead({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+export function PageHead({
+  title,
+  subtitle,
+  actions,
+  tone = 'default',
+}: {
+  title: ReactNode
+  subtitle?: ReactNode
+  actions?: ReactNode
+  tone?: PageHeadTone
+}) {
+  const toneCls = tone !== 'default' ? tone : ''
   return (
-    <div className="tl-page-head">
+    <div className={`tl-page-head ${toneCls}`.trim()}>
       <div className="tl-page-title">
         <h1>{title}</h1>
         {subtitle && <p>{subtitle}</p>}
       </div>
       {actions && <div className="tl-page-head-actions">{actions}</div>}
+    </div>
+  )
+}
+
+// ─── EmptyState ─────────────────────────────────────────────────────────
+export function EmptyState({
+  icon,
+  title,
+  description,
+  tone = 'default',
+  cta,
+}: {
+  icon?: ReactNode
+  title: ReactNode
+  description?: ReactNode
+  tone?: 'default' | 'good' | 'warn' | 'info' | 'purple'
+  cta?: ReactNode
+}) {
+  const toneCls = tone !== 'default' ? tone : ''
+  return (
+    <div className={`tl-empty ${toneCls}`.trim()}>
+      {icon && <span className="ico">{icon}</span>}
+      <h4>{title}</h4>
+      {description && <p>{description}</p>}
+      {cta && <div className="cta">{cta}</div>}
+    </div>
+  )
+}
+
+// ─── StatStrip ──────────────────────────────────────────────────────────
+export function StatStrip({
+  label,
+  value,
+  sub,
+  tone = 'default',
+  pulse = false,
+}: {
+  label: ReactNode
+  value: ReactNode
+  sub?: ReactNode
+  tone?: StatStripTone
+  pulse?: boolean
+}) {
+  const toneCls = tone !== 'default' ? tone : ''
+  const slug = typeof label === 'string' ? slugify(label) : ''
+  return (
+    <div className={`tl-stat-strip ${toneCls}`.trim()} data-testid={slug ? `stat-${slug}` : undefined}>
+      <div className="label">{label}{pulse && <span className="pulse" aria-hidden />}</div>
+      <div className="value">{value}</div>
+      {sub && <div className="sub">{sub}</div>}
     </div>
   )
 }
