@@ -5427,6 +5427,9 @@ function TicketsBrowser() {
   const activeList = activeCount.data ?? []
   const voidedList = voidedCount.data ?? []
   const totalCobrado = activeList.reduce((sum, t) => sum + t.priceAmount, 0)
+  const animActiveCount = useCountUp(activeList.length)
+  const animVoidedCount = useCountUp(voidedList.length)
+  const animTotalCobrado = useCountUp(totalCobrado)
 
   return (
     <section className="space-y-5">
@@ -5461,15 +5464,15 @@ function TicketsBrowser() {
       <div className="tl-stagger grid grid-cols-3 gap-3">
         <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Activos</p>
-          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{activeList.length}</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{Math.round(animActiveCount)}</p>
         </div>
         <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-rose-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Cancelados</p>
-          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{voidedList.length}</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{Math.round(animVoidedCount)}</p>
         </div>
         <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Total cobrado</p>
-          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totalCobrado, 'MXN')}</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(animTotalCobrado, 'MXN')}</p>
         </div>
       </div>
 
