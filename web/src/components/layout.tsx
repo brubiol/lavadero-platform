@@ -61,11 +61,13 @@ export function Sidebar({
   role,
   userName,
   payrollAccess = true,
+  flaggedCount = 0,
   onLogout,
 }: {
   role: NavRole
   userName: string
   payrollAccess?: boolean
+  flaggedCount?: number
   onLogout: () => void
 }) {
   const ops    = NAV_OPS.filter(it => inRole(role, it.roles))
@@ -100,7 +102,13 @@ export function Sidebar({
       {owner.length > 0 && (
         <div className="tl-sb-group" data-group="owner">
           <div className="tl-sb-label">Dueño</div>
-          {owner.map(it => <SidebarLink key={it.id} item={it} />)}
+          {owner.map(it => (
+            <SidebarLink
+              key={it.id}
+              item={it}
+              badge={it.id === 'vigilancia' && flaggedCount > 0 ? flaggedCount : undefined}
+            />
+          ))}
         </div>
       )}
 
@@ -125,7 +133,7 @@ export function Sidebar({
   )
 }
 
-function SidebarLink({ item }: { item: NavItem }) {
+function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
   return (
     <NavLink
       to={item.to}
@@ -135,6 +143,14 @@ function SidebarLink({ item }: { item: NavItem }) {
     >
       <span className="ico">{item.icon}</span>
       <span className="elip">{item.label}</span>
+      {typeof badge === 'number' && badge > 0 && (
+        <span
+          className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+          style={{ background: 'var(--bad-500)', boxShadow: '0 0 0 2px rgba(239,68,68,0.25)' }}
+        >
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </NavLink>
   )
 }

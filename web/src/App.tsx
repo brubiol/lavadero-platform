@@ -347,6 +347,8 @@ type ActorActivity = {
   advancesCreated: number
   shiftsClosed: number
   payrollAdjustments: number
+  suspicionScore: number
+  suspicionLevel: 'CLEAN' | 'LOW' | 'MEDIUM' | 'HIGH'
 }
 
 type ShiftShortage = {
@@ -974,6 +976,14 @@ function routeMeta(pathname: string) {
 function AppShell() {
   const { auth, logout } = useAuth()
   const location = useLocation()
+  const isOwner = auth?.user.role === 'DUENO'
+  const flaggedCount = useQuery({
+    queryKey: ['audit-events', 'flagged'],
+    queryFn: () => api<AuditEvent[]>('/api/v1/audit-events/flagged'),
+    enabled: Boolean(isOwner),
+    refetchInterval: 60_000,
+  })
+
   if (!auth) {
     return <LoginScreen />
   }
@@ -988,6 +998,7 @@ function AppShell() {
           role={role}
           userName={auth.user.fullName}
           payrollAccess={auth.user.payrollAccess ?? true}
+          flaggedCount={isOwner ? (flaggedCount.data?.length ?? 0) : 0}
           onLogout={() => void logout()}
         />
       }
@@ -4616,6 +4627,7 @@ function VigilanciaScreen() {
           <table className="tl-tbl zebra">
             <thead>
               <tr>
+                <th>Riesgo</th>
                 <th>Usuario</th>
                 <th className="r">Tickets</th>
                 <th className="r">Editados</th>
@@ -4632,8 +4644,32 @@ function VigilanciaScreen() {
             <tbody>
               {(data?.byActor ?? []).map((a) => {
                 const flag = (n: number, threshold: number) => n >= threshold ? 'font-bold text-rose-700' : ''
+                const levelStyle =
+                  a.suspicionLevel === 'HIGH'
+                    ? 'bg-rose-100 text-rose-700'
+                    : a.suspicionLevel === 'MEDIUM'
+                    ? 'bg-amber-100 text-amber-700'
+                    : a.suspicionLevel === 'LOW'
+                    ? 'bg-violet-100 text-violet-700'
+                    : 'bg-emerald-100 text-emerald-700'
+                const levelLabel =
+                  a.suspicionLevel === 'HIGH' ? 'Alto'
+                  : a.suspicionLevel === 'MEDIUM' ? 'Medio'
+                  : a.suspicionLevel === 'LOW' ? 'Bajo'
+                  : 'Limpio'
                 return (
                   <tr key={a.actor} onClick={() => setDrillActor(a.actor)} className="cursor-pointer">
+                    <td>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold tabular-nums ${levelStyle}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          a.suspicionLevel === 'HIGH' ? 'bg-rose-500'
+                          : a.suspicionLevel === 'MEDIUM' ? 'bg-amber-500'
+                          : a.suspicionLevel === 'LOW' ? 'bg-violet-500'
+                          : 'bg-emerald-500'
+                        }`} />
+                        {levelLabel} · {a.suspicionScore}
+                      </span>
+                    </td>
                     <td className="font-semibold text-violet-700 hover:text-violet-900">{a.actor} →</td>
                     <td className="r tabular-nums">{a.ticketsCreated}</td>
                     <td className={`r tabular-nums ${flag(a.ticketsEdited, 3)}`}>{a.ticketsEdited}</td>
@@ -4649,7 +4685,7 @@ function VigilanciaScreen() {
                 )
               })}
               {(data?.byActor.length ?? 0) === 0 && !patterns.isLoading && (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-ink-400">Sin actividad en este rango.</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-ink-400">Sin actividad en este rango.</td></tr>
               )}
             </tbody>
           </table>

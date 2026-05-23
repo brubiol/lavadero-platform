@@ -6,6 +6,7 @@ import com.lavadero.api.money.domain.ExpenseCategory;
 import com.lavadero.api.money.repository.ExpenseRepository;
 import com.lavadero.api.money.service.BusinessContextResolver.Context;
 import com.lavadero.api.money.web.ExpenseDtos.CreateExpenseRequest;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExpenseService {
+    /** Expenses above this amount auto-flag for owner review. */
+    private static final BigDecimal LARGE_EXPENSE_THRESHOLD = new BigDecimal("3000.00");
+
     private final ExpenseRepository expenses;
     private final BusinessContextResolver contextResolver;
     private final AuditService audit;
@@ -29,8 +33,17 @@ public class ExpenseService {
         Expense expense = new Expense(context.businessDay(), context.shift(), context.recordDate(), request.category(),
                 request.amount(), request.description());
         Expense saved = expenses.save(expense);
-        audit.record("EXPENSE_CREATED", "EXPENSE", saved.getId(), saved.getDescription(),
-                saved.getCategory() + " " + saved.getAmount());
+
+        boolean largeAmount = request.amount() != null
+                && request.amount().compareTo(LARGE_EXPENSE_THRESHOLD) >= 0;
+        if (largeAmount) {
+            audit.recordFlagged("EXPENSE_CREATED", "EXPENSE", saved.getId(),
+                    "Gasto alto: $" + saved.getAmount(),
+                    saved.getCategory() + " · " + (saved.getDescription() == null ? "" : saved.getDescription()));
+        } else {
+            audit.record("EXPENSE_CREATED", "EXPENSE", saved.getId(), saved.getDescription(),
+                    saved.getCategory() + " " + saved.getAmount());
+        }
         return saved;
     }
 

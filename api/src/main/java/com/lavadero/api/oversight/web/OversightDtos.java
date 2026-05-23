@@ -21,7 +21,9 @@ public final class OversightDtos {
             int withdrawalsCreated,
             int advancesCreated,
             int shiftsClosed,
-            int payrollAdjustments) {
+            int payrollAdjustments,
+            int suspicionScore,
+            String suspicionLevel) {
     }
 
     public record ShiftShortage(

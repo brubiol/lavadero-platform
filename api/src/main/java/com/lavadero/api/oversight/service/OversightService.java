@@ -105,8 +105,7 @@ public class OversightService {
 
         List<ActorActivity> actorList = byActor.values().stream()
                 .map(ActorBuilder::build)
-                .sorted(Comparator.comparingInt(a ->
-                        -(a.ticketsCourtesy() + a.ticketsVoided() + a.ticketsEdited())))
+                .sorted(Comparator.comparingInt(ActorActivity::suspicionScore).reversed())
                 .toList();
 
         int totalCortesias = actorList.stream().mapToInt(ActorActivity::ticketsCourtesy).sum();
@@ -151,9 +150,35 @@ public class OversightService {
             }
         }
 
+        /**
+         * Suspicion score — weighted composite of behaviors that historically signal
+         * theft attempts. Higher = warrants more attention. Weights tuned for a small
+         * cash car wash where each metric should be very low in a normal day.
+         */
+        int score() {
+            int s = 0;
+            s += courtesy * 3;                // 3 pts each — most common abuse vector
+            s += voided * 4;                  // 4 pts each — keeps cash but voids ticket
+            s += discount;                    // 1 pt each — milder but worth tracking
+            s += Math.max(0, edited - 1) * 2; // editing >1 ticket is unusual
+            s += Math.max(0, withdrawals - 2) * 3; // withdrawals beyond 2 in range
+            s += Math.max(0, advances - 2) * 2;
+            s += payrollAdjustments * 5;      // payroll adjustments are rare; high weight
+            return s;
+        }
+
+        String level(int score) {
+            if (score >= 25) return "HIGH";
+            if (score >= 12) return "MEDIUM";
+            if (score >= 5)  return "LOW";
+            return "CLEAN";
+        }
+
         ActorActivity build() {
+            int score = score();
             return new ActorActivity(actor, created, edited, voided, courtesy, discount,
-                    expenses, withdrawals, advances, shiftsClosed, payrollAdjustments);
+                    expenses, withdrawals, advances, shiftsClosed, payrollAdjustments,
+                    score, level(score));
         }
     }
 }

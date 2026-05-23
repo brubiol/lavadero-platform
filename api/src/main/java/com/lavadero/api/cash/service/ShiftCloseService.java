@@ -3,6 +3,7 @@ package com.lavadero.api.cash.service;
 import com.lavadero.api.audit.service.AuditService;
 import com.lavadero.api.cash.domain.CashCount;
 import com.lavadero.api.cash.domain.ShiftCloseSummary;
+import com.lavadero.api.cash.event.ShiftClosedEvent;
 import com.lavadero.api.cash.repository.CashCountRepository;
 import com.lavadero.api.cash.repository.ShiftCloseSummaryRepository;
 import com.lavadero.api.cash.web.ShiftCloseDtos.CloseShiftRequest;
@@ -21,6 +22,7 @@ import com.lavadero.api.operations.repository.TicketRepository;
 import com.lavadero.api.payroll.repository.DebtPaymentRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,11 +39,13 @@ public class ShiftCloseService {
     private final PrepaidPackageRepository prepaidPackages;
     private final ProductMovementRepository inventoryMovements;
     private final AuditService audit;
+    private final ApplicationEventPublisher events;
 
     public ShiftCloseService(ShiftRepository shifts, TicketRepository tickets, ExpenseRepository expenses,
             WithdrawalRepository withdrawals, EmployeeAdvanceRepository advances, DebtPaymentRepository debtPayments,
             CashCountRepository cashCounts, ShiftCloseSummaryRepository closeSummaries,
-            PrepaidPackageRepository prepaidPackages, ProductMovementRepository inventoryMovements, AuditService audit) {
+            PrepaidPackageRepository prepaidPackages, ProductMovementRepository inventoryMovements, AuditService audit,
+            ApplicationEventPublisher events) {
         this.shifts = shifts;
         this.tickets = tickets;
         this.expenses = expenses;
@@ -53,6 +57,7 @@ public class ShiftCloseService {
         this.prepaidPackages = prepaidPackages;
         this.inventoryMovements = inventoryMovements;
         this.audit = audit;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -128,6 +133,9 @@ public class ShiftCloseService {
                 cashCount.getTotalCounted(), variance, closingReason));
         audit.record("SHIFT_CLOSED", "SHIFT", shiftId, closingReason,
                 "expected " + expectedCash + " counted " + cashCount.getTotalCounted() + " variance " + variance);
+        // Publish an event so advisory listeners (AI watchdog, notifications) run AFTER the
+        // close commits. AI failures cannot block the close.
+        events.publishEvent(new ShiftClosedEvent(shiftId, shift.getBusinessDay().getBusinessDate()));
         return ShiftCloseSummaryResponse.closed(saved, cashRevenue, cardRevenue, transferRevenue, prepaidTotal, inventorySalesTotal);
     }
 
