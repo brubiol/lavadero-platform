@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   IDashboard, ITicketNew, ITickets, IMoney, ICut, IPayroll, IInventory, ICatalog,
@@ -153,16 +153,6 @@ export function Topbar({
   actions?: ReactNode
 }) {
   const navigate = useNavigate()
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        navigate('/tickets')
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [navigate])
   return (
     <div className="tl-topbar hidden lg:flex">
       <div className="tl-crumb">
@@ -177,7 +167,6 @@ export function Topbar({
       <button type="button" className="tl-search cursor-pointer hover:border-primary-500 hover:bg-white transition-colors" onClick={() => navigate('/tickets')}>
         <ISearch size={14} />
         <span className="flex-1 text-left">Buscar tickets, lavadores, gastos…</span>
-        <kbd>⌘K</kbd>
       </button>
       {actions}
       <div className="tl-icon-btn relative" title="Notificaciones">
