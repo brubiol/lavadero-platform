@@ -1759,12 +1759,13 @@ function TicketWorkspace({
                 <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Datos del servicio</h3>
               </div>
               {/* Cortesia pill toggle */}
-              <label className={`flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+              <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
                 watched.courtesy
                   ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]'
                   : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
               }`}>
-                <input type="checkbox" {...form.register('courtesy')} className="sr-only" aria-label="Marcar como cortesia" />
+                {/* Invisible overlay covers the full pill so Playwright (and pointer clicks) always hit the checkbox, not the visual span */}
+                <input type="checkbox" {...form.register('courtesy')} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Marcar como cortesia" />
                 <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
                 Cortesia
               </label>
