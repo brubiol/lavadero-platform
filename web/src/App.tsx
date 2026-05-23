@@ -1868,37 +1868,35 @@ function TicketWorkspace({
                     )}
 
                     {/* Search input */}
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={lavadorQuery}
-                        onChange={(e) => setLavadorQuery(e.target.value)}
-                        onFocus={() => setLavadorFocused(true)}
-                        onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
-                        placeholder="Buscar lavador..."
-                        className="w-full"
-                      />
-                      {lavadorFocused && filtered.length > 0 && (
-                        <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
-                          {filtered.map((e) => {
-                            const active = selectedIds.includes(e.id)
-                            return (
-                              <button
-                                key={e.id}
-                                type="button"
-                                onClick={() => toggle(e.id)}
-                                className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${
-                                  active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
-                                }`}
-                              >
-                                {e.fullName}
-                                {active && <span className="text-[11px] text-violet-500">✓</span>}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    <input
+                      type="text"
+                      value={lavadorQuery}
+                      onChange={(e) => setLavadorQuery(e.target.value)}
+                      onFocus={() => setLavadorFocused(true)}
+                      onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
+                      placeholder="Buscar lavador..."
+                      className="w-full"
+                    />
+                    {lavadorFocused && filtered.length > 0 && (
+                      <div className="mt-1 overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
+                        {filtered.map((e) => {
+                          const active = selectedIds.includes(e.id)
+                          return (
+                            <button
+                              key={e.id}
+                              type="button"
+                              onClick={() => toggle(e.id)}
+                              className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${
+                                active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
+                              }`}
+                            >
+                              {e.fullName}
+                              {active && <span className="text-[11px] text-violet-500">✓</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
 
                     {form.formState.errors.employeeIds?.message && (
                       <p className="text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
