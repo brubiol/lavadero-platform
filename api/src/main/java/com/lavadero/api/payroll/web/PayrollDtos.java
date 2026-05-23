@@ -1,5 +1,6 @@
 package com.lavadero.api.payroll.web;
 
+import com.lavadero.api.payroll.domain.DebtPayment;
 import com.lavadero.api.payroll.domain.PayrollAdjustment;
 import com.lavadero.api.payroll.domain.PayrollAdjustmentType;
 import com.lavadero.api.payroll.domain.PayrollDay;
@@ -69,6 +70,23 @@ public final class PayrollDtos {
     }
 
     public record DebtBalanceResponse(Long employeeId, BigDecimal balance) {
+    }
+
+    public record CreateDebtPaymentRequest(
+            @NotNull LocalDate paymentDate,
+            @NotNull @DecimalMin("0.01") BigDecimal amount,
+            Long businessDayId,
+            Long shiftId,
+            @Size(max = 500) String note) {
+    }
+
+    public record DebtPaymentResponse(Long id, Long employeeId, String employeeName, LocalDate paymentDate,
+            BigDecimal amount, String note, BigDecimal newBalance, Instant createdAt) {
+        public static DebtPaymentResponse from(DebtPayment payment, BigDecimal newBalance) {
+            return new DebtPaymentResponse(payment.getId(), payment.getEmployee().getId(),
+                    payment.getEmployee().getFullName(), payment.getPaymentDate(), payment.getAmount(),
+                    payment.getNote(), newBalance, payment.getCreatedAt());
+        }
     }
 
     public record PayrollAdjustmentResponse(Long id, Long payrollPeriodId, Long employeeId, String employeeName,

@@ -1,12 +1,16 @@
 package com.lavadero.api.payroll.web;
 
+import com.lavadero.api.payroll.domain.DebtPayment;
 import com.lavadero.api.payroll.domain.PayrollPeriodStatus;
 import com.lavadero.api.payroll.service.DebtLedgerService;
+import com.lavadero.api.payroll.service.DebtPaymentService;
 import com.lavadero.api.payroll.service.PayrollService;
 import com.lavadero.api.payroll.service.PayrollExportService;
+import com.lavadero.api.payroll.web.PayrollDtos.CreateDebtPaymentRequest;
 import com.lavadero.api.payroll.web.PayrollDtos.CreatePayrollAdjustmentRequest;
 import com.lavadero.api.payroll.web.PayrollDtos.CreatePayrollPeriodRequest;
 import com.lavadero.api.payroll.web.PayrollDtos.DebtBalanceResponse;
+import com.lavadero.api.payroll.web.PayrollDtos.DebtPaymentResponse;
 import com.lavadero.api.payroll.web.PayrollDtos.PayrollAdjustmentResponse;
 import com.lavadero.api.payroll.web.PayrollDtos.PayrollPeriodResponse;
 import jakarta.validation.Valid;
@@ -32,11 +36,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class PayrollController {
     private final PayrollService payroll;
     private final DebtLedgerService debtLedger;
+    private final DebtPaymentService debtPayments;
     private final PayrollExportService payrollExport;
 
-    public PayrollController(PayrollService payroll, DebtLedgerService debtLedger, PayrollExportService payrollExport) {
+    public PayrollController(PayrollService payroll, DebtLedgerService debtLedger,
+            DebtPaymentService debtPayments, PayrollExportService payrollExport) {
         this.payroll = payroll;
         this.debtLedger = debtLedger;
+        this.debtPayments = debtPayments;
         this.payrollExport = payrollExport;
     }
 
@@ -104,5 +111,13 @@ public class PayrollController {
     @GetMapping("/employees/{id}/debt-balance")
     public DebtBalanceResponse debtBalance(@PathVariable Long id) {
         return new DebtBalanceResponse(id, debtLedger.balance(id));
+    }
+
+    @PostMapping("/employees/{id}/debt-payments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public DebtPaymentResponse createDebtPayment(@PathVariable Long id,
+            @Valid @RequestBody CreateDebtPaymentRequest request) {
+        DebtPayment payment = debtPayments.create(id, request);
+        return DebtPaymentResponse.from(payment, debtLedger.balance(id));
     }
 }

@@ -41,6 +41,9 @@ public class ShiftCloseSummary extends AuditedEntity {
     @Column(name = "advances_total", nullable = false, precision = 10, scale = 2)
     private BigDecimal advancesTotal;
 
+    @Column(name = "debt_payments_total", nullable = false, precision = 10, scale = 2)
+    private BigDecimal debtPaymentsTotal;
+
     @Column(name = "expected_cash", nullable = false, precision = 10, scale = 2)
     private BigDecimal expectedCash;
 
@@ -60,14 +63,15 @@ public class ShiftCloseSummary extends AuditedEntity {
     }
 
     public ShiftCloseSummary(Shift shift, CashCount cashCount, BigDecimal ticketRevenue, BigDecimal expensesTotal,
-            BigDecimal withdrawalsTotal, BigDecimal advancesTotal, BigDecimal expectedCash, BigDecimal totalCounted,
-            BigDecimal variance, String closingReason) {
+            BigDecimal withdrawalsTotal, BigDecimal advancesTotal, BigDecimal debtPaymentsTotal,
+            BigDecimal expectedCash, BigDecimal totalCounted, BigDecimal variance, String closingReason) {
         this.shift = shift;
         this.cashCount = cashCount;
         this.ticketRevenue = ticketRevenue;
         this.expensesTotal = expensesTotal;
         this.withdrawalsTotal = withdrawalsTotal;
         this.advancesTotal = advancesTotal;
+        this.debtPaymentsTotal = debtPaymentsTotal;
         this.expectedCash = expectedCash;
         this.totalCounted = totalCounted;
         this.variance = variance;
@@ -101,6 +105,10 @@ public class ShiftCloseSummary extends AuditedEntity {
 
     public BigDecimal getAdvancesTotal() {
         return advancesTotal;
+    }
+
+    public BigDecimal getDebtPaymentsTotal() {
+        return debtPaymentsTotal;
     }
 
     public BigDecimal getExpectedCash() {

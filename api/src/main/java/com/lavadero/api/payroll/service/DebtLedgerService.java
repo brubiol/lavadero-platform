@@ -9,6 +9,7 @@ import com.lavadero.api.payroll.domain.PayrollPeriod;
 import com.lavadero.api.payroll.repository.DebtLedgerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,21 @@ public class DebtLedgerService {
         }
         debtLedger.save(new DebtLedgerEntry(employee, period.getEndDate(), DebtLedgerType.PAYROLL_DEDUCTION, amount,
                 null, period, "Descuento de nomina"));
+    }
+
+    /**
+     * Records a cash repayment of an existing debt balance. Called by
+     * DebtPaymentService after the corresponding debt_payments row is saved.
+     * Caller is responsible for validating the amount against the current
+     * balance — this method does not re-check.
+     */
+    @Transactional
+    public void recordCashPayment(Employee employee, LocalDate date, BigDecimal amount, String note) {
+        if (amount.signum() <= 0) {
+            return;
+        }
+        debtLedger.save(new DebtLedgerEntry(employee, date, DebtLedgerType.PAYMENT, amount, null, null,
+                note == null || note.isBlank() ? "Pago en efectivo" : note));
     }
 
     @Transactional(readOnly = true)

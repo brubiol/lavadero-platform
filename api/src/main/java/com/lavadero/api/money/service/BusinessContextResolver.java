@@ -9,16 +9,16 @@ import java.time.LocalDate;
 import org.springframework.stereotype.Component;
 
 @Component
-class BusinessContextResolver {
+public class BusinessContextResolver {
     private final BusinessDayRepository businessDays;
     private final ShiftRepository shifts;
 
-    BusinessContextResolver(BusinessDayRepository businessDays, ShiftRepository shifts) {
+    public BusinessContextResolver(BusinessDayRepository businessDays, ShiftRepository shifts) {
         this.businessDays = businessDays;
         this.shifts = shifts;
     }
 
-    Context resolve(Long businessDayId, Long shiftId, LocalDate fallbackDate) {
+    public Context resolve(Long businessDayId, Long shiftId, LocalDate fallbackDate) {
         Shift shift = null;
         BusinessDay businessDay = null;
         if (shiftId != null) {
@@ -37,6 +37,6 @@ class BusinessContextResolver {
         return new Context(businessDay, shift, recordDate);
     }
 
-    record Context(BusinessDay businessDay, Shift shift, LocalDate recordDate) {
+    public record Context(BusinessDay businessDay, Shift shift, LocalDate recordDate) {
     }
 }
