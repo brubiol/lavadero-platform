@@ -5946,19 +5946,19 @@ function AiAnalystSection({
       </form>
 
       {chat.data && (
-        <div className="rounded-xl border border-violet-100 bg-violet-50/70 p-4">
+        <div className="tl-ai-response tl-ai-response-analyst">
           <AiLabeledText label="Conclusion" text={chat.data.answer} />
           <AiEvidenceList title="Numeros usados" rows={chat.data.supportingNumbers} />
           {chat.data.suggestedFollowUps.length > 0 && (
             <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Siguientes preguntas</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-500">Siguientes preguntas</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {chat.data.suggestedFollowUps.map((question) => (
                   <button
                     key={question}
                     type="button"
                     onClick={() => chatForm.setValue('message', question)}
-                    className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 ring-1 ring-violet-100 hover:bg-violet-50"
+                    className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-primary-700 ring-1 ring-primary-100 transition hover:bg-primary-50 hover:ring-primary-500"
                   >
                     {question}
                   </button>
@@ -6005,12 +6005,10 @@ function AiInvestigationSection({ from, to }: { from: string; to: string }) {
       </form>
 
       {investigation.data && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+        <div className="tl-ai-response tl-ai-response-investigation">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <AiLabeledText label="Conclusion" text={investigation.data.conclusion} />
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
-              Confianza {confidenceLabel(investigation.data.confidence)}
-            </span>
+            <Pill tone="good">Confianza {confidenceLabel(investigation.data.confidence)}</Pill>
           </div>
           <AiEvidenceList title="Evidencia" rows={investigation.data.evidence} />
           <AiEvidenceList title="Pasos realizados" rows={investigation.data.steps} ordered />
@@ -6070,26 +6068,22 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
 
   const summaryLines = aiSummaryLines(insight.summary)
   const visibleLines = compact ? summaryLines.slice(0, 3) : summaryLines
+  const severityTone: PillTone = insight.severity === 'CRITICAL' ? 'bad' : insight.severity === 'WARNING' ? 'warn' : 'purple'
+  const busy = acknowledge.isPending || dismiss.isPending
 
   return (
-    <article className={`rounded-xl border p-4 shadow-sm ${aiSeverityClass(insight.severity)}`}>
+    <article className={`tl-ai-card tl-ai-card-${insight.severity.toLowerCase()}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
-              {featureLabel(insight.featureType)}
-            </span>
-            <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
-              {severityLabel(insight.severity)}
-            </span>
-            <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-500 ring-1 ring-black/5">
-              {statusLabel(insight.status)}
-            </span>
-            <span className="text-xs text-slate-500">{insight.sourceFrom} a {insight.sourceTo}</span>
+            <Pill tone="gray" dot={false}>{featureLabel(insight.featureType)}</Pill>
+            <Pill tone={severityTone}>{severityLabel(insight.severity)}</Pill>
+            <Pill tone="gray" dot={false}>{statusLabel(insight.status)}</Pill>
+            <span className="text-xs text-ink-500">{insight.sourceFrom} a {insight.sourceTo}</span>
           </div>
-          <h4 className="mt-3 text-sm font-bold text-slate-950">{insight.title}</h4>
+          <h4 className="mt-3 text-[14px] font-bold text-ink-900 tracking-[-0.005em]">{insight.title}</h4>
           {visibleLines.length > 0 && (
-            <div className="mt-2 space-y-1.5 text-sm leading-6 text-slate-700">
+            <div className="mt-2 space-y-1.5 text-[13.5px] leading-6 text-ink-700">
               {visibleLines.map((line, index) => (
                 <p key={`${insight.id}-${index}`}>{line}</p>
               ))}
@@ -6100,32 +6094,20 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
         <div className="flex shrink-0 flex-wrap gap-2">
           {insight.status === 'NEW' ? (
             <>
-              <button
-                type="button"
-                onClick={() => acknowledge.mutate()}
-                disabled={acknowledge.isPending || dismiss.isPending}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
+              <Button kind="secondary" size="sm" onClick={() => acknowledge.mutate()} disabled={busy}>
                 Revisado
-              </button>
-              <button
-                type="button"
-                onClick={() => dismiss.mutate()}
-                disabled={acknowledge.isPending || dismiss.isPending}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-60"
-              >
+              </Button>
+              <Button kind="ghost" size="sm" onClick={() => dismiss.mutate()} disabled={busy}>
                 Descartar
-              </button>
+              </Button>
             </>
           ) : (
-            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">
-              {statusLabel(insight.status)}
-            </span>
+            <Pill tone="gray" dot={false}>{statusLabel(insight.status)}</Pill>
           )}
         </div>
       </div>
       {(acknowledge.error || dismiss.error) && (
-        <p className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{(acknowledge.error || dismiss.error)!.message}</p>
+        <p className="mt-3 rounded-lg bg-bad-50 p-2 text-xs text-bad-700">{(acknowledge.error || dismiss.error)!.message}</p>
       )}
     </article>
   )
@@ -6134,8 +6116,8 @@ function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: bool
 function AiLabeledText({ label, text }: { label: string; text: string }) {
   return (
     <div className="min-w-0 flex-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold leading-6 text-slate-950">{text}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-500">{label}</p>
+      <p className="mt-1 text-[13.5px] font-semibold leading-6 text-ink-900">{text}</p>
     </div>
   )
 }
@@ -6145,8 +6127,8 @@ function AiEvidenceList({ title, rows, ordered = false }: { title: string; rows:
   const Tag = ordered ? 'ol' : 'ul'
   return (
     <div className="mt-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <Tag className={`mt-1 space-y-1 text-sm leading-6 text-slate-700 ${ordered ? 'list-decimal pl-5' : 'list-disc pl-5'}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-500">{title}</p>
+      <Tag className={`mt-1 space-y-1 text-[13px] leading-6 text-ink-700 ${ordered ? 'list-decimal pl-5' : 'list-disc pl-5'}`}>
         {rows.map((row) => <li key={row}>{row}</li>)}
       </Tag>
     </div>
@@ -6155,9 +6137,9 @@ function AiEvidenceList({ title, rows, ordered = false }: { title: string; rows:
 
 function AiEmptyState({ text }: { text: string }) {
   return (
-    <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+    <div className="rounded-xl border border-dashed border-border-soft bg-ink-50/60 px-4 py-5 text-center text-[13px] text-ink-500">
       {text}
-    </p>
+    </div>
   )
 }
 
@@ -6487,15 +6469,6 @@ function confidenceLabel(confidence: InvestigationConfidence) {
     HIGH: 'alta',
   }
   return labels[confidence]
-}
-
-function aiSeverityClass(severity: AiSeverity) {
-  const classes: Record<AiSeverity, string> = {
-    INFO: 'border-violet-100 bg-violet-50',
-    WARNING: 'border-amber-100 bg-amber-50',
-    CRITICAL: 'border-red-100 bg-red-50',
-  }
-  return classes[severity]
 }
 
 function formatAiDetailValue(value: unknown): string {
