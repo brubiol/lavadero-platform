@@ -46,4 +46,24 @@ public final class AiDtos {
     public record InvestigationResponse(String conclusion, List<String> evidence, List<String> steps,
             String confidence, LocalDate sourceFrom, LocalDate sourceTo, AiInsightResponse insight) {
     }
+
+    public record QuickPromptsResponse(List<PromptCategory> categories) {
+    }
+
+    public record PromptCategory(String key, String name, String icon, List<String> prompts) {
+    }
+
+    public record TodayResponse(
+            LocalDate date,
+            AiInsightResponse brief,
+            List<AiInsightResponse> alerts,
+            int criticalCount,
+            int warningCount,
+            TodaySummary summary) {
+    }
+
+    public record TodaySummary(long carsWashed, java.math.BigDecimal ticketRevenue,
+            java.math.BigDecimal expensesTotal, java.math.BigDecimal result,
+            java.math.BigDecimal cashVariance) {
+    }
 }

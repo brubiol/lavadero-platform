@@ -13,6 +13,10 @@ import com.lavadero.api.ai.repository.AiInsightRepository;
 import com.lavadero.api.ai.web.AiDtos.AiInsightResponse;
 import com.lavadero.api.ai.web.AiDtos.AnalystChatResponse;
 import com.lavadero.api.ai.web.AiDtos.InvestigationResponse;
+import com.lavadero.api.ai.web.AiDtos.PromptCategory;
+import com.lavadero.api.ai.web.AiDtos.QuickPromptsResponse;
+import com.lavadero.api.ai.web.AiDtos.TodayResponse;
+import com.lavadero.api.ai.web.AiDtos.TodaySummary;
 import com.lavadero.api.inventory.service.InventoryService;
 import com.lavadero.api.inventory.web.InventoryDtos.InventorySnapshotResponse;
 import com.lavadero.api.inventory.web.InventoryDtos.ProductSnapshotResponse;
@@ -223,6 +227,65 @@ public class AiInsightService {
                 details(Map.of("question", question, "steps", steps, "evidence", evidence, "confidence", confidence)),
                 from, to);
         return new InvestigationResponse(summary, evidence, steps, confidence, from, to, response(insight));
+    }
+
+    @Transactional
+    public TodayResponse today(LocalDate date) {
+        // Brief (re-use existing logic; will fetch latest or generate)
+        AiInsightResponse brief = dailyBrief(date, false);
+
+        // Run + collect alerts for the date (will return only newly created, but we want existing too)
+        runAlerts(date, date);
+        List<AiInsight> rawAlerts = insights.findByFeatureTypeAndStatusAndSourceFromGreaterThanEqualAndSourceToLessThanEqualOrderByGeneratedAtDesc(
+                AiFeatureType.ANOMALY_ALERT, AiInsightStatus.NEW, date, date);
+        List<AiInsightResponse> alerts = rawAlerts.stream().map(this::response).toList();
+        int critical = (int) alerts.stream().filter(a -> a.severity() == AiInsightSeverity.CRITICAL).count();
+        int warning = (int) alerts.stream().filter(a -> a.severity() == AiInsightSeverity.WARNING).count();
+
+        // Summary numbers
+        DailySummaryResponse day = reports.get(date);
+        TodaySummary summary = new TodaySummary(
+                Math.toIntExact(day.carsWashed()),
+                day.ticketRevenue(),
+                day.expensesTotal(),
+                day.result(),
+                day.cashVariance());
+
+        return new TodayResponse(date, brief, alerts, critical, warning, summary);
+    }
+
+    @Transactional(readOnly = true)
+    public QuickPromptsResponse quickPrompts() {
+        return new QuickPromptsResponse(List.of(
+                new PromptCategory("resumen", "Resumen", "📊", List.of(
+                        "¿Cómo fue el día de hoy?",
+                        "¿Cuánto entró en efectivo vs tarjeta?",
+                        "¿Cuál fue el resultado del día?",
+                        "Compara este día con el promedio"
+                )),
+                new PromptCategory("lavadores", "Lavadores", "👤", List.of(
+                        "¿Quién lavó más carros hoy?",
+                        "¿Hay lavadores con pocos tickets?",
+                        "Compara el rendimiento de los lavadores",
+                        "¿Cuántos carros le toca a cada lavador?"
+                )),
+                new PromptCategory("caja", "Caja", "💵", List.of(
+                        "¿Hubo faltante o sobrante hoy?",
+                        "¿En qué turno hubo más diferencia?",
+                        "¿Cuál es el patrón de diferencias últimamente?"
+                )),
+                new PromptCategory("inventario", "Inventario", "📦", List.of(
+                        "¿Qué productos están bajos?",
+                        "¿Qué aroma se vendió más?",
+                        "¿Cómo van los snacks este mes?"
+                )),
+                new PromptCategory("tendencias", "Tendencias", "📈", List.of(
+                        "¿Esta semana fue mejor o peor que la pasada?",
+                        "¿Qué día tuvo más ingresos?",
+                        "¿Por qué bajaron los ingresos?",
+                        "¿Subieron los gastos comparado con el mes pasado?"
+                ))
+        ));
     }
 
     private List<AlertCandidate> alertCandidates(LocalDate from, LocalDate to) {

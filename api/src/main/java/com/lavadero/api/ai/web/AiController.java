@@ -8,6 +8,8 @@ import com.lavadero.api.ai.web.AiDtos.AnalystChatRequest;
 import com.lavadero.api.ai.web.AiDtos.AnalystChatResponse;
 import com.lavadero.api.ai.web.AiDtos.InvestigationRequest;
 import com.lavadero.api.ai.web.AiDtos.InvestigationResponse;
+import com.lavadero.api.ai.web.AiDtos.QuickPromptsResponse;
+import com.lavadero.api.ai.web.AiDtos.TodayResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -70,5 +72,16 @@ public class AiController {
     @PostMapping("/investigations")
     public InvestigationResponse investigate(@Valid @RequestBody InvestigationRequest request) {
         return ai.investigate(request.question(), request.from(), request.to());
+    }
+
+    @GetMapping("/today")
+    public TodayResponse today(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ai.today(date);
+    }
+
+    @GetMapping("/quick-prompts")
+    public QuickPromptsResponse quickPrompts() {
+        return ai.quickPrompts();
     }
 }

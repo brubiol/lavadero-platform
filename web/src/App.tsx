@@ -497,6 +497,38 @@ type InvestigationResponse = {
   insight: AiInsight
 }
 
+type PromptCategory = {
+  key: string
+  name: string
+  icon: string
+  prompts: string[]
+}
+
+type QuickPromptsResponse = {
+  categories: PromptCategory[]
+}
+
+type TodayResponse = {
+  date: string
+  brief: AiInsight
+  alerts: AiInsight[]
+  criticalCount: number
+  warningCount: number
+  summary: {
+    carsWashed: number
+    ticketRevenue: number
+    expensesTotal: number
+    result: number
+    cashVariance: number | null
+  }
+}
+
+type ChatMessage =
+  | { id: string; role: 'user'; text: string; mode: 'quick' | 'deep'; ts: number }
+  | { id: string; role: 'assistant'; mode: 'quick'; data: AnalystChatResponse; ts: number }
+  | { id: string; role: 'assistant'; mode: 'deep'; data: InvestigationResponse; ts: number }
+  | { id: string; role: 'assistant'; mode: 'error'; text: string; ts: number }
+
 type MonthAggregate = {
   month: string
   cars: number
