@@ -1218,11 +1218,42 @@ function DayStatusCard() {
   )
 }
 
+function HeroDelta({ today, yesterday }: { today: number; yesterday: number | undefined }) {
+  if (yesterday == null) return null
+  if (yesterday === 0 && today === 0) return null
+  const diff = today - yesterday
+  if (yesterday === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10.5px] font-bold text-emerald-300">
+        nuevo
+      </span>
+    )
+  }
+  const pct = Math.round((diff / Math.abs(yesterday)) * 100)
+  if (pct === 0) return <span className="text-[11px] text-white/40">igual que ayer</span>
+  const up = diff > 0
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold ${
+      up ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'
+    }`}>
+      {up ? '▲' : '▼'} {Math.abs(pct)}% vs ayer
+    </span>
+  )
+}
+
 function Dashboard() {
   const [date, setDate] = useState(today)
+  const navigate = useNavigate()
   const summary = useQuery({
     queryKey: ['daily-summary', date],
     queryFn: () => api<DailySummary>(`/api/v1/reports/daily-summary?date=${date}`),
+  })
+  const yesterdayDateObj = new Date(date + 'T00:00:00')
+  yesterdayDateObj.setDate(yesterdayDateObj.getDate() - 1)
+  const yesterday = yesterdayDateObj.toISOString().slice(0, 10)
+  const yestSummary = useQuery({
+    queryKey: ['daily-summary', yesterday],
+    queryFn: () => api<DailySummary>(`/api/v1/reports/daily-summary?date=${yesterday}`),
   })
   const monthStart = today.slice(0, 7) + '-01'
   const monthHist = useQuery({
@@ -1231,6 +1262,9 @@ function Dashboard() {
   })
 
   const data = summary.data
+  const yest = yestSummary.data
+  const phaseData = usePhaseData()
+  const openShifts = (phaseData.shifts.data ?? []).filter((s) => s.status === 'OPEN')
 
   const { auth, hasRole } = useAuth()
   const isOwner = hasRole('DUENO')
@@ -1254,6 +1288,8 @@ function Dashboard() {
   const dateLong = `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${dayMonth}`
 
   const resultPositive = data ? data.result >= 0 : true
+  const monthDate = new Date()
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate()
 
   return (
     <section className="space-y-6">
@@ -1289,35 +1325,102 @@ function Dashboard() {
 
       {/* ─── Hero scoreboard ──────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-ink-900 via-ink-800 to-ink-900 px-6 py-7 sm:px-9 sm:py-9 shadow-[0_24px_48px_-20px_rgba(15,23,42,0.45)]">
+        {/* dot grid texture */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
+          }}
+        />
+        {/* aurora glows */}
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-violet-500/25 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-emerald-500/15 blur-3xl" />
         <div className="pointer-events-none absolute right-6 top-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Turbo Lavado · Resumen</div>
 
         <div className="relative grid grid-cols-1 gap-7 sm:grid-cols-3 sm:gap-8">
-          <div>
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Carros lavados</p>
-            <p className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
+          {/* Carros */}
+          <div data-testid="metric-carros-lavados">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/10 text-white/70">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 16H9m10 0h3v-3.15a1 1 0 00-.84-.99L16 11l-2.7-3.6a1 1 0 00-.8-.4H5.24a2 2 0 00-1.8 1.1l-.8 1.63A6 6 0 002 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/>
+                </svg>
+              </span>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Carros lavados</p>
+            </div>
+            <p data-testid="metric-carros-lavados-value" className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
               {isLoading ? '—' : (data?.carsWashed ?? 0)}
             </p>
-            <p className="mt-2 text-[12px] text-white/40">
-              {data?.courtesyCount ? `${data.courtesyCount} cortesía${data.courtesyCount === 1 ? '' : 's'}` : 'Operación del día'}
-            </p>
+            <div className="mt-2.5 flex items-center gap-2">
+              {data && yest && <HeroDelta today={data.carsWashed} yesterday={yest.carsWashed} />}
+              {data?.courtesyCount ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-white/15 px-1.5 py-0.5 text-[10.5px] font-semibold text-white/60">
+                  {data.courtesyCount} cortesía{data.courtesyCount === 1 ? '' : 's'}
+                </span>
+              ) : null}
+            </div>
           </div>
-          <div className="sm:border-l sm:border-white/10 sm:pl-8">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Ingresos</p>
-            <p className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
+
+          {/* Ingresos */}
+          <div data-testid="metric-ingresos-autos" className="sm:border-l sm:border-white/10 sm:pl-8">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/10 text-white/70">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>
+                </svg>
+              </span>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Ingresos</p>
+            </div>
+            <p data-testid="metric-ingresos-autos-value" className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
               {isLoading ? '—' : money(data?.ticketRevenue ?? 0, 'MXN')}
             </p>
-            <p className="mt-2 text-[12px] text-white/40">Tickets activos</p>
+            <div className="mt-2.5 flex items-center gap-2">
+              {data && yest && <HeroDelta today={data.ticketRevenue} yesterday={yest.ticketRevenue} />}
+            </div>
           </div>
+
+          {/* Resultado */}
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Resultado</p>
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/10 text-white/70">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="20" x2="5" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="19" y1="20" x2="19" y2="14"/>
+                </svg>
+              </span>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Resultado</p>
+            </div>
             <p className={`font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] ${resultPositive ? 'text-emerald-300' : 'text-rose-300'}`}>
               {isLoading ? '—' : money(data?.result ?? 0, 'MXN')}
             </p>
-            <p className="mt-2 text-[12px] text-white/40">Ingresos − gastos</p>
+            <div className="mt-2.5 flex items-center gap-2">
+              {data && yest && <HeroDelta today={data.result} yesterday={yest.result} />}
+            </div>
           </div>
         </div>
+
+        {/* Quick actions */}
+        {openShifts.length > 0 && (
+          <div className="relative mt-7 flex flex-wrap items-center gap-2 border-t border-white/10 pt-5">
+            <button
+              type="button"
+              onClick={() => navigate('/tickets/nuevo')}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12.5px] font-semibold text-ink-900 transition-colors hover:bg-white/90"
+            >
+              <span className="text-[15px] leading-none">+</span> Nuevo ticket
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/corte')}
+              className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Hacer corte
+            </button>
+            <span className="ml-auto text-[11px] font-medium text-white/40">
+              {openShifts.length} turno{openShifts.length === 1 ? '' : 's'} activo{openShifts.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ─── Secondary metric strip ────────────────────────────────── */}
@@ -1339,7 +1442,7 @@ function Dashboard() {
         <div className="relative overflow-hidden rounded-2xl border border-border-soft bg-gradient-to-r from-ink-50 via-white to-violet-50/40 px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink-900 text-white font-display text-[14px] font-bold tracking-tight">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-ink-900 text-white font-display text-[13px] font-bold tracking-tight">
                 {dateObj.toLocaleDateString('es-MX', { month: 'short' }).slice(0, 3).toUpperCase()}
               </div>
               <div>
@@ -1348,6 +1451,9 @@ function Dashboard() {
                   {monthHist.data.totalCars} carros
                   <span className="mx-1.5 text-ink-300">·</span>
                   {money(Number(monthHist.data.totalRevenue), 'MXN')} ingresos
+                </p>
+                <p className="mt-1 text-[11px] text-ink-400">
+                  Día {monthDate.getDate()} de {daysInMonth}
                 </p>
               </div>
             </div>
@@ -1361,15 +1467,31 @@ function Dashboard() {
               <span className="text-[11px] font-semibold uppercase tracking-wide opacity-70">resultado</span>
             </div>
           </div>
+          {/* progress bar of month */}
+          <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-ink-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-violet-400 to-emerald-400"
+              style={{ width: `${Math.min(100, Math.round((monthDate.getDate() / daysInMonth) * 100))}%` }}
+            />
+          </div>
         </div>
       )}
 
       {/* ─── Tickets recientes ─────────────────────────────────────── */}
-      <Panel title="Tickets recientes" subtitle={data ? `${data.recentTickets.length} en esta fecha` : undefined}>
+      <Panel
+        title="Tickets recientes"
+        subtitle={data ? `${data.recentTickets.length} en esta fecha` : undefined}
+        actions={
+          <NavLink to="/tickets" className="text-[12px] font-semibold text-violet-600 no-underline hover:text-violet-700">
+            Ver todos →
+          </NavLink>
+        }
+      >
         <div className="overflow-hidden rounded-xl border border-gray-100">
           <table className="tl-tbl zebra">
             <thead>
               <tr>
+                <th className="w-16">Hora</th>
                 <th>Nota</th>
                 <th>Vehiculo</th>
                 <th>Servicio</th>
@@ -1380,28 +1502,41 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {(data?.recentTickets ?? []).map((ticket) => (
-                <tr key={ticket.id}>
-                  <td className="font-semibold">
-                    {ticket.internalRef || ticket.notaNumber}
-                    <p className="mt-0.5 text-[11px] font-normal text-ink-400">{ticket.notaNumber}</p>
-                  </td>
-                  <td>
-                    <span>{ticket.vehicleDescription || '-'}</span>
-                    {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
-                  </td>
-                  <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
-                  <td>{ticket.assignments.map((assignment) => assignment.employeeName).join(', ')}</td>
-                  <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
-                  <td><PaymentPill ticket={ticket} /></td>
-                  <td>
-                    <TicketStatusPill ticket={ticket} />
-                  </td>
-                </tr>
-              ))}
+              {(data?.recentTickets ?? []).map((ticket) => {
+                const occurred = ticket.occurredAt ?? ticket.createdAt
+                const timeStr = new Date(occurred).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+                return (
+                  <tr key={ticket.id}>
+                    <td className="font-mono text-[12px] text-ink-500">{timeStr}</td>
+                    <td className="font-semibold">
+                      {ticket.internalRef || ticket.notaNumber}
+                      <p className="mt-0.5 text-[11px] font-normal text-ink-400">{ticket.notaNumber}</p>
+                    </td>
+                    <td>
+                      <span>{ticket.vehicleDescription || '-'}</span>
+                      {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
+                    </td>
+                    <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {ticket.assignments.map((a) => (
+                          <span key={a.employeeId} className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                            {a.employeeName.split(' ')[0]}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
+                    <td><PaymentPill ticket={ticket} /></td>
+                    <td>
+                      <TicketStatusPill ticket={ticket} />
+                    </td>
+                  </tr>
+                )
+              })}
               {!summary.isLoading && (data?.recentTickets.length ?? 0) === 0 && (
                 <tr className="tl-empty-row">
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="tl-empty-icon">
                       <div className="icon-wrap">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
