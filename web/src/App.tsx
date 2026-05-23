@@ -5081,9 +5081,21 @@ function PrepaidPackageScreen() {
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
-      <div>
-        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Paquetes prepagados</h2>
-        <p className="text-[13.5px] text-ink-500 mt-0.5">Registra la venta del paquete. Los lavados individuales se capturan como cortesia.</p>
+
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Pre-pago · {effectiveBusinessDay?.businessDate ?? 'sin día'}</p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Paquetes prepagados</h2>
+          <p className="mt-1 text-[12.5px] text-ink-500">Vende el paquete una vez. Captura los lavados individuales como cortesía.</p>
+        </div>
+        <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50/80 to-white px-4 py-3">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-violet-700">Cobrado hoy</p>
+          <p className="font-display mt-1 text-[24px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">
+            {money(totalHoy, 'MXN')}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-400">{list.length} paquete{list.length === 1 ? '' : 's'}</p>
+        </div>
       </div>
 
       {disabledReason && (
@@ -5154,7 +5166,7 @@ function PrepaidPackageScreen() {
               <select {...form.register('paymentMethod')}>
                 <option value="CASH">Efectivo</option>
                 <option value="CARD">Tarjeta</option>
-                <option value="TRANSFER">Windows</option>
+                <option value="TRANSFER">Depósito</option>
               </select>
             </SelectField>
             <TextField label="Notas (opcional)" error={form.formState.errors.notes?.message}>
@@ -5167,17 +5179,28 @@ function PrepaidPackageScreen() {
           </form>
         </Panel>
 
-        <Panel title={`Paquetes vendidos hoy — ${money(totalHoy, 'MXN')}`}>
-          {packages.isLoading && <p className="text-sm text-gray-400">Cargando...</p>}
+        <Panel
+          title="Vendidos hoy"
+          subtitle={list.length > 0 ? `${list.length} paquete${list.length === 1 ? '' : 's'} · ${money(totalHoy, 'MXN')}` : undefined}
+        >
+          {packages.isLoading && <p className="text-sm text-ink-400">Cargando...</p>}
           {list.length === 0 && !packages.isLoading && (
-            <p className="text-sm text-gray-400">Sin paquetes vendidos hoy.</p>
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-50">
+                <svg className="h-5 w-5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                  <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <p className="text-[14px] font-semibold text-ink-700">Aún no se venden paquetes hoy.</p>
+              <p className="mt-1 text-[12.5px] text-ink-400">Usa el formulario para registrar la primera venta.</p>
+            </div>
           )}
           {list.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-gray-100">
               <table className="tl-tbl zebra">
                 <thead>
                   <tr>
-                    <th>Hora</th>
+                    <th className="w-16">Hora</th>
                     <th>Lavadas</th>
                     <th className="r">Monto</th>
                     <th>Pago</th>
@@ -5187,18 +5210,24 @@ function PrepaidPackageScreen() {
                 <tbody>
                   {list.map((pkg) => (
                     <tr key={pkg.id}>
-                      <td className="text-ink-500">{new Date(pkg.occurredAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="font-semibold">{pkg.washesIncluded}</td>
-                      <td className="r font-semibold text-violet-700">{money(pkg.amount, 'MXN')}</td>
+                      <td className="font-mono text-[12px] text-ink-500 tabular-nums">
+                        {new Date(pkg.occurredAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </td>
+                      <td>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-0.5 text-[12px] font-bold text-violet-700">
+                          {pkg.washesIncluded} lavadas
+                        </span>
+                      </td>
+                      <td className="r font-display text-[15px] font-bold text-violet-700 tabular-nums">{money(pkg.amount, 'MXN')}</td>
                       <td>
                         {pkg.paymentMethod === 'CARD'
                           ? <Pill tone="info" dot={false}>Tarjeta</Pill>
                           : pkg.paymentMethod === 'TRANSFER'
-                            ? <Pill tone="warn" dot={false}>Windows</Pill>
+                            ? <Pill tone="warn" dot={false}>Depósito</Pill>
                             : <Pill tone="gray" dot={false}>Efectivo</Pill>
                         }
                       </td>
-                      <td className="text-ink-500">{pkg.notes || '-'}</td>
+                      <td className="text-[12.5px] text-ink-500">{pkg.notes || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
