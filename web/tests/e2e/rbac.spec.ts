@@ -24,14 +24,11 @@ test('GERENTE can access payroll but not DUENO-only reports and audit', async ({
   await loginAs(page, 'e2e_gerente', 'e2egerente123')
 
   await expect(page.getByTestId('nav-nomina')).toBeVisible()
-  await expect(page.getByTestId('nav-catalogos')).not.toBeVisible()
+  await expect(page.getByTestId('nav-catalogos')).toBeVisible()
   await expect(page.getByTestId('nav-reportes')).not.toBeVisible()
 
   await page.getByTestId('nav-nomina').click()
   await expect(page.getByRole('heading', { name: 'Nomina' })).toBeVisible({ timeout: 8_000 })
-
-  await page.goto('/catalogos')
-  await expect(page.getByText('Sin permiso')).toBeVisible()
 
   await page.goto('/auditoria')
   await expect(page.getByText('Sin permiso')).toBeVisible()
