@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   IDashboard, ITicketNew, ITickets, IMoney, ICut, IPayroll, IInventory, ICatalog,
   IReports, IAi, IAudit, IBell, ICalendar, ISearch, ILogout, IPlus,
@@ -152,6 +152,7 @@ export function Topbar({
   role: NavRole
   actions?: ReactNode
 }) {
+  const navigate = useNavigate()
   return (
     <div className="tl-topbar hidden lg:flex">
       <div className="tl-crumb">
@@ -163,11 +164,11 @@ export function Topbar({
         ))}
         <span className="here">{title}</span>
       </div>
-      <div className="tl-search">
+      <button type="button" className="tl-search cursor-pointer hover:border-primary-500 hover:bg-white transition-colors" onClick={() => navigate('/tickets')}>
         <ISearch size={14} />
-        <span className="flex-1">Buscar tickets, lavadores, gastos…</span>
+        <span className="flex-1 text-left">Buscar tickets, lavadores, gastos…</span>
         <kbd>⌘K</kbd>
-      </div>
+      </button>
       {actions}
       <div className="tl-icon-btn relative" title="Notificaciones">
         <IBell size={16} />
