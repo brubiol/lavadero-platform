@@ -2994,7 +2994,7 @@ function TicketWorkspace({
                       <input placeholder="Ej. 41703" {...form.register('internalRef')} />
                     </TextField>
                   )}
-                  <TextField label="Vehículo" error={form.formState.errors.vehicleDescription?.message}>
+                  <TextField label="Descripción del vehículo" error={form.formState.errors.vehicleDescription?.message}>
                     <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
                   </TextField>
                   <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
@@ -3161,7 +3161,7 @@ function TicketWorkspace({
               <div className="space-y-5 p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
-                    <input type="number" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
+                    <input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
                   </TextField>
                   <div>
                     <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
@@ -3638,13 +3638,13 @@ function CatalogsScreen() {
                 </select>
               </SelectField>
               <TextField label="Sueldo base" error={employeeForm.formState.errors.baseWeeklySalary?.message}>
-                <input type="number" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
+                <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
               </TextField>
               <TextField label="$ por carro" error={employeeForm.formState.errors.commissionRate?.message}>
-                <input type="number" min={0} step="0.01" {...employeeForm.register('commissionRate')} />
+                <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('commissionRate')} />
               </TextField>
               <TextField label="Bono/carro" error={employeeForm.formState.errors.productivityBonusRate?.message}>
-                <input type="number" min={0} step="0.01" {...employeeForm.register('productivityBonusRate')} />
+                <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('productivityBonusRate')} />
               </TextField>
               <FormButton label="Agregar" loading={createEmployee.isPending} />
             </form>
@@ -3701,7 +3701,7 @@ function CatalogsScreen() {
 
           <Panel title="Servicios">
             <form className="grid gap-3 md:grid-cols-[140px_1fr_auto]" onSubmit={serviceForm.handleSubmit((values) => createService.mutate(values))}>
-              <TextField label="Codigo" error={serviceForm.formState.errors.code?.message}>
+              <TextField label="Código" error={serviceForm.formState.errors.code?.message}>
                 <input placeholder="LAVADO" {...serviceForm.register('code')} />
               </TextField>
               <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
@@ -3709,7 +3709,7 @@ function CatalogsScreen() {
               </TextField>
               <FormButton label="Agregar" loading={createService.isPending} />
               <div className="md:col-span-3">
-                <TextField label="Descripcion" error={serviceForm.formState.errors.description?.message}>
+                <TextField label="Descripción" error={serviceForm.formState.errors.description?.message}>
                   <textarea rows={2} placeholder="Opcional" {...serviceForm.register('description')} />
                 </TextField>
               </div>
@@ -3742,7 +3742,7 @@ function CatalogsScreen() {
                 </select>
               </SelectField>
               <TextField label="Orden" error={sizeForm.formState.errors.sortOrder?.message}>
-                <input type="number" min={0} {...sizeForm.register('sortOrder')} />
+                <input type="number" inputMode="decimal" min={0} {...sizeForm.register('sortOrder')} />
               </TextField>
               <FormButton label="Agregar" loading={createSize.isPending} />
             </form>
@@ -3779,7 +3779,7 @@ function CatalogsScreen() {
                 </select>
               </SelectField>
               <TextField label="Precio" error={priceForm.formState.errors.amount?.message}>
-                <input type="number" min={0} step="0.01" {...priceForm.register('amount')} />
+                <input type="number" inputMode="decimal" min={0} step="0.01" {...priceForm.register('amount')} />
               </TextField>
               <TextField label="Desde" error={priceForm.formState.errors.effectiveFrom?.message}>
                 <input type="date" {...priceForm.register('effectiveFrom')} />
@@ -3827,7 +3827,7 @@ function CatalogsScreen() {
         </div>
 
         <aside className="space-y-5">
-          <Panel title="Operacion de hoy">
+          <Panel title="Operación de hoy">
             <form className="space-y-4" onSubmit={operationsForm.handleSubmit((values) => openBusinessDay.mutate(values))}>
               <TextField label="Fecha" error={operationsForm.formState.errors.businessDate?.message}>
                 <input type="date" {...operationsForm.register('businessDate')} />
@@ -4325,7 +4325,7 @@ function ShiftCloseScreen() {
                 {/* Morralla */}
                 <div className="border-t border-border-soft pt-5">
                   <TextField label="Morralla total">
-                    <input type="number" min={0} step="0.01" {...cashForm.register('morrallaTotal')} />
+                    <input type="number" inputMode="decimal" min={0} step="0.01" {...cashForm.register('morrallaTotal')} />
                   </TextField>
                 </div>
                 {/* Total preview */}
@@ -5033,7 +5033,7 @@ function AuditScreen() {
             </select>
           </SelectField>
           <TextField label="ID entidad">
-            <input type="number" min={1} value={entityId} onChange={(event) => setEntityId(event.target.value)} />
+            <input type="number" inputMode="decimal" min={1} value={entityId} onChange={(event) => setEntityId(event.target.value)} />
           </TextField>
         </div>
       </Panel>
@@ -5660,9 +5660,9 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
           <input placeholder="Opcional" {...form.register('sku')} />
         </TextField>
         <TextField label="Precio actual" error={form.formState.errors.currentUnitPrice?.message}>
-          <input type="number" min={0} step="0.01" {...form.register('currentUnitPrice')} />
+          <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('currentUnitPrice')} />
         </TextField>
-        <SelectField label="Categoria">
+        <SelectField label="Categoría">
           <select {...form.register('category')}>
             <option value="AROMA">Aroma</option>
             <option value="SNACK">Snack</option>
@@ -5801,7 +5801,7 @@ function InventoryAdjustmentModal({ products, onClose }: { products: Product[]; 
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <ProductSelect products={products} form={form} />
         <TextField label="Cantidad (+ entra, - sale)" error={form.formState.errors.quantity?.message}>
-          <input type="number" step="0.01" {...form.register('quantity')} />
+          <input type="number" inputMode="decimal" step="0.01" {...form.register('quantity')} />
         </TextField>
         <TextField label="Fecha y hora">
           <input type="datetime-local" {...form.register('movementDate')} />
@@ -5842,10 +5842,10 @@ function InventoryMovementModal<T extends InventorySaleFormValues | InventoryPur
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <ProductSelect products={products} form={form} />
         <TextField label="Cantidad" error={f.formState.errors.quantity?.message}>
-          <input type="number" min={0} step="0.01" {...f.register('quantity')} />
+          <input type="number" inputMode="decimal" min={0} step="0.01" {...f.register('quantity')} />
         </TextField>
         <TextField label="Precio unitario" error={f.formState.errors.unitPrice?.message}>
-          <input type="number" min={0} step="0.01" placeholder="0 usa precio del producto en venta" {...f.register('unitPrice')} />
+          <input type="number" inputMode="decimal" min={0} step="0.01" placeholder="0 usa precio del producto en venta" {...f.register('unitPrice')} />
         </TextField>
         <TextField label="Fecha y hora">
           <input type="datetime-local" {...f.register('movementDate')} />
@@ -6252,7 +6252,7 @@ function PayrollScreen() {
                 </select>
               </SelectField>
               <TextField label="Monto" error={adjustmentForm.formState.errors.amount?.message}>
-                <input type="number" min={0.01} step="0.01" {...adjustmentForm.register('amount')} disabled={locked} />
+                <input type="number" inputMode="decimal" min={0.01} step="0.01" {...adjustmentForm.register('amount')} disabled={locked} />
               </TextField>
               <TextField label="Nota" error={adjustmentForm.formState.errors.note?.message}>
                 <input placeholder="clima, permiso, enfermo..." {...adjustmentForm.register('note')} disabled={locked} />
@@ -6576,10 +6576,10 @@ function PrepaidPackageScreen() {
 
             <div className="grid grid-cols-2 gap-4">
               <TextField label="Lavadas incluidas" error={form.formState.errors.washesIncluded?.message}>
-                <input type="number" min={1} {...form.register('washesIncluded')} />
+                <input type="number" inputMode="decimal" min={1} {...form.register('washesIncluded')} />
               </TextField>
               <TextField label="Monto cobrado ($)" error={form.formState.errors.amount?.message}>
-                <input type="number" min={0.01} step={0.01} {...form.register('amount')} />
+                <input type="number" inputMode="decimal" min={0.01} step={0.01} {...form.register('amount')} />
               </TextField>
             </div>
             <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
@@ -7012,7 +7012,7 @@ function ExpenseModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>
         <TextField label="Fecha" error={form.formState.errors.expenseDate?.message}>
           <input type="date" {...form.register('expenseDate')} />
         </TextField>
-        <SelectField label="Categoria" error={form.formState.errors.category?.message}>
+        <SelectField label="Categoría" error={form.formState.errors.category?.message}>
           <select {...form.register('category')}>
             {expenseCategories.map((item) => (
               <option key={item} value={item}>{categoryLabel(item)}</option>
@@ -7020,9 +7020,9 @@ function ExpenseModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>
           </select>
         </SelectField>
         <TextField label="Monto" error={form.formState.errors.amount?.message}>
-          <input type="number" min={0} step="0.01" {...form.register('amount')} />
+          <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('amount')} />
         </TextField>
-        <TextField label="Descripcion" error={form.formState.errors.description?.message}>
+        <TextField label="Descripción" error={form.formState.errors.description?.message}>
           <textarea rows={3} placeholder="Ej. Material de limpieza" {...form.register('description')} />
         </TextField>
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
@@ -7063,7 +7063,7 @@ function WithdrawalModal({ data, onClose }: { data: ReturnType<typeof usePhaseDa
           <input type="date" {...form.register('withdrawalDate')} />
         </TextField>
         <TextField label="Monto" error={form.formState.errors.amount?.message}>
-          <input type="number" min={0} step="0.01" {...form.register('amount')} />
+          <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('amount')} />
         </TextField>
         <TextField label="Motivo" error={form.formState.errors.reason?.message}>
           <textarea rows={3} placeholder="Ej. Retiro del dueno" {...form.register('reason')} />
@@ -7115,7 +7115,7 @@ function AdvanceModal({ data, onClose }: { data: ReturnType<typeof usePhaseData>
           </select>
         </SelectField>
         <TextField label="Monto" error={form.formState.errors.amount?.message}>
-          <input type="number" min={0} step="0.01" {...form.register('amount')} />
+          <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('amount')} />
         </TextField>
         <TextField label="Motivo" error={form.formState.errors.reason?.message}>
           <textarea rows={3} placeholder="Ej. Adelanto semanal" {...form.register('reason')} />
@@ -7409,10 +7409,10 @@ function EmployeeEditModal({
               </select>
             </SelectField>
             <TextField label="Sueldo base/sem" error={form.formState.errors.baseWeeklySalary?.message}>
-              <input type="number" min={0} step="0.01" {...form.register('baseWeeklySalary')} />
+              <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('baseWeeklySalary')} />
             </TextField>
             <TextField label="$ por carro" error={form.formState.errors.commissionRate?.message}>
-              <input type="number" min={0} step="0.01" {...form.register('commissionRate')} />
+              <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('commissionRate')} />
             </TextField>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
@@ -7424,7 +7424,7 @@ function EmployeeEditModal({
               </select>
             </SelectField>
             <TextField label="$ por carro fuera de turno" error={form.formState.errors.outOfShiftCommissionRate?.message}>
-              <input type="number" min={0} step="0.01" {...form.register('outOfShiftCommissionRate')} />
+              <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('outOfShiftCommissionRate')} />
             </TextField>
           </div>
           {watchedPayrollType === 'SALARY' && (
@@ -7432,10 +7432,10 @@ function EmployeeEditModal({
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reglas de sueldo</p>
               <div className="grid gap-3 md:grid-cols-2">
                 <TextField label="Premio por dia de descanso" error={form.formState.errors.restDayPremium?.message}>
-                  <input type="number" min={0} step="0.01" {...form.register('restDayPremium')} />
+                  <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('restDayPremium')} />
                 </TextField>
                 <TextField label="Penalizacion fija por falta" error={form.formState.errors.absenceDayPenalty?.message}>
-                  <input type="number" min={0} step="0.01" {...form.register('absenceDayPenalty')} />
+                  <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('absenceDayPenalty')} />
                 </TextField>
               </div>
               <p className="mt-2 text-xs text-gray-500">
