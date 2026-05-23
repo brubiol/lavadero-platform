@@ -14,7 +14,9 @@ public final class VehicleSizeDtos {
     public record CreateVehicleSizeRequest(
             @NotBlank @Size(max = 40) @Pattern(regexp = "^[A-Z0-9_]+$") String code,
             @NotBlank @Size(max = 120) String name,
-            @Min(0) Integer sortOrder) {
+            @Min(0) Integer sortOrder,
+            @Pattern(regexp = "^(AUTO|MOTO|RAZR|PERSONAL)$",
+                    message = "category must be AUTO, MOTO, RAZR, or PERSONAL") String category) {
     }
 
     public record UpdateVehicleSizeRequest(

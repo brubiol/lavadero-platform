@@ -26,7 +26,8 @@ public class VehicleSizeService {
         if (vehicleSizes.existsByCode(request.code())) {
             throw new IllegalArgumentException("Vehicle size code already exists");
         }
-        return vehicleSizes.save(new VehicleSize(request.code(), request.name(), request.sortOrder()));
+        return vehicleSizes.save(new VehicleSize(request.code(), request.name(), request.sortOrder(),
+                request.category()));
     }
 
     @Transactional(readOnly = true)

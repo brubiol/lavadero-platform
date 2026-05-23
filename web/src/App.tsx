@@ -617,7 +617,7 @@ const ticketSchema = z.object({
   businessDayId: z.coerce.number().positive('Abre un dia de trabajo primero'),
   shiftId: z.coerce.number().positive('Selecciona un turno abierto'),
   serviceTypeId: z.coerce.number().positive('Selecciona un servicio'),
-  vehicleSizeId: z.coerce.number().positive('Selecciona un tamano'),
+  vehicleSizeId: z.coerce.number().positive('Selecciona un tamaño'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
   vehicleDescription: z.string().max(160, 'Maximo 160 caracteres').optional(),
   notes: z.string().max(500, 'Maximo 500 caracteres').optional(),
@@ -668,13 +668,14 @@ const vehicleSizeSchema = z.object({
   code: codeSchema,
   name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
   sortOrder: z.coerce.number().int('Debe ser numero entero').min(0, 'Minimo 0'),
+  category: z.enum(['AUTO', 'MOTO', 'RAZR', 'PERSONAL']).default('AUTO'),
 })
 
 type VehicleSizeFormValues = z.infer<typeof vehicleSizeSchema>
 
 const servicePriceSchema = z.object({
   serviceTypeId: z.coerce.number().positive('Selecciona servicio'),
-  vehicleSizeId: z.coerce.number().positive('Selecciona tamano'),
+  vehicleSizeId: z.coerce.number().positive('Selecciona tamaño'),
   amount: z.coerce.number().positive('El precio debe ser mayor que 0'),
   effectiveFrom: z.string().min(1, 'Selecciona fecha'),
 })
@@ -2933,7 +2934,7 @@ function TicketWorkspace({
                       ))}
                     </select>
                   </SelectField>
-                  <SelectField label="Tamaño de vehículo" error={form.formState.errors.vehicleSizeId?.message}>
+                  <SelectField label="Vehículo" error={form.formState.errors.vehicleSizeId?.message}>
                     <select {...form.register('vehicleSizeId')}>
                       <option value={0}>Selecciona vehículo</option>
                       {(() => {
@@ -3170,7 +3171,7 @@ function TicketWorkspace({
                 </div>
 
                 {/* Cargo extra (exceso de lodo, vehiculo extra sucio, etc.) */}
-                <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-[180px_1fr]">
                   <TextField label="Cargo extra ($)" error={form.formState.errors.surchargeAmount?.message}>
                     <input
                       type="number"
@@ -3179,22 +3180,27 @@ function TicketWorkspace({
                       placeholder="0"
                       disabled={watched.courtesy}
                       data-testid="ticket-surcharge-amount"
+                      className={watched.courtesy ? 'opacity-60' : undefined}
                       {...form.register('surchargeAmount')}
                     />
                   </TextField>
                   <TextField label="Motivo del cargo" error={form.formState.errors.surchargeReason?.message}>
                     <input
                       type="text"
-                      placeholder="Ej. Lleno de lodo, mascotas, vomito..."
+                      placeholder={Number(watched.surchargeAmount) > 0
+                        ? 'Ej. Lleno de lodo, mascotas, vómito...'
+                        : 'Ingresa primero el monto'}
                       maxLength={120}
                       disabled={watched.courtesy || !(Number(watched.surchargeAmount) > 0)}
+                      className={watched.courtesy || !(Number(watched.surchargeAmount) > 0)
+                        ? 'opacity-60' : undefined}
                       {...form.register('surchargeReason')}
                     />
                   </TextField>
                 </div>
                 {Number(watched.surchargeAmount) > 0 && !watched.courtesy && (
-                  <p className="-mt-2 text-xs font-medium text-amber-700">
-                    Se sumara {money(Number(watched.surchargeAmount), 'MXN')} al precio del servicio.
+                  <p className="text-xs font-medium text-amber-700">
+                    Se sumará {money(Number(watched.surchargeAmount), 'MXN')} al precio del servicio.
                   </p>
                 )}
 
@@ -3352,6 +3358,19 @@ function TicketWorkspace({
                   {watched.courtesy ? 'N/A' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Depósito' : 'Efectivo'}
                 </span>
               </div>
+              {!watched.courtesy && Number(watched.surchargeAmount) > 0 && (
+                <div className="flex items-start justify-between gap-3 py-2.5">
+                  <span className="min-w-0 text-ink-400">
+                    Cargo extra
+                    {watched.surchargeReason?.trim() && (
+                      <span className="block text-[11px] text-ink-300">· {watched.surchargeReason.trim()}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 font-semibold text-amber-600">
+                    +{money(Number(watched.surchargeAmount), 'MXN')}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Submit */}
@@ -3434,7 +3453,7 @@ function CatalogsScreen() {
   })
   const sizeForm = useForm<VehicleSizeFormValues>({
     resolver: zodResolver(vehicleSizeSchema) as Resolver<VehicleSizeFormValues>,
-    defaultValues: { code: '', name: '', sortOrder: 0 },
+    defaultValues: { code: '', name: '', sortOrder: 0, category: 'AUTO' },
   })
   const priceForm = useForm<ServicePriceFormValues>({
     resolver: zodResolver(servicePriceSchema) as Resolver<ServicePriceFormValues>,
@@ -3528,9 +3547,9 @@ function CatalogsScreen() {
       }),
     }),
     onSuccess: async () => {
-      sizeForm.reset({ code: '', name: '', sortOrder: 0 })
+      sizeForm.reset({ code: '', name: '', sortOrder: 0, category: 'AUTO' })
       await queryClient.invalidateQueries({ queryKey: ['vehicle-sizes'] })
-      showToast('Tamano guardado')
+      showToast('Tamaño guardado')
     },
   })
 
@@ -3691,14 +3710,22 @@ function CatalogsScreen() {
             />
           </Panel>
 
-          <Panel title="Tamanos de vehiculo">
-            <form className="grid gap-3 md:grid-cols-[140px_1fr_120px_auto]" onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}>
-              <TextField label="Codigo" error={sizeForm.formState.errors.code?.message}>
+          <Panel title="Tamaños de vehículo">
+            <form className="grid gap-3 md:grid-cols-[120px_1fr_160px_90px_auto]" onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}>
+              <TextField label="Código" error={sizeForm.formState.errors.code?.message}>
                 <input placeholder="CHICO" {...sizeForm.register('code')} />
               </TextField>
               <TextField label="Nombre" error={sizeForm.formState.errors.name?.message}>
                 <input placeholder="Chico" {...sizeForm.register('name')} />
               </TextField>
+              <SelectField label="Categoría" error={sizeForm.formState.errors.category?.message}>
+                <select {...sizeForm.register('category')}>
+                  <option value="AUTO">Autos y camionetas</option>
+                  <option value="MOTO">Motos</option>
+                  <option value="RAZR">RAZR</option>
+                  <option value="PERSONAL">Cam. de personal</option>
+                </select>
+              </SelectField>
               <TextField label="Orden" error={sizeForm.formState.errors.sortOrder?.message}>
                 <input type="number" min={0} {...sizeForm.register('sortOrder')} />
               </TextField>
@@ -3706,12 +3733,15 @@ function CatalogsScreen() {
             </form>
             {createSize.error && <ErrorMessage message={createSize.error.message} />}
             <SimpleList
-              empty="No hay tamanos."
-              rows={sizes.map((size) => ({
-                id: size.id,
-                title: size.name,
-                detail: `${size.code} / orden ${size.sortOrder}`,
-              }))}
+              empty="No hay tamaños."
+              rows={sizes.map((size) => {
+                const catLabel = ({ AUTO: 'Auto', MOTO: 'Moto', RAZR: 'RAZR', PERSONAL: 'Personal' } as Record<string, string>)[size.category ?? 'AUTO'] ?? 'Auto'
+                return {
+                  id: size.id,
+                  title: size.name,
+                  detail: `${size.code} · ${catLabel} · orden ${size.sortOrder}`,
+                }
+              })}
             />
           </Panel>
 
@@ -3725,9 +3755,9 @@ function CatalogsScreen() {
                   ))}
                 </select>
               </SelectField>
-              <SelectField label="Tamano" error={priceForm.formState.errors.vehicleSizeId?.message}>
+              <SelectField label="Tamaño" error={priceForm.formState.errors.vehicleSizeId?.message}>
                 <select {...priceForm.register('vehicleSizeId')}>
-                  <option value={0}>Tamano</option>
+                  <option value={0}>Tamaño</option>
                   {sizes.map((size) => (
                     <option key={size.id} value={size.id}>{size.name}</option>
                   ))}
@@ -3749,7 +3779,7 @@ function CatalogsScreen() {
                 <thead className="">
                   <tr>
                     <th>Servicio</th>
-                    <th>Tamano</th>
+                    <th>Tamaño</th>
                     <th className="r">Precio</th>
                     <th>Desde</th>
                   </tr>
@@ -6449,7 +6479,7 @@ function PrepaidPackageScreen() {
                     ))}
                   </select>
                 </SelectField>
-                <SelectField label="Tamano">
+                <SelectField label="Tamaño">
                   <select value={calcSizeId} onChange={(e) => setCalcSizeId(Number(e.target.value))}>
                     <option value={0}>Selecciona...</option>
                     {vehicleSizes.filter((s) => s.active).map((s) => (
