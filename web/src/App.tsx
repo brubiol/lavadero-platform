@@ -3083,9 +3083,9 @@ function ExpenseLedgerScreen() {
           <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Gastos</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button data-testid="gastos-new-expense" className="tl-btn tl-btn-primary" onClick={() => setModal('expense')}>+ Gasto</button>
-          <button data-testid="gastos-new-withdrawal" className="tl-btn tl-btn-secondary" onClick={() => setModal('withdrawal')}>+ Retiro</button>
-          <button data-testid="gastos-new-advance" className="tl-btn tl-btn-secondary" onClick={() => setModal('advance')}>+ Préstamo</button>
+          <button data-testid="gastos-new-expense" className="tl-btn tl-btn-primary" onClick={() => { setTab('expenses'); setModal('expense') }}>+ Gasto</button>
+          <button data-testid="gastos-new-withdrawal" className="tl-btn tl-btn-secondary" onClick={() => { setTab('withdrawals'); setModal('withdrawal') }}>+ Retiro</button>
+          <button data-testid="gastos-new-advance" className="tl-btn tl-btn-secondary" onClick={() => { setTab('advances'); setModal('advance') }}>+ Préstamo</button>
         </div>
       </div>
 
