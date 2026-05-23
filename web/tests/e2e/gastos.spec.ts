@@ -65,6 +65,6 @@ test('category filter narrows the gastos table', async ({ page }) => {
   await page.getByTestId('nav-gastos').click()
   await expect(page.locator('h2').filter({ hasText: 'Gastos' })).toBeVisible({ timeout: 8_000 })
 
-  await page.getByLabel('Categoria').selectOption('CFE')
+  await page.getByLabel('Categoría').selectOption('CFE')
   await expect(page.locator('td').filter({ hasText: 'Material' })).toHaveCount(0, { timeout: 5_000 })
 })
