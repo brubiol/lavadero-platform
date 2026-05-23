@@ -1320,7 +1320,10 @@ function Dashboard() {
             <tbody className="">
               {(data?.recentTickets ?? []).map((ticket) => (
                 <tr key={ticket.id}>
-                  <td className="font-semibold">{ticket.notaNumber}</td>
+                  <td className="font-semibold">
+                    {ticket.internalRef || ticket.notaNumber}
+                    <p className="mt-0.5 text-[11px] font-normal text-ink-400">{ticket.notaNumber}</p>
+                  </td>
                   <td>
                     <span>{ticket.vehicleDescription || '-'}</span>
                     {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
