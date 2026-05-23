@@ -5,11 +5,13 @@ import { useForm, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Frame, MobileNav, MobileTopbar, Sidebar, Topbar, type NavRole } from './components/layout'
+import { IAudit, ICash, IPayroll, IReports } from './components/icons'
 import {
   Avatars,
   Banner,
   Button,
   EcoBadge,
+  EmptyState,
   Field,
   Metric,
   PageHead,
@@ -17,6 +19,7 @@ import {
   Pill,
   Plate,
   Sparkline,
+  StatStrip,
   StatusPill,
   SummaryRow,
   type MetricVariant,
@@ -1683,22 +1686,24 @@ function AiScreen() {
   const alerts = (aiInsights.data ?? []).filter((insight) => insight.featureType === 'ANOMALY_ALERT')
   const historyRows = history.data ?? []
 
+  const briefDetail = aiBrief.data ? 'Disponible' : aiBrief.isLoading ? 'Generando...' : 'Pendiente'
+  const briefTone = aiBrief.data ? 'info' : aiBrief.isLoading ? 'purple' : 'warn'
+  const alertsTone = alerts.length > 0 ? 'warn' : 'good'
+  const alertsDetail = alerts.length === 1 ? 'requiere revision' : 'requieren revision'
+
   return (
     <section className="space-y-5">
-      <div className="tl-page-head">
-        <div className="tl-page-title">
-          <h1>AI Command Center</h1>
-          <p>Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario.</p>
-        </div>
-        <div className="tl-page-head-actions">
-          <Pill tone="purple" dot={false}>Asesor operativo</Pill>
-        </div>
-      </div>
+      <PageHead
+        tone="hero"
+        title="AI Command Center"
+        subtitle="Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario."
+        actions={<Pill tone="purple" dot={false}>Asesor operativo</Pill>}
+      />
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <AiStatusCard label="Brief seleccionado" value={date} detail={aiBrief.data ? 'Disponible' : aiBrief.isLoading ? 'Generando...' : 'Pendiente'} tone="sky" />
-        <AiStatusCard label="Alertas nuevas" value={String(alerts.length)} detail={alerts.length === 1 ? 'requiere revision' : 'requieren revision'} tone={alerts.length > 0 ? 'amber' : 'emerald'} />
-        <AiStatusCard label="Rango analista" value={`${from} / ${to}`} detail={`${historyRows.length} insights en historial`} tone="slate" />
+      <div className="tl-stagger grid gap-3 md:grid-cols-3">
+        <StatStrip tone={briefTone} label="Brief seleccionado" value={date} sub={briefDetail} />
+        <StatStrip tone={alertsTone} label="Alertas nuevas" value={String(alerts.length)} sub={alertsDetail} pulse={alerts.length > 0} />
+        <StatStrip tone="purple" label="Rango analista" value={`${from} / ${to}`} sub={`${historyRows.length} insights en historial`} />
       </div>
 
       <AiBriefSection
@@ -3148,20 +3153,53 @@ function ShiftCloseScreen() {
 
   const watchedCount = cashForm.watch()
   const localCountPreview = calculateCashCount(watchedCount)
+  const selectedShift = shifts.find((s) => s.id === Number(effectiveShiftId))
 
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Corte de turno</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Conteo de efectivo, revision de salidas y cierre del turno.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            Cierre de caja · {data.currentBusinessDay?.businessDate ?? 'sin día'}
+          </p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Corte de turno</h2>
         </div>
-        <SelectField label="Turno">
-          <select data-testid="corte-shift-select" value={effectiveShiftId} onChange={(event) => {
-            setSelectedShiftId(Number(event.target.value))
-            setCashCount(null)
-          }}>
+        <div className="flex items-center gap-2 rounded-xl border border-border-soft bg-white p-1.5 shadow-xs">
+          {shifts.length === 0 ? (
+            <span className="px-3 text-[12.5px] text-ink-400">Sin turnos</span>
+          ) : (
+            shifts.map((shift) => {
+              const isSelected = shift.id === Number(effectiveShiftId)
+              const isOpen = shift.status === 'OPEN'
+              return (
+                <button
+                  key={shift.id}
+                  type="button"
+                  data-testid={isSelected ? 'corte-shift-select-active' : undefined}
+                  onClick={() => { setSelectedShiftId(shift.id); setCashCount(null) }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                    isSelected
+                      ? 'bg-ink-900 text-white shadow-sm'
+                      : 'text-ink-600 hover:bg-ink-100'
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${isOpen ? 'bg-emerald-400' : 'bg-ink-300'}`} />
+                  {shift.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}
+                </button>
+              )
+            })
+          )}
+          {/* Hidden select preserves the existing E2E selector */}
+          <select
+            data-testid="corte-shift-select"
+            value={effectiveShiftId}
+            onChange={(event) => { setSelectedShiftId(Number(event.target.value)); setCashCount(null) }}
+            aria-label="Turno"
+            className="sr-only"
+          >
             <option value={0}>Selecciona turno</option>
             {shifts.map((shift) => (
               <option key={shift.id} value={shift.id}>
@@ -3169,7 +3207,7 @@ function ShiftCloseScreen() {
               </option>
             ))}
           </select>
-        </SelectField>
+        </div>
       </div>
 
       {!data.currentBusinessDay && (
@@ -3180,118 +3218,267 @@ function ShiftCloseScreen() {
       )}
       {closeSummary.error && <ErrorMessage message={closeSummary.error.message} />}
 
+      {/* ─── Hero variance comparison ─────────────────────────────── */}
+      {selectedShift && summary && (
+        <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-ink-900 via-ink-800 to-ink-900 px-6 py-7 sm:px-9 sm:py-7 shadow-[0_24px_48px_-20px_rgba(15,23,42,0.45)]">
+          {/* dot grid texture */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
+            style={{
+              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
+              backgroundSize: '22px 22px',
+            }}
+          />
+          <div className={`pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl ${
+            variance == null ? 'bg-violet-500/20' : variance >= 0 ? 'bg-emerald-500/25' : 'bg-rose-500/25'
+          }`} />
+          <div className="pointer-events-none absolute right-6 top-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">
+            {summary.closed ? 'Turno cerrado' : 'Conteo activo'}
+          </div>
+
+          <div className="relative grid grid-cols-3 items-end gap-4 sm:gap-8">
+            <div>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Esperado</p>
+              <p className="font-display mt-2 text-[36px] font-black leading-none tracking-[-0.03em] text-white tabular-nums sm:text-[44px]">
+                {money(summary.expectedCash, 'MXN')}
+              </p>
+            </div>
+            <div className="text-center text-white/30 text-[18px] sm:text-[22px] font-light">vs</div>
+            <div className="text-right">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Contado</p>
+              <p className="font-display mt-2 text-[36px] font-black leading-none tracking-[-0.03em] text-white tabular-nums sm:text-[44px]">
+                {counted == null ? '—' : money(counted, 'MXN')}
+              </p>
+            </div>
+          </div>
+
+          {variance != null && (
+            <div className="relative mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5">
+              <div>
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/45">Diferencia</p>
+                <p className={`font-display mt-1 text-[24px] font-black leading-none tabular-nums ${
+                  variance >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                }`}>
+                  {variance >= 0 ? '+' : ''}{money(variance, 'MXN')}
+                </p>
+              </div>
+              <span className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold ${
+                variance > 0
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : variance < 0
+                  ? 'bg-rose-500/15 text-rose-300'
+                  : 'bg-white/10 text-white/70'
+              }`}>
+                <span className={`h-2 w-2 rounded-full ${
+                  variance > 0 ? 'bg-emerald-400' : variance < 0 ? 'bg-rose-400' : 'bg-white/40'
+                }`} />
+                {variance > 0 ? 'Sobrante' : variance < 0 ? 'Faltante' : 'Caja cuadrada'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         <div className="space-y-5">
-          <Panel title="1. Conteo de efectivo">
-            <form className="space-y-4" onSubmit={cashForm.handleSubmit((values) => countMutation.mutate(values))}>
-              <div className="grid gap-3 md:grid-cols-4">
-                <CashInput label="$1000" name="bills1000" form={cashForm} />
-                <CashInput label="$500" name="bills500" form={cashForm} />
-                <CashInput label="$200" name="bills200" form={cashForm} />
-                <CashInput label="$100" name="bills100" form={cashForm} />
-                <CashInput label="$50" name="bills50" form={cashForm} />
-                <CashInput label="$20" name="bills20" form={cashForm} />
-                <CashInput label="$10" name="coins10" form={cashForm} />
-                <CashInput label="$5" name="coins5" form={cashForm} />
-                <CashInput label="$2" name="coins2" form={cashForm} />
-                <CashInput label="$1" name="coins1" form={cashForm} />
-                <CashInput label="$0.50" name="coins05" form={cashForm} />
+          {/* ── 1. Conteo de efectivo ─────────────────────────────── */}
+          <div className="tl-panel overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm bg-gradient-to-b from-violet-500 to-violet-700">1</span>
+                <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Conteo de efectivo</h3>
               </div>
-              <TextField label="Morralla total">
-                <input type="number" min={0} step="0.01" {...cashForm.register('morrallaTotal')} />
-              </TextField>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3 text-sm">
-                <span className="text-gray-500">Total contado preview</span>
-                <strong className="text-lg">{money(localCountPreview, 'MXN')}</strong>
+              <span className="font-mono text-[13px] font-bold tabular-nums text-ink-900">
+                {money(localCountPreview, 'MXN')}
+              </span>
+            </div>
+            <div className="p-5">
+              <form className="space-y-5" onSubmit={cashForm.handleSubmit((values) => countMutation.mutate(values))}>
+                {/* Billetes */}
+                <div>
+                  <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Billetes</p>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <CashInput label="$1000" name="bills1000" form={cashForm} />
+                    <CashInput label="$500" name="bills500" form={cashForm} />
+                    <CashInput label="$200" name="bills200" form={cashForm} />
+                    <CashInput label="$100" name="bills100" form={cashForm} />
+                    <CashInput label="$50" name="bills50" form={cashForm} />
+                    <CashInput label="$20" name="bills20" form={cashForm} />
+                  </div>
+                </div>
+                {/* Monedas */}
+                <div className="border-t border-border-soft pt-5">
+                  <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Monedas</p>
+                  <div className="grid gap-3 md:grid-cols-5">
+                    <CashInput label="$10" name="coins10" form={cashForm} />
+                    <CashInput label="$5" name="coins5" form={cashForm} />
+                    <CashInput label="$2" name="coins2" form={cashForm} />
+                    <CashInput label="$1" name="coins1" form={cashForm} />
+                    <CashInput label="$0.50" name="coins05" form={cashForm} />
+                  </div>
+                </div>
+                {/* Morralla */}
+                <div className="border-t border-border-soft pt-5">
+                  <TextField label="Morralla total">
+                    <input type="number" min={0} step="0.01" {...cashForm.register('morrallaTotal')} />
+                  </TextField>
+                </div>
+                {/* Total preview */}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50/80 to-white p-4">
+                  <div>
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-violet-600">Total contado</p>
+                    <p className="font-display text-[24px] font-black leading-none tracking-[-0.02em] text-ink-900 tabular-nums mt-1">
+                      {money(localCountPreview, 'MXN')}
+                    </p>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
+                    data-testid="corte-save-count"
+                    className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
+                  >
+                    {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
+                  </button>
+                </div>
+                {countMutation.error && <ErrorMessage message={countMutation.error.message} />}
+              </form>
+            </div>
+          </div>
+
+          {/* ── 2. Movimientos del turno ──────────────────────────── */}
+          <div className="tl-panel overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm bg-gradient-to-b from-emerald-400 to-emerald-600">2</span>
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Movimientos del turno</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-emerald-700">Entra</p>
+                  <p className="font-display mt-1 text-[22px] font-bold leading-none tabular-nums text-ink-900">
+                    {summary ? money(summary.ticketRevenue, 'MXN') : '…'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-ink-500">Tickets</p>
+                </div>
+                <div className="rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-rose-700">Sale</p>
+                  <p className="font-display mt-1 text-[22px] font-bold leading-none tabular-nums text-ink-900">
+                    {summary ? money(summary.expensesTotal, 'MXN') : '…'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-ink-500">Gastos</p>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-amber-700">Sale</p>
+                  <p className="font-display mt-1 text-[22px] font-bold leading-none tabular-nums text-ink-900">
+                    {summary ? money(summary.withdrawalsTotal, 'MXN') : '…'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-ink-500">Retiros</p>
+                </div>
               </div>
-              {countMutation.error && <ErrorMessage message={countMutation.error.message} />}
-              <button
-                type="submit"
-                disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
-                data-testid="corte-save-count"
-                className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
-              >
-                {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
-              </button>
-            </form>
-          </Panel>
+              <div className="rounded-xl border border-border-soft bg-ink-50/40 p-4 font-mono text-[12.5px]">
+                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400 font-sans">Desglose por método</p>
+                <SummaryRow k="Efectivo (tickets)" v={summary ? money(summary.cashRevenue, 'MXN') : '…'} />
+                <SummaryRow k="Tarjeta" v={summary ? money(summary.cardRevenue, 'MXN') : '…'} />
+                <SummaryRow k="Depósito" v={summary ? money(summary.transferRevenue, 'MXN') : '…'} />
+                {summary?.prepaidPackagesTotal != null && summary.prepaidPackagesTotal > 0 && (
+                  <SummaryRow k="Paquetes prepagados" v={money(summary.prepaidPackagesTotal, 'MXN')} />
+                )}
+                {summary?.inventorySalesTotal != null && summary.inventorySalesTotal > 0 && (
+                  <SummaryRow k="Miscelánea (ventas)" v={money(summary.inventorySalesTotal, 'MXN')} />
+                )}
+              </div>
+              <p className="text-[11.5px] text-ink-400">
+                Efectivo esperado = efectivo de tickets + paquetes + miscelánea − gastos − retiros.
+              </p>
+            </div>
+          </div>
 
-          <Panel title="2. Gastos y retiros del turno">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Metric label="Ingresos tickets" value={summary ? money(summary.ticketRevenue, 'MXN') : '...'} />
-              <Metric label="Gastos" value={summary ? money(summary.expensesTotal, 'MXN') : '...'} />
-              <Metric label="Retiros" value={summary ? money(summary.withdrawalsTotal, 'MXN') : '...'} />
-            </div>
-            <div className="mt-3">
-              <SummaryRow k="Efectivo (tickets)" v={summary ? money(summary.cashRevenue, 'MXN') : '…'} />
-              <SummaryRow k="Tarjeta" v={summary ? money(summary.cardRevenue, 'MXN') : '…'} />
-              <SummaryRow k="Deposito" v={summary ? money(summary.transferRevenue, 'MXN') : '…'} />
-              {summary?.prepaidPackagesTotal != null && summary.prepaidPackagesTotal > 0 && (
-                <SummaryRow k="Paquetes prepagados" v={money(summary.prepaidPackagesTotal, 'MXN')} />
-              )}
-              {summary?.inventorySalesTotal != null && summary.inventorySalesTotal > 0 && (
-                <SummaryRow k="Miscelanea (ventas)" v={money(summary.inventorySalesTotal, 'MXN')} />
-              )}
-            </div>
-            <p className="mt-3 text-sm text-gray-500">
-              Efectivo esperado = efectivo de tickets + paquetes + miscelanea - gastos - retiros.
-            </p>
-          </Panel>
-
-          <Panel title="3. Revision del corte">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Metric label="Esperado" value={summary ? money(summary.expectedCash, 'MXN') : '...'} />
-              <Metric label="Contado" value={counted == null ? 'Sin conteo' : money(counted, 'MXN')} />
-              <Metric label="Diferencia" value={variance == null ? 'Pendiente' : money(variance, 'MXN')} />
-            </div>
-            {isShort && (
-              <Banner tone="bad" title="Hay faltante." text="El sistema exige motivo antes de cerrar el turno." />
-            )}
-            {variance != null && variance > 0 && (
-              <Banner tone="good" title="Hay sobrante." text="Puedes cerrar sin motivo obligatorio." />
-            )}
-          </Panel>
+          {/* ── 3. Estado del corte ───────────────────────────────── */}
+          {isShort && (
+            <Banner tone="bad" title="Hay faltante." text="El sistema exige motivo antes de cerrar el turno." />
+          )}
+          {variance != null && variance > 0 && (
+            <Banner tone="good" title="Hay sobrante." text="Puedes cerrar sin motivo obligatorio." />
+          )}
         </div>
 
         <aside>
-          <Panel title="4. Cerrar turno">
-            <form className="space-y-4" onSubmit={closeForm.handleSubmit((values) => closeMutation.mutate(values))}>
-              <SummaryRow label="Estado" value={summary?.closed ? 'Cerrado' : summary?.shiftStatus ?? 'Pendiente'} />
-              <SummaryRow label="Conteo guardado" value={cashCount || summary?.cashCount ? 'Si' : 'No'} />
-              <SummaryRow label="Diferencia" value={variance == null ? 'Pendiente' : money(variance, 'MXN')} />
-              {isShort && (
-                <TextField label="Motivo de faltante" error={closeForm.formState.errors.closingReason?.message}>
-                  <textarea rows={4} placeholder="Ej. Falto cambio en caja" {...closeForm.register('closingReason')} />
-                </TextField>
-              )}
-              {closeMutation.error && <ErrorMessage message={closeMutation.error.message} />}
-              {reopenMutation.error && <ErrorMessage message={reopenMutation.error.message} />}
-              <Button
-                kind="primary"
-                size="lg"
-                type="submit"
-                block
-                disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
-                testId="corte-close-shift"
-              >
-                {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? 'Turno cerrado' : 'Cerrar turno'}
-              </Button>
-              {hasRole('DUENO') && summary?.closed && (
+          <div className="sticky top-[72px] tl-panel overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm bg-gradient-to-b from-amber-400 to-amber-600">3</span>
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Cerrar turno</h3>
+            </div>
+            <div className="p-5">
+              <form className="space-y-4" onSubmit={closeForm.handleSubmit((values) => closeMutation.mutate(values))}>
+                {/* Status rows */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11.5px] text-ink-500">Estado</span>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                      summary?.closed
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${summary?.closed ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      {summary?.closed ? 'Cerrado' : (summary?.shiftStatus ?? 'Pendiente')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11.5px] text-ink-500">Conteo guardado</span>
+                    <span className={`text-[12px] font-semibold ${cashCount || summary?.cashCount ? 'text-emerald-700' : 'text-ink-400'}`}>
+                      {cashCount || summary?.cashCount ? '✓ Sí' : '— Pendiente'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11.5px] text-ink-500">Diferencia</span>
+                    <span className={`font-mono text-[12.5px] font-bold tabular-nums ${
+                      variance == null
+                        ? 'text-ink-400'
+                        : variance < 0
+                        ? 'text-rose-700'
+                        : variance > 0
+                        ? 'text-emerald-700'
+                        : 'text-ink-800'
+                    }`}>
+                      {variance == null ? '—' : (variance >= 0 ? '+' : '') + money(variance, 'MXN')}
+                    </span>
+                  </div>
+                </div>
+
+                {isShort && (
+                  <TextField label="Motivo de faltante" error={closeForm.formState.errors.closingReason?.message}>
+                    <textarea rows={3} placeholder="Ej. Faltó cambio en caja" {...closeForm.register('closingReason')} />
+                  </TextField>
+                )}
+                {closeMutation.error && <ErrorMessage message={closeMutation.error.message} />}
+                {reopenMutation.error && <ErrorMessage message={reopenMutation.error.message} />}
                 <Button
-                  kind="secondary"
+                  kind="primary"
                   size="lg"
+                  type="submit"
                   block
-                  disabled={reopenMutation.isPending}
-                  onClick={() => {
-                    const reason = window.prompt('Motivo para reabrir el turno cerrado')
-                    if (reason?.trim()) reopenMutation.mutate(reason.trim())
-                  }}
+                  disabled={closeMutation.isPending || summary?.closed || !(cashCount || summary?.cashCount)}
+                  testId="corte-close-shift"
                 >
-                  {reopenMutation.isPending ? 'Reabriendo...' : 'Reabrir turno'}
+                  {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? '✓ Turno cerrado' : 'Cerrar turno'}
                 </Button>
-              )}
-            </form>
-          </Panel>
+                {hasRole('DUENO') && summary?.closed && (
+                  <Button
+                    kind="secondary"
+                    size="lg"
+                    block
+                    disabled={reopenMutation.isPending}
+                    onClick={() => {
+                      const reason = window.prompt('Motivo para reabrir el turno cerrado')
+                      if (reason?.trim()) reopenMutation.mutate(reason.trim())
+                    }}
+                  >
+                    {reopenMutation.isPending ? 'Reabriendo...' : 'Reabrir turno'}
+                  </Button>
+                )}
+              </form>
+            </div>
+          </div>
         </aside>
       </div>
     </section>
@@ -3326,10 +3513,6 @@ function AuditActionPill({ action }: { action: string }) {
   )
 }
 
-function actorInitials(username: string): string {
-  return username.slice(0, 2).toUpperCase()
-}
-
 function AuditScreen() {
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
@@ -3362,19 +3545,20 @@ function AuditScreen() {
 
   return (
     <section className="space-y-5">
-      <div>
-        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Auditoria</h2>
-        <p className="text-[13.5px] text-ink-500 mt-0.5">Cambios importantes de caja, tickets, gastos, nomina y correcciones.</p>
-      </div>
+      <PageHead
+        tone="hero"
+        title="Auditoria"
+        subtitle="Cambios importantes de caja, tickets, gastos, nomina y correcciones."
+      />
 
       {pendingFlagged.length > 0 && (
-        <Panel title={`Cambios irregulares por revisar (${pendingFlagged.length})`}>
-          <p className="mb-3 text-[13px] text-ink-500">
+        <Panel tone="warn" title={`Cambios irregulares por revisar (${pendingFlagged.length})`}>
+          <p className="mb-3 text-[13px] text-ink-600">
             Cambios grandes de nomina o de pago del personal. Revisa cada uno y marcalo como revisado.
           </p>
           <div className="space-y-2">
             {pendingFlagged.map((event) => (
-              <div key={event.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <div key={event.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-amber-900">{event.reason || event.action}</p>
                   {event.details && <p className="text-xs text-amber-700">{event.details}</p>}
@@ -3382,14 +3566,14 @@ function AuditScreen() {
                     {event.actorUsername} · {formatDateTime(event.occurredAt)}
                   </p>
                 </div>
-                <button
-                  type="button"
+                <Button
+                  kind="primary"
+                  size="sm"
                   onClick={() => review.mutate(event.id)}
                   disabled={review.isPending}
-                  className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
                 >
                   Marcar revisado
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -3443,9 +3627,7 @@ function AuditScreen() {
                   <td className="whitespace-nowrap text-gray-500">{formatDateTime(event.occurredAt)}</td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">
-                        {actorInitials(event.actorUsername)}
-                      </span>
+                      <Avatars names={[event.actorUsername]} />
                       <span className="text-sm">{event.actorUsername}</span>
                     </div>
                   </td>
@@ -3457,7 +3639,14 @@ function AuditScreen() {
               ))}
               {!events.isLoading && (events.data ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin eventos para estos filtros.</td>
+                  <td colSpan={6}>
+                    <EmptyState
+                      icon={<IAudit size={20} />}
+                      title="Sin eventos para estos filtros"
+                      description="Cambia el rango o la entidad para ver mas registros."
+                      tone="info"
+                    />
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -3532,14 +3721,16 @@ function ReportsScreen() {
     }
   }
 
+  const resultValue = range ? Number(range.result) : null
+  const resultTone: MetricVariant = resultValue == null ? 'feature' : resultValue >= 0 ? 'feature' : 'danger'
+
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Reportes</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Resumen diario, mensual, corte de caja, lavadores y exportacion Excel.</p>
-        </div>
-      </div>
+      <PageHead
+        tone="hero"
+        title="Reportes"
+        subtitle="Resumen diario, mensual, corte de caja, lavadores y exportacion Excel."
+      />
 
       <Panel title="Rango">
         <div className="grid gap-3 md:grid-cols-[180px_180px_220px_auto]">
@@ -3569,13 +3760,13 @@ function ReportsScreen() {
         <ErrorMessage message={(daily.error || monthly.error || cashVariance.error || performance.error || preview.error)!.message} />
       )}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6" data-testid="reports-range-metrics">
-        <Metric label="Ingresos" value={range ? money(range.ticketRevenue, 'MXN') : '...'} />
-        <Metric label="Salidas" value={range ? money(range.expensesTotal, 'MXN') : '...'} />
-        <Metric label="Resultado" value={range ? money(range.result, 'MXN') : '...'} />
-        <Metric label="Carros" value={String(range?.carsWashed ?? '...')} />
+      <div className="tl-stagger grid gap-4 md:grid-cols-3 xl:grid-cols-6" data-testid="reports-range-metrics">
+        <Metric label="Ingresos" tone="good" value={range ? money(range.ticketRevenue, 'MXN') : '...'} />
+        <Metric label="Salidas" tone="bad" value={range ? money(range.expensesTotal, 'MXN') : '...'} />
+        <Metric label="Resultado" variant={resultTone} value={range ? money(range.result, 'MXN') : '...'} />
+        <Metric label="Carros" tone="info" value={String(range?.carsWashed ?? '...')} />
         <Metric label="Cortesias" value={String(range?.courtesyCount ?? '...')} />
-        <Metric label="Anulados" value={String(range?.voidedCount ?? '...')} />
+        <Metric label="Anulados" tone="warn" value={String(range?.voidedCount ?? '...')} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
@@ -3594,19 +3785,32 @@ function ReportsScreen() {
                   </tr>
                 </thead>
                 <tbody className="">
-                  {(range?.days ?? []).map((day) => (
-                    <tr key={day.date}>
-                      <td className="font-semibold">{day.date}</td>
-                      <td className="r">{day.carsWashed}</td>
-                      <td className="r">{money(day.ticketRevenue, 'MXN')}</td>
-                      <td className="r">{money(day.expensesTotal, 'MXN')}</td>
-                      <td className="r">{money(day.result, 'MXN')}</td>
-                      <td className="r">{day.cashVariance == null ? '-' : money(day.cashVariance, 'MXN')}</td>
-                    </tr>
-                  ))}
+                  {(range?.days ?? []).map((day) => {
+                    const dayResult = Number(day.result)
+                    const dayVar = day.cashVariance == null ? null : Number(day.cashVariance)
+                    return (
+                      <tr key={day.date}>
+                        <td className="font-semibold">{day.date}</td>
+                        <td className="r">{day.carsWashed}</td>
+                        <td className="r">{money(day.ticketRevenue, 'MXN')}</td>
+                        <td className="r">{money(day.expensesTotal, 'MXN')}</td>
+                        <td className={`r ${dayResult >= 0 ? 'tl-money-good' : 'tl-money-bad'}`}>{money(day.result, 'MXN')}</td>
+                        <td className={`r ${dayVar == null ? '' : dayVar >= 0 ? 'tl-money-good' : 'tl-money-bad'}`}>
+                          {dayVar == null ? '-' : money(day.cashVariance, 'MXN')}
+                        </td>
+                      </tr>
+                    )
+                  })}
                   {!daily.isLoading && (range?.days.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">No hay datos en este rango.</td>
+                      <td colSpan={6}>
+                        <EmptyState
+                          icon={<IReports size={20} />}
+                          title="Sin datos en este rango"
+                          description="Ajusta las fechas para ver el resumen diario."
+                          tone="purple"
+                        />
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -3636,7 +3840,14 @@ function ReportsScreen() {
                   ))}
                   {!performance.isLoading && (performance.data?.employees.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400">No hay lavadores con tickets en este rango.</td>
+                      <td colSpan={4}>
+                        <EmptyState
+                          icon={<IPayroll size={20} />}
+                          title="Sin lavadores con tickets"
+                          description="No se acreditaron tickets a ningun lavador en este rango."
+                          tone="info"
+                        />
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -3644,11 +3855,21 @@ function ReportsScreen() {
             </div>
           </Panel>
 
-          <Panel title="Varianza de caja">
-            <div className="grid gap-4 md:grid-cols-3" data-testid="reports-cash-variance">
-              <Metric label="Esperado" value={cashVariance.data ? money(cashVariance.data.expectedCash, 'MXN') : '...'} />
-              <Metric label="Contado" value={cashVariance.data ? money(cashVariance.data.totalCounted, 'MXN') : '...'} />
-              <Metric label="Diferencia" value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : '...'} />
+          <Panel tone="accent" title="Varianza de caja">
+            <div className="tl-stagger grid gap-4 md:grid-cols-3" data-testid="reports-cash-variance">
+              <Metric label="Esperado" tone="info" value={cashVariance.data ? money(cashVariance.data.expectedCash, 'MXN') : '...'} />
+              <Metric label="Contado" tone="info" value={cashVariance.data ? money(cashVariance.data.totalCounted, 'MXN') : '...'} />
+              <Metric
+                label="Diferencia"
+                tone={
+                  cashVariance.data == null
+                    ? 'default'
+                    : Number(cashVariance.data.variance) >= 0
+                      ? 'good'
+                      : 'bad'
+                }
+                value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : '...'}
+              />
             </div>
             <div className="overflow-hidden rounded-xl border border-gray-100">
               <table className="tl-tbl zebra">
@@ -3662,18 +3883,28 @@ function ReportsScreen() {
                   </tr>
                 </thead>
                 <tbody className="">
-                  {(cashVariance.data?.rows ?? []).map((row) => (
-                    <tr key={`${row.shiftId}-${row.date}`}>
-                      <td>{row.date}</td>
-                      <td>{row.shiftType}</td>
-                      <td className="r">{money(row.expectedCash, 'MXN')}</td>
-                      <td className="r">{money(row.totalCounted, 'MXN')}</td>
-                      <td className="r">{money(row.variance, 'MXN')}</td>
-                    </tr>
-                  ))}
+                  {(cashVariance.data?.rows ?? []).map((row) => {
+                    const rowVar = Number(row.variance)
+                    return (
+                      <tr key={`${row.shiftId}-${row.date}`}>
+                        <td>{row.date}</td>
+                        <td>{row.shiftType}</td>
+                        <td className="r">{money(row.expectedCash, 'MXN')}</td>
+                        <td className="r">{money(row.totalCounted, 'MXN')}</td>
+                        <td className={`r ${rowVar >= 0 ? 'tl-money-good' : 'tl-money-bad'}`}>{money(row.variance, 'MXN')}</td>
+                      </tr>
+                    )
+                  })}
                   {!cashVariance.isLoading && (cashVariance.data?.rows.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-gray-400">No hay cortes cerrados en este rango.</td>
+                      <td colSpan={5}>
+                        <EmptyState
+                          icon={<ICash size={20} />}
+                          title="Sin cortes cerrados"
+                          description="No hay cortes cerrados en este rango de fechas."
+                          tone="info"
+                        />
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -3684,20 +3915,20 @@ function ReportsScreen() {
 
         <aside className="space-y-5">
           <Panel title="Export preview">
-            <div className="space-y-3 text-sm">
-              <SummaryRow label="Tickets" value={String(preview.data?.ticketCount ?? '...')} />
-              <SummaryRow label="Ingresos" value={preview.data ? money(preview.data.ticketRevenue, 'MXN') : '...'} />
-              <SummaryRow label="Gastos" value={preview.data ? money(preview.data.expensesTotal, 'MXN') : '...'} />
-              <SummaryRow label="Retiros" value={preview.data ? money(preview.data.withdrawalsTotal, 'MXN') : '...'} />
-              <SummaryRow label="Prestamos" value={preview.data ? money(preview.data.advancesTotal, 'MXN') : '...'} />
-              <SummaryRow label="Cortes" value={String(preview.data?.shiftCloseCount ?? '...')} />
-              <SummaryRow label="Inventario" value={String(preview.data?.inventoryMovementCount ?? '...')} />
-              <SummaryRow label="Nomina" value={String(preview.data?.payrollPeriodCount ?? '...')} />
+            <div className="tl-stagger flex flex-col gap-2">
+              <StatStrip tone="info" label="Tickets" value={String(preview.data?.ticketCount ?? '...')} />
+              <StatStrip tone="good" label="Ingresos" value={preview.data ? money(preview.data.ticketRevenue, 'MXN') : '...'} />
+              <StatStrip tone="bad" label="Gastos" value={preview.data ? money(preview.data.expensesTotal, 'MXN') : '...'} />
+              <StatStrip tone="warn" label="Retiros" value={preview.data ? money(preview.data.withdrawalsTotal, 'MXN') : '...'} />
+              <StatStrip tone="warn" label="Prestamos" value={preview.data ? money(preview.data.advancesTotal, 'MXN') : '...'} />
+              <StatStrip tone="info" label="Cortes" value={String(preview.data?.shiftCloseCount ?? '...')} />
+              <StatStrip tone="purple" label="Inventario" value={String(preview.data?.inventoryMovementCount ?? '...')} />
+              <StatStrip tone="purple" label="Nomina" value={String(preview.data?.payrollPeriodCount ?? '...')} />
             </div>
           </Panel>
 
-          <Panel title="Resumen mensual">
-            <div className="space-y-3 text-sm">
+          <Panel tone="feature" title="Resumen mensual">
+            <div className="flex flex-col gap-2">
               <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : '...'} />
               <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? '...')} />
               <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : '...'} />
@@ -5348,33 +5579,6 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
       >
         {loading ? 'Guardando...' : label}
       </button>
-    </div>
-  )
-}
-
-function AiStatusCard({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string
-  value: string
-  detail: string
-  tone: 'sky' | 'amber' | 'emerald' | 'slate'
-}) {
-  const toneClass = {
-    sky: 'border-violet-100 bg-violet-50/70 text-violet-700',
-    amber: 'border-amber-100 bg-amber-50/80 text-amber-700',
-    emerald: 'border-emerald-100 bg-emerald-50/80 text-emerald-700',
-    slate: 'border-slate-200 bg-white text-slate-700',
-  }[tone]
-
-  return (
-    <div className={`rounded-xl border p-4 shadow-sm ${toneClass}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
-      <p className="mt-2 break-words text-lg font-bold text-slate-950">{value}</p>
-      <p className="mt-1 text-sm opacity-80">{detail}</p>
     </div>
   )
 }
