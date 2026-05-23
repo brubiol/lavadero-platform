@@ -2,6 +2,7 @@ package com.lavadero.api.inventory.domain;
 
 import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.common.domain.AuditedEntity;
+import com.lavadero.api.operations.domain.Shift;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -50,6 +51,10 @@ public class ProductMovement extends AuditedEntity {
     @JoinColumn(name = "employee_id")
     private Employee employee;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shift_id")
+    private Shift shift;
+
     protected ProductMovement() {
     }
 
@@ -70,6 +75,14 @@ public class ProductMovement extends AuditedEntity {
 
     public Employee getEmployee() {
         return employee;
+    }
+
+    public void setShift(Shift shift) {
+        this.shift = shift;
+    }
+
+    public Shift getShift() {
+        return shift;
     }
 
     public Long getId() {

@@ -3,6 +3,8 @@ package com.lavadero.api.inventory.domain;
 import com.lavadero.api.common.domain.AuditedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -31,14 +33,19 @@ public class Product extends AuditedEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private ProductCategory category = ProductCategory.OTRO;
+
     protected Product() {
     }
 
-    public Product(String name, String sku, BigDecimal currentUnitPrice, boolean trackInventory) {
+    public Product(String name, String sku, BigDecimal currentUnitPrice, boolean trackInventory, ProductCategory category) {
         this.name = name;
         this.sku = sku;
         this.currentUnitPrice = currentUnitPrice;
         this.trackInventory = trackInventory;
+        this.category = category != null ? category : ProductCategory.OTRO;
     }
 
     public Long getId() {
@@ -65,7 +72,11 @@ public class Product extends AuditedEntity {
         return active;
     }
 
-    public void update(String name, String sku, BigDecimal currentUnitPrice, Boolean trackInventory, Boolean active) {
+    public ProductCategory getCategory() {
+        return category;
+    }
+
+    public void update(String name, String sku, BigDecimal currentUnitPrice, Boolean trackInventory, Boolean active, ProductCategory category) {
         if (name != null) {
             this.name = name;
         }
@@ -80,6 +91,9 @@ public class Product extends AuditedEntity {
         }
         if (active != null) {
             this.active = active;
+        }
+        if (category != null) {
+            this.category = category;
         }
     }
 }

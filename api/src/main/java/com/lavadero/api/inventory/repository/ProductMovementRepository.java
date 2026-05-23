@@ -27,4 +27,8 @@ public interface ProductMovementRepository extends JpaRepository<ProductMovement
             @Param("type") MovementType type,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    @Query("SELECT COALESCE(SUM(m.totalAmount), 0) FROM ProductMovement m " +
+           "WHERE m.shift.id = :shiftId AND m.movementType = 'SALE'")
+    BigDecimal sumSalesForShift(@Param("shiftId") Long shiftId);
 }

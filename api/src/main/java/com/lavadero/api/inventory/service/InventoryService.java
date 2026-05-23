@@ -4,7 +4,10 @@ import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.catalog.repository.EmployeeRepository;
 import com.lavadero.api.inventory.domain.MovementType;
 import com.lavadero.api.inventory.domain.Product;
+import com.lavadero.api.inventory.domain.ProductCategory;
 import com.lavadero.api.inventory.domain.ProductMovement;
+import com.lavadero.api.operations.domain.Shift;
+import com.lavadero.api.operations.repository.ShiftRepository;
 import com.lavadero.api.inventory.repository.ProductMovementRepository;
 import com.lavadero.api.inventory.repository.ProductRepository;
 import com.lavadero.api.inventory.web.InventoryDtos.CreateAdjustmentRequest;
@@ -37,13 +40,15 @@ public class InventoryService {
     private final ProductMovementRepository movements;
     private final EmployeeRepository employees;
     private final EmployeeAdvanceRepository advances;
+    private final ShiftRepository shifts;
 
     public InventoryService(ProductRepository products, ProductMovementRepository movements,
-            EmployeeRepository employees, EmployeeAdvanceRepository advances) {
+            EmployeeRepository employees, EmployeeAdvanceRepository advances, ShiftRepository shifts) {
         this.products = products;
         this.movements = movements;
         this.employees = employees;
         this.advances = advances;
+        this.shifts = shifts;
     }
 
     @Transactional(readOnly = true)
@@ -57,15 +62,16 @@ public class InventoryService {
     @Transactional
     public Product createProduct(CreateProductRequest request) {
         boolean trackInventory = request.trackInventory() == null || request.trackInventory();
+        ProductCategory category = request.category() != null ? request.category() : ProductCategory.OTRO;
         return products.save(new Product(request.name().trim(), request.sku().trim().toUpperCase(),
-                money(request.currentUnitPrice()), trackInventory));
+                money(request.currentUnitPrice()), trackInventory, category));
     }
 
     @Transactional
     public Product updateProduct(Long id, UpdateProductRequest request) {
         Product product = getProduct(id);
         product.update(trim(request.name()), trimUpper(request.sku()), moneyOrNull(request.currentUnitPrice()),
-                request.trackInventory(), request.active());
+                request.trackInventory(), request.active(), request.category());
         return product;
     }
 
@@ -107,6 +113,11 @@ public class InventoryService {
             movement.setEmployee(employee);
             advances.save(new EmployeeAdvance(null, null, employee, LocalDate.now(), total,
                     "Fiado: " + product.getName()));
+        }
+        if (!fiado && request.shiftId() != null) {
+            Shift shift = shifts.findById(request.shiftId())
+                    .orElseThrow(() -> new EntityNotFoundException("Shift not found"));
+            movement.setShift(shift);
         }
         return movements.save(movement);
     }

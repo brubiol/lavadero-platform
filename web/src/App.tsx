@@ -139,6 +139,7 @@ type ShiftCloseSummary = {
   cashCount?: CashCount | null
   closed: boolean
   prepaidPackagesTotal?: number | null
+  inventorySalesTotal?: number | null
 }
 
 type TicketAssignment = {
@@ -328,6 +329,8 @@ type AuditEvent = {
 
 type MovementType = 'SALE' | 'FIADO' | 'PURCHASE' | 'ADJUSTMENT' | 'OPENING_COUNT' | 'CLOSING_COUNT'
 
+type ProductCategory = 'AROMA' | 'SNACK' | 'OTRO'
+
 type Product = {
   id: number
   name: string
@@ -335,6 +338,7 @@ type Product = {
   currentUnitPrice: number
   trackInventory: boolean
   active: boolean
+  category: ProductCategory
   createdAt: string
   updatedAt: string
 }
@@ -677,6 +681,7 @@ const productSchema = z.object({
   currentUnitPrice: z.coerce.number().min(0, 'Minimo 0'),
   trackInventory: z.boolean().default(true),
   active: z.boolean().default(true),
+  category: z.enum(['AROMA', 'SNACK', 'OTRO']).default('OTRO'),
 })
 
 type ProductFormValues = z.infer<typeof productSchema>
@@ -2830,9 +2835,12 @@ function ShiftCloseScreen() {
               {summary?.prepaidPackagesTotal != null && summary.prepaidPackagesTotal > 0 && (
                 <SummaryRow k="Paquetes prepagados" v={money(summary.prepaidPackagesTotal, 'MXN')} />
               )}
+              {summary?.inventorySalesTotal != null && summary.inventorySalesTotal > 0 && (
+                <SummaryRow k="Miscelanea (ventas)" v={money(summary.inventorySalesTotal, 'MXN')} />
+              )}
             </div>
             <p className="mt-3 text-sm text-gray-500">
-              Efectivo esperado = efectivo de tickets + efectivo de paquetes - gastos - retiros.
+              Efectivo esperado = efectivo de tickets + paquetes + miscelanea - gastos - retiros.
             </p>
           </Panel>
 
@@ -3422,61 +3430,66 @@ function InventoryScreen() {
         <Metric label="Stock bajo" value={String(lowCount)} />
       </div>
 
-      <Panel title="Productos">
-        <div className="overflow-hidden rounded-xl border border-gray-100">
-          <table className="tl-tbl zebra">
-            <thead className="">
-              <tr>
-                <th>Producto</th>
-                <th>SKU</th>
-                <th className="r">Stock</th>
-                <th className="r">Precio</th>
-                <th>Ultimo movimiento</th>
-                <th>Indicador</th>
-                <th className="r">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="">
-              {rows.map((row) => {
-                const latest = row.recentMovements[0]
-                const lowStock = row.product.trackInventory && row.quantityOnHand <= 5
-                return (
-                  <tr key={row.product.id}>
-                    <td className="font-semibold">{row.product.name}</td>
-                    <td>{row.product.sku || '-'}</td>
-                    <td className="r">{row.quantityOnHand.toFixed(2)}</td>
-                    <td className="r">{money(row.product.currentUnitPrice, 'MXN')}</td>
-                    <td>
-                      {latest ? `${movementLabel(latest.movementType)} / ${latest.quantity}` : 'Sin movimientos'}
-                    </td>
-                    <td>
-                      <InventoryStatusPill lowStock={lowStock} tracked={row.product.trackInventory} />
-                    </td>
-                    <td className="r">
-                      <button
-                        className="text-sm font-semibold text-blue-700 hover:text-blue-900"
-                        onClick={() => {
-                          setEditingProduct(row.product)
-                          setModal('product')
-                        }}
-                      >
-                        Editar
-                      </button>
-                    </td>
+      {(['AROMA', 'SNACK', 'OTRO'] as ProductCategory[]).map((cat) => {
+        const catRows = rows.filter((row) => (row.product.category ?? 'OTRO') === cat)
+        if (catRows.length === 0) return null
+        const catLabel = cat === 'AROMA' ? 'Aromas' : cat === 'SNACK' ? 'Snacks' : 'Otros'
+        return (
+          <Panel key={cat} title={catLabel}>
+            <div className="overflow-hidden rounded-xl border border-gray-100">
+              <table className="tl-tbl zebra">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>SKU</th>
+                    <th className="r">Stock</th>
+                    <th className="r">Precio</th>
+                    <th>Ultimo movimiento</th>
+                    <th>Indicador</th>
+                    <th className="r">Acciones</th>
                   </tr>
-                )
-              })}
-              {!snapshot.isLoading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                    No hay productos todavia. Crea un producto y registra una compra inicial.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+                </thead>
+                <tbody>
+                  {catRows.map((row) => {
+                    const latest = row.recentMovements[0]
+                    const lowStock = row.product.trackInventory && row.quantityOnHand <= 5
+                    return (
+                      <tr key={row.product.id}>
+                        <td className="font-semibold">{row.product.name}</td>
+                        <td>{row.product.sku || '-'}</td>
+                        <td className="r">{row.quantityOnHand.toFixed(2)}</td>
+                        <td className="r">{money(row.product.currentUnitPrice, 'MXN')}</td>
+                        <td>
+                          {latest ? `${movementLabel(latest.movementType)} / ${latest.quantity}` : 'Sin movimientos'}
+                        </td>
+                        <td>
+                          <InventoryStatusPill lowStock={lowStock} tracked={row.product.trackInventory} />
+                        </td>
+                        <td className="r">
+                          <button
+                            className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                            onClick={() => {
+                              setEditingProduct(row.product)
+                              setModal('product')
+                            }}
+                          >
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        )
+      })}
+      {!snapshot.isLoading && rows.length === 0 && (
+        <Panel title="Productos">
+          <p className="px-4 py-10 text-center text-gray-400">No hay productos todavia. Crea un producto y registra una compra inicial.</p>
+        </Panel>
+      )}
 
       {modal === 'product' && (
         <ProductModal
@@ -3505,8 +3518,9 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
           currentUnitPrice: product.currentUnitPrice,
           trackInventory: product.trackInventory,
           active: product.active,
+          category: product.category ?? 'OTRO',
         }
-      : { name: '', sku: '', currentUnitPrice: 0, trackInventory: true, active: true },
+      : { name: '', sku: '', currentUnitPrice: 0, trackInventory: true, active: true, category: 'OTRO' },
   })
   const mutation = useMutation({
     mutationFn: (values: ProductFormValues) => api<Product>(product ? `/api/v1/products/${product.id}` : '/api/v1/products', {
@@ -3517,6 +3531,7 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
         currentUnitPrice: Number(values.currentUnitPrice),
         trackInventory: values.trackInventory,
         active: values.active,
+        category: values.category,
       }),
     }),
     onSuccess: async () => {
@@ -3537,6 +3552,13 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
         <TextField label="Precio actual" error={form.formState.errors.currentUnitPrice?.message}>
           <input type="number" min={0} step="0.01" {...form.register('currentUnitPrice')} />
         </TextField>
+        <SelectField label="Categoria">
+          <select {...form.register('category')}>
+            <option value="AROMA">Aroma</option>
+            <option value="SNACK">Snack</option>
+            <option value="OTRO">Otro</option>
+          </select>
+        </SelectField>
         <label className="flex items-center gap-3 text-sm font-medium">
           <input type="checkbox" {...form.register('trackInventory')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
           Controlar inventario
@@ -3554,6 +3576,8 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
 
 function InventorySaleModal({ products, employees, onClose }: { products: Product[]; employees: Employee[]; onClose: () => void }) {
   const queryClient = useQueryClient()
+  const phaseData = usePhaseData()
+  const openShiftId = phaseData.shifts.data?.find((s) => s.status === 'OPEN')?.id ?? null
   const form = useForm<InventorySaleFormValues>({
     resolver: zodResolver(inventorySaleSchema),
     defaultValues: { productId: 0, quantity: 1, unitPrice: 0, movementDate: '', fiado: false, employeeId: 0 },
@@ -3570,6 +3594,7 @@ function InventorySaleModal({ products, employees, onClose }: { products: Produc
         movementDate: values.movementDate ? toIsoDateTime(values.movementDate) : undefined,
         fiado: values.fiado,
         employeeId: values.fiado && values.employeeId ? Number(values.employeeId) : undefined,
+        shiftId: !values.fiado && openShiftId ? openShiftId : undefined,
       }),
     }),
     onSuccess: async () => {

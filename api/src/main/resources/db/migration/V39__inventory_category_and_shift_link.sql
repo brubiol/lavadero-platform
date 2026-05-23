@@ -1,0 +1,2 @@
+ALTER TABLE products ADD COLUMN category VARCHAR(30) NOT NULL DEFAULT 'OTRO';
+ALTER TABLE product_movements ADD COLUMN shift_id BIGINT REFERENCES shifts(id);
