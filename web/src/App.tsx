@@ -1232,7 +1232,7 @@ function Dashboard() {
 
   const data = summary.data
 
-  const { hasRole } = useAuth()
+  const { auth, hasRole } = useAuth()
   const isOwner = hasRole('DUENO')
   const flagged = useQuery({
     queryKey: ['audit-events', 'flagged'],
@@ -1245,21 +1245,33 @@ function Dashboard() {
   const MetricVal = ({ v, wide }: { v?: string; wide?: boolean }) =>
     isLoading ? <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} /> : <>{v}</>
 
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
+  const firstName = auth?.user.fullName.split(' ')[0] ?? ''
+  const dateObj = new Date(date + 'T00:00:00')
+  const weekday = dateObj.toLocaleDateString('es-MX', { weekday: 'long' })
+  const dayMonth = dateObj.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+  const dateLong = `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${dayMonth}`
+
+  const resultPositive = data ? data.result >= 0 : true
+
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* ─── Header: greeting + date picker ─────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">Dashboard</h2>
-          <p className="text-[13.5px] text-ink-500 mt-0.5">Resumen del dia — ventas, carros, estado del turno.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">{dateLong}</p>
+          <h2 className="font-display mt-1 text-[30px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
+            {greeting}{firstName ? `, ${firstName}` : ''}.
+          </h2>
         </div>
-        <div className="w-full max-w-48">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>
-            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="tl-input" />
-          </label>
-        </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Ver fecha</span>
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="tl-input" />
+        </label>
       </div>
 
+      {/* ─── Owner audit warning ────────────────────────────────────── */}
       {isOwner && pendingFlagged.length > 0 && (
         <NavLink to="/auditoria" className="block no-underline">
           <Banner
@@ -1273,24 +1285,43 @@ function Dashboard() {
 
       <DayStatusCard />
 
-      {monthHist.data && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3" style={{ background: 'var(--ink-50)', borderColor: 'var(--border-soft)' }}>
-          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>Este mes</span>
-          <Pill tone="gray" dot={false}>{monthHist.data.totalCars} carros</Pill>
-          <Pill tone="good" dot={false}>${Number(monthHist.data.totalRevenue).toLocaleString('es-MX', { maximumFractionDigits: 0 })} ingresos</Pill>
-          <Pill tone={monthHist.data.totalResultado >= 0 ? 'good' : 'bad'} dot={false}>
-            ${Number(monthHist.data.totalResultado).toLocaleString('es-MX', { maximumFractionDigits: 0 })} resultado
-          </Pill>
-        </div>
-      )}
-
       {summary.error && <ErrorMessage message={summary.error.message} />}
 
-      {/* 9 metrics: 3 cols → 3 rows (mobile) | 3 cols → 3 rows (md) | auto-fit 3 rows (xl) */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Metric label="Carros lavados" value={<MetricVal v={data ? String(data.carsWashed) : undefined} />} />
-        <Metric label="Ingresos autos" value={<MetricVal v={data ? money(data.ticketRevenue, 'MXN') : undefined} wide />} variant="feature" />
-        <Metric label="Resultado" value={<MetricVal v={data ? money(data.result, 'MXN') : undefined} wide />} variant="info" />
+      {/* ─── Hero scoreboard ──────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-ink-900 via-ink-800 to-ink-900 px-6 py-7 sm:px-9 sm:py-9 shadow-[0_24px_48px_-20px_rgba(15,23,42,0.45)]">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-violet-500/25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-emerald-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute right-6 top-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Turbo Lavado · Resumen</div>
+
+        <div className="relative grid grid-cols-1 gap-7 sm:grid-cols-3 sm:gap-8">
+          <div>
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Carros lavados</p>
+            <p className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
+              {isLoading ? '—' : (data?.carsWashed ?? 0)}
+            </p>
+            <p className="mt-2 text-[12px] text-white/40">
+              {data?.courtesyCount ? `${data.courtesyCount} cortesía${data.courtesyCount === 1 ? '' : 's'}` : 'Operación del día'}
+            </p>
+          </div>
+          <div className="sm:border-l sm:border-white/10 sm:pl-8">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Ingresos</p>
+            <p className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
+              {isLoading ? '—' : money(data?.ticketRevenue ?? 0, 'MXN')}
+            </p>
+            <p className="mt-2 text-[12px] text-white/40">Tickets activos</p>
+          </div>
+          <div className="sm:border-l sm:border-white/10 sm:pl-8">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Resultado</p>
+            <p className={`font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] ${resultPositive ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {isLoading ? '—' : money(data?.result ?? 0, 'MXN')}
+            </p>
+            <p className="mt-2 text-[12px] text-white/40">Ingresos − gastos</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Secondary metric strip ────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Metric label="Efectivo" value={<MetricVal v={data ? money(data.cashRevenue, 'MXN') : undefined} wide />} variant="success" />
         <Metric label="Tarjeta" value={<MetricVal v={data ? money(data.cardRevenue, 'MXN') : undefined} wide />} variant="info" />
         <Metric label="Deposito" value={<MetricVal v={data ? money(data.transferRevenue, 'MXN') : undefined} wide />} variant="warn" />
@@ -1303,10 +1334,41 @@ function Dashboard() {
         />
       </div>
 
-      <Panel title="Tickets recientes">
+      {/* ─── Acumulado del mes ─────────────────────────────────────── */}
+      {monthHist.data && (
+        <div className="relative overflow-hidden rounded-2xl border border-border-soft bg-gradient-to-r from-ink-50 via-white to-violet-50/40 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink-900 text-white font-display text-[14px] font-bold tracking-tight">
+                {dateObj.toLocaleDateString('es-MX', { month: 'short' }).slice(0, 3).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-400">Acumulado del mes</p>
+                <p className="mt-0.5 text-[14px] font-semibold text-ink-900">
+                  {monthHist.data.totalCars} carros
+                  <span className="mx-1.5 text-ink-300">·</span>
+                  {money(Number(monthHist.data.totalRevenue), 'MXN')} ingresos
+                </p>
+              </div>
+            </div>
+            <div className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] font-bold ${
+              monthHist.data.totalResultado >= 0
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-rose-200 bg-rose-50 text-rose-700'
+            }`}>
+              <span className={`h-2 w-2 rounded-full ${monthHist.data.totalResultado >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              {money(Number(monthHist.data.totalResultado), 'MXN')}
+              <span className="text-[11px] font-semibold uppercase tracking-wide opacity-70">resultado</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Tickets recientes ─────────────────────────────────────── */}
+      <Panel title="Tickets recientes" subtitle={data ? `${data.recentTickets.length} en esta fecha` : undefined}>
         <div className="overflow-hidden rounded-xl border border-gray-100">
           <table className="tl-tbl zebra">
-            <thead className="">
+            <thead>
               <tr>
                 <th>Nota</th>
                 <th>Vehiculo</th>
@@ -1317,7 +1379,7 @@ function Dashboard() {
                 <th>Estado</th>
               </tr>
             </thead>
-            <tbody className="">
+            <tbody>
               {(data?.recentTickets ?? []).map((ticket) => (
                 <tr key={ticket.id}>
                   <td className="font-semibold">
