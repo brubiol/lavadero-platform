@@ -28,7 +28,10 @@ export function variantToTone(v?: MetricVariant): MetricTone {
 }
 
 function slugify(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  // Strip Spanish diacritics first so "Préstamos" → "prestamos" — keeps
+  // ASCII test ids stable as we add proper accents to UI copy.
+  const ascii = label.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return ascii.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
 // ─── Panel ──────────────────────────────────────────────────────────────

@@ -1665,7 +1665,7 @@ function Dashboard() {
           </NavLink>
         }
       >
-        <div className="overflow-hidden rounded-xl border border-gray-100">
+        <div className="overflow-hidden rounded-xl border border-border-soft">
           <table className="tl-tbl zebra">
             <thead>
               <tr>
@@ -1761,13 +1761,20 @@ function EndOfDayScreen() {
         <div className="space-y-5">
           <Panel title="Trabajo de hoy">
             <div className="tl-stagger grid gap-4 md:grid-cols-4">
-              <Metric label="Tickets" tone="info" value={String(daily?.recentTickets.length ?? 0)} />
-              <Metric label="Carros" tone="info" value={String(daily?.carsWashed ?? 0)} />
-              <Metric label="Efectivo" tone="good" value={daily ? money(daily.cashRevenue, 'MXN') : '...'} />
-              <Metric label="Tarjeta" tone="info" value={daily ? money(daily.cardRevenue, 'MXN') : '...'} />
-              <Metric label="Depósito" tone="warn" value={daily ? money(daily.transferRevenue, 'MXN') : '...'} />
-              <Metric label="Miscelánea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : '...'} />
-              <Metric label="Gastos" tone="bad" value={daily ? money(daily.expensesTotal, 'MXN') : '...'} />
+              {(() => {
+                const sk = (wide?: boolean) => <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} />
+                return (
+                  <>
+                    <Metric label="Tickets" tone="info" value={daily ? String(daily.recentTickets.length) : sk()} />
+                    <Metric label="Carros" tone="info" value={daily ? String(daily.carsWashed) : sk()} />
+                    <Metric label="Efectivo" tone="good" value={daily ? money(daily.cashRevenue, 'MXN') : sk(true)} />
+                    <Metric label="Tarjeta" tone="info" value={daily ? money(daily.cardRevenue, 'MXN') : sk(true)} />
+                    <Metric label="Depósito" tone="warn" value={daily ? money(daily.transferRevenue, 'MXN') : sk(true)} />
+                    <Metric label="Miscelánea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : sk(true)} />
+                    <Metric label="Gastos" tone="bad" value={daily ? money(daily.expensesTotal, 'MXN') : sk(true)} />
+                  </>
+                )
+              })()}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button kind="primary" onClick={() => navigate('/tickets/nuevo')}>
@@ -3650,7 +3657,7 @@ function CatalogsScreen() {
             </form>
             {createEmployee.error && <ErrorMessage message={createEmployee.error.message} />}
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Lavadores registrados</span>
+              <span className="text-sm font-medium text-ink-600">Lavadores registrados</span>
               <button
                 type="button"
                 onClick={() => setShowInactiveEmployees(!showInactiveEmployees)}
@@ -3672,7 +3679,7 @@ function CatalogsScreen() {
                   <div>
                     <span className="font-medium">{employee.fullName}</span>
                     {!employee.active && <span className="ml-2 text-xs text-red-500">Baja</span>}
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-ink-400">
                       {employee.payrollType === 'COMMISSION'
                         ? `Comision ${money(employee.commissionRate, 'MXN')}/carro`
                         : `Sueldo ${money(employee.baseWeeklySalary, 'MXN')}/sem`}
@@ -3681,7 +3688,7 @@ function CatalogsScreen() {
                   <button
                     type="button"
                     onClick={() => setEditingEmployee(employee)}
-                    className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                    className="shrink-0 rounded-md border border-border-soft px-2 py-1 text-xs text-ink-600 hover:bg-ink-50"
                   >
                     Editar
                   </button>
@@ -3789,7 +3796,7 @@ function CatalogsScreen() {
               </div>
             </form>
             {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead className="">
                   <tr>
@@ -3835,14 +3842,14 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openBusinessDay.isPending}
-                className="w-full tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full tl-btn tl-btn-primary"
               >
                 {openBusinessDay.isPending ? 'Abriendo...' : 'Abrir dia'}
               </button>
             </form>
             {openBusinessDay.error && <ErrorMessage message={openBusinessDay.error.message} />}
-            <div className="rounded-md bg-gray-50 p-3 text-sm">
-              <p className="text-gray-400">Dia abierto</p>
+            <div className="rounded-md bg-ink-50 p-3 text-sm">
+              <p className="text-ink-400">Dia abierto</p>
               <p className="font-semibold">{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</p>
             </div>
           </Panel>
@@ -3858,7 +3865,7 @@ function CatalogsScreen() {
               <button
                 type="submit"
                 disabled={openShift.isPending || !data.currentBusinessDay}
-                className="w-full tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full tl-btn tl-btn-primary"
               >
                 {openShift.isPending ? 'Abriendo...' : 'Abrir turno'}
               </button>
@@ -4340,7 +4347,7 @@ function ShiftCloseScreen() {
                     type="submit"
                     disabled={countMutation.isPending || !effectiveShiftId || summary?.closed}
                     data-testid="corte-save-count"
-                    className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
+                    className="tl-btn tl-btn-primary"
                   >
                     {countMutation.isPending ? 'Calculando...' : 'Guardar conteo'}
                   </button>
@@ -4936,7 +4943,7 @@ function AuditActionPill({ action }: { action: string }) {
     PAYROLL_PERIOD:     { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Nómina' },
     PAYROLL_ADJUSTMENT: { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Ajuste nómina' },
   }
-  const style = cfg[action] ?? { bg: 'bg-gray-100', text: 'text-gray-600', label: action.replace(/_/g, ' ') }
+  const style = cfg[action] ?? { bg: 'bg-ink-100', text: 'text-ink-600', label: action.replace(/_/g, ' ') }
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${style.bg} ${style.text}`}>
       {style.label}
@@ -5040,7 +5047,7 @@ function AuditScreen() {
 
       <Panel title="Eventos recientes">
         {events.error && <ErrorMessage message={events.error.message} />}
-        <div className="overflow-hidden rounded-xl border border-gray-100">
+        <div className="overflow-hidden rounded-xl border border-border-soft">
           <table className="tl-tbl zebra">
             <thead className="">
               <tr>
@@ -5055,7 +5062,7 @@ function AuditScreen() {
             <tbody className="">
               {(events.data ?? []).map((event) => (
                 <tr key={event.id} className={event.severity === 'FLAGGED' ? 'bg-amber-50' : ''}>
-                  <td className="whitespace-nowrap text-gray-500">{formatDateTime(event.occurredAt)}</td>
+                  <td className="whitespace-nowrap text-ink-500">{formatDateTime(event.occurredAt)}</td>
                   <td>
                     <div className="flex items-center gap-2">
                       <Avatars names={[event.actorUsername]} />
@@ -5063,9 +5070,9 @@ function AuditScreen() {
                     </div>
                   </td>
                   <td><AuditActionPill action={event.action} /></td>
-                  <td className="text-gray-500">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
+                  <td className="text-ink-500">{event.entityType}{event.entityId ? ` #${event.entityId}` : ''}</td>
                   <td>{event.reason || '-'}</td>
-                  <td className="text-gray-500">{event.details || '-'}</td>
+                  <td className="text-ink-500">{event.details || '-'}</td>
                 </tr>
               ))}
               {!events.isLoading && (events.data ?? []).length === 0 && (
@@ -5210,7 +5217,7 @@ function ReportsScreen() {
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           <Panel title="Resumen por dia">
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead className="">
                   <tr>
@@ -5257,7 +5264,7 @@ function ReportsScreen() {
           </Panel>
 
           <Panel title="Rendimiento de lavadores">
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead className="">
                   <tr>
@@ -5309,7 +5316,7 @@ function ReportsScreen() {
                 value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : <span className="tl-metric-skeleton wide" />}
               />
             </div>
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead className="">
                   <tr>
@@ -5354,14 +5361,22 @@ function ReportsScreen() {
         <aside className="space-y-5">
           <Panel title="Export preview">
             <div className="tl-stagger flex flex-col gap-2">
-              <StatStrip tone="info" label="Tickets" value={String(preview.data?.ticketCount ?? '...')} />
-              <StatStrip tone="good" label="Ingresos" value={preview.data ? money(preview.data.ticketRevenue, 'MXN') : '...'} />
-              <StatStrip tone="bad" label="Gastos" value={preview.data ? money(preview.data.expensesTotal, 'MXN') : '...'} />
-              <StatStrip tone="warn" label="Retiros" value={preview.data ? money(preview.data.withdrawalsTotal, 'MXN') : '...'} />
-              <StatStrip tone="warn" label="Prestamos" value={preview.data ? money(preview.data.advancesTotal, 'MXN') : '...'} />
-              <StatStrip tone="info" label="Cortes" value={String(preview.data?.shiftCloseCount ?? '...')} />
-              <StatStrip tone="purple" label="Inventario" value={String(preview.data?.inventoryMovementCount ?? '...')} />
-              <StatStrip tone="purple" label="Nomina" value={String(preview.data?.payrollPeriodCount ?? '...')} />
+              {(() => {
+                const sk = (wide?: boolean) => <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} />
+                const p = preview.data
+                return (
+                  <>
+                    <StatStrip tone="info" label="Tickets" value={p ? String(p.ticketCount) : sk()} />
+                    <StatStrip tone="good" label="Ingresos" value={p ? money(p.ticketRevenue, 'MXN') : sk(true)} />
+                    <StatStrip tone="bad" label="Gastos" value={p ? money(p.expensesTotal, 'MXN') : sk(true)} />
+                    <StatStrip tone="warn" label="Retiros" value={p ? money(p.withdrawalsTotal, 'MXN') : sk(true)} />
+                    <StatStrip tone="warn" label="Préstamos" value={p ? money(p.advancesTotal, 'MXN') : sk(true)} />
+                    <StatStrip tone="info" label="Cortes" value={p ? String(p.shiftCloseCount) : sk()} />
+                    <StatStrip tone="purple" label="Inventario" value={p ? String(p.inventoryMovementCount) : sk()} />
+                    <StatStrip tone="purple" label="Nómina" value={p ? String(p.payrollPeriodCount) : sk()} />
+                  </>
+                )
+              })()}
             </div>
           </Panel>
 
@@ -5396,7 +5411,7 @@ function ReportsScreen() {
             <Metric label="Resultado" value={historical.data ? money(historical.data.totalResultado, 'MXN') : '...'} variant="info" />
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-gray-100">
+          <div className="overflow-hidden rounded-xl border border-border-soft">
             <table className="tl-tbl zebra">
               <thead className="">
                 <tr>
@@ -5670,11 +5685,11 @@ function ProductModal({ product, onClose }: { product?: Product | null; onClose:
           </select>
         </SelectField>
         <label className="flex items-center gap-3 text-sm font-medium">
-          <input type="checkbox" {...form.register('trackInventory')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
+          <input type="checkbox" {...form.register('trackInventory')} className="h-4 w-4 rounded border-border-soft text-violet-600" />
           Controlar inventario
         </label>
         <label className="flex items-center gap-3 text-sm font-medium">
-          <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
+          <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-border-soft text-violet-600" />
           Activo
         </label>
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
@@ -5723,7 +5738,7 @@ function InventorySaleModal({ products, employees, onClose }: { products: Produc
       submitLabel="Guardar venta"
     >
       <label className="flex items-center gap-3 text-sm font-medium">
-        <input type="checkbox" {...form.register('fiado')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
+        <input type="checkbox" {...form.register('fiado')} className="h-4 w-4 rounded border-border-soft text-violet-600" />
         Fiado (a credito — no suma al corte)
       </label>
       {isFiado && (
@@ -6087,11 +6102,11 @@ function PayrollScreen() {
               <option value="LOCKED">Bloqueados</option>
             </select>
           </SelectField>
-          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+          <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border-soft">
             {(periods.data ?? []).map((item) => (
               <button
                 key={item.id}
-                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm hover:bg-gray-50 ${
+                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm hover:bg-ink-50 ${
                   selectedId === item.id ? 'bg-blue-50 text-blue-800' : ''
                 }`}
                 onClick={() => {
@@ -6101,7 +6116,7 @@ function PayrollScreen() {
               >
                 <span>
                   <strong className="block">{item.startDate}</strong>
-                  <span className="text-gray-400">al {item.endDate}</span>
+                  <span className="text-ink-400">al {item.endDate}</span>
                 </span>
                 <PayrollStatusPill status={item.status} />
               </button>
@@ -6121,14 +6136,14 @@ function PayrollScreen() {
           <Panel title="Resumen semanal">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-gray-400">Periodo</p>
+                <p className="text-sm text-ink-400">Periodo</p>
                 <p className="font-semibold">{selectedPeriod ? `${selectedPeriod.startDate} al ${selectedPeriod.endDate}` : 'Sin seleccionar'}</p>
               </div>
               <div className="flex gap-2">
                 <button
                   disabled={!selectedId || locked || compute.isPending}
                   data-testid="payroll-compute"
-                  className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
+                  className="tl-btn tl-btn-primary"
                   onClick={() => compute.mutate()}
                 >
                   Recalcular
@@ -6181,7 +6196,7 @@ function PayrollScreen() {
           </Panel>
 
           <Panel title="Grid semanal">
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead className="">
                   <tr>
@@ -6201,7 +6216,7 @@ function PayrollScreen() {
                   {(selectedPeriod?.entries ?? []).map((entry) => (
                     <tr
                       key={entry.id}
-                      className="cursor-pointer hover:bg-gray-50"
+                      className="cursor-pointer hover:bg-ink-50"
                       onClick={() => setSelectedEmployeeId(entry.employeeId)}
                     >
                       <td className="font-semibold">{entry.employeeName}</td>
@@ -6218,7 +6233,7 @@ function PayrollScreen() {
                   ))}
                   {!period.isLoading && (selectedPeriod?.entries.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={10} className="px-4 py-8 text-center text-ink-400">
                         Crea o selecciona un periodo para calcular automaticamente.
                       </td>
                     </tr>
@@ -6261,13 +6276,13 @@ function PayrollScreen() {
                 type="submit"
                 disabled={!selectedId || locked || addAdjustment.isPending}
                 data-testid="payroll-add-adjustment"
-                className="tl-btn tl-btn-primary disabled:bg-gray-200 disabled:text-gray-400"
+                className="tl-btn tl-btn-primary"
               >
                 Agregar
               </button>
             </form>
             {(addAdjustment.error || deleteAdjustment.error) && <ErrorMessage message={(addAdjustment.error || deleteAdjustment.error)!.message} />}
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead className="">
                   <tr>
@@ -6284,7 +6299,7 @@ function PayrollScreen() {
                     <tr key={adjustment.id}>
                       <td className="font-semibold">{adjustment.employeeName}</td>
                       <td>{adjustment.concept}</td>
-                      <td className="text-gray-500">{adjustment.note || '-'}</td>
+                      <td className="text-ink-500">{adjustment.note || '-'}</td>
                       <td className="r">{adjustment.type === 'EARNING' ? money(adjustment.amount, 'MXN') : '-'}</td>
                       <td className="r">{adjustment.type === 'DEDUCTION' ? money(adjustment.amount, 'MXN') : '-'}</td>
                       <td className="r">
@@ -6292,7 +6307,7 @@ function PayrollScreen() {
                           type="button"
                           disabled={locked || deleteAdjustment.isPending}
                           onClick={() => deleteAdjustment.mutate(adjustment.id)}
-                          className="rounded-lg border border-red-100 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.98] disabled:text-gray-300"
+                          className="rounded-lg border border-red-100 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.98] disabled:text-ink-300"
                         >
                           Quitar
                         </button>
@@ -6301,7 +6316,7 @@ function PayrollScreen() {
                   ))}
                   {(selectedPeriod?.adjustments.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={6} className="px-4 py-8 text-center text-ink-400">
                         Sin extras, vales, faltas o permisos capturados.
                       </td>
                     </tr>
@@ -6316,7 +6331,7 @@ function PayrollScreen() {
               <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
                 <div className="space-y-1.5 text-sm">
                   <SummaryRow label="Lavador" value={selectedEntry.employeeName} />
-                  <div className="my-2 border-t border-gray-100" />
+                  <div className="my-2 border-t border-border-soft" />
                   <SummaryRow label="Sueldo base" value={money(selectedEntry.baseSalary, 'MXN')} />
                   {selectedEntry.restDayPay > 0 && (
                     <SummaryRow label="+ Dia de descanso" value={money(selectedEntry.restDayPay, 'MXN')} />
@@ -6327,20 +6342,20 @@ function PayrollScreen() {
                   <SummaryRow label={`+ Bono carros (${selectedEntry.carsWashed.toFixed(2)})`} value={money(selectedEntry.carsBonus, 'MXN')} />
                   <SummaryRow label="+ Comision" value={money(selectedEntry.commissions, 'MXN')} />
                   <SummaryRow label="+ Extras" value={money(selectedEntry.manualEarnings, 'MXN')} />
-                  <div className="flex items-center justify-between border-t border-gray-200 pt-2 font-semibold">
+                  <div className="flex items-center justify-between border-t border-border-soft pt-2 font-semibold">
                     <span>= Bruto</span>
                     <span>{money(selectedEntry.grossPay, 'MXN')}</span>
                   </div>
                   <SummaryRow label="- Deducciones" value={`-${money(selectedEntry.manualDeductions, 'MXN')}`} />
                   <SummaryRow label="- Prestamos" value={`-${money(selectedEntry.advancesDeducted, 'MXN')}`} />
-                  <div className="flex items-center justify-between border-t border-gray-200 pt-2 text-base font-bold text-violet-700">
+                  <div className="flex items-center justify-between border-t border-border-soft pt-2 text-base font-bold text-violet-700">
                     <span>= Neto a pagar</span>
                     <span>{money(selectedEntry.netPay, 'MXN')}</span>
                   </div>
-                  <div className="my-2 border-t border-gray-100" />
+                  <div className="my-2 border-t border-border-soft" />
                   <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
                 </div>
-                <div className="overflow-hidden rounded-xl border border-gray-100">
+                <div className="overflow-hidden rounded-xl border border-border-soft">
                   <table className="tl-tbl zebra">
                     <thead className="">
                       <tr>
@@ -6362,7 +6377,7 @@ function PayrollScreen() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-400">Selecciona una fila para ver detalle y saldo de deuda.</p>
+              <p className="text-sm text-ink-400">Selecciona una fila para ver detalle y saldo de deuda.</p>
             )}
           </Panel>
         </div>
@@ -6616,7 +6631,7 @@ function PrepaidPackageScreen() {
             </div>
           )}
           {list.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-gray-100">
+            <div className="overflow-hidden rounded-xl border border-border-soft">
               <table className="tl-tbl zebra">
                 <thead>
                   <tr>
@@ -7241,8 +7256,8 @@ function AiDetailRows({ details }: { details: Record<string, unknown> | null }) 
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
       {rows.map(([key, value]) => (
         <div key={key} className="rounded-lg bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5">
-          <span className="block font-semibold uppercase tracking-wide text-gray-400">{key.replace(/_/g, ' ')}</span>
-          <span className="mt-1 block break-words text-gray-700">{formatAiDetailValue(value)}</span>
+          <span className="block font-semibold uppercase tracking-wide text-ink-400">{key.replace(/_/g, ' ')}</span>
+          <span className="mt-1 block break-words text-ink-700">{formatAiDetailValue(value)}</span>
         </div>
       ))}
     </div>
@@ -7265,7 +7280,7 @@ function MoneyTable({
   const slug = testidSlug(title)
   return (
     <Panel title={title}>
-      <div className="overflow-hidden rounded-xl border border-gray-100" data-testid={`money-table-${slug}`}>
+      <div className="overflow-hidden rounded-xl border border-border-soft" data-testid={`money-table-${slug}`}>
         <table className="tl-tbl zebra">
           <thead className="">
             <tr>
@@ -7286,7 +7301,7 @@ function MoneyTable({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-400">{empty}</td>
+                <td colSpan={4} className="px-4 py-8 text-center text-ink-400">{empty}</td>
               </tr>
             )}
           </tbody>
@@ -7390,7 +7405,7 @@ function EmployeeEditModal({
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold">Editar lavador — {employee.fullName}</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+          <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-600">✕</button>
         </div>
         <form className="space-y-4" onSubmit={form.handleSubmit(onSave)}>
           <div className="grid gap-3 md:grid-cols-2">
@@ -7428,8 +7443,8 @@ function EmployeeEditModal({
             </TextField>
           </div>
           {watchedPayrollType === 'SALARY' && (
-            <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reglas de sueldo</p>
+            <div className="rounded-lg border border-border-soft bg-ink-50/60 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Reglas de sueldo</p>
               <div className="grid gap-3 md:grid-cols-2">
                 <TextField label="Premio por dia de descanso" error={form.formState.errors.restDayPremium?.message}>
                   <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('restDayPremium')} />
@@ -7438,15 +7453,15 @@ function EmployeeEditModal({
                   <input type="number" inputMode="decimal" min={0} step="0.01" {...form.register('absenceDayPenalty')} />
                 </TextField>
               </div>
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-ink-500">
                 Si trabaja los 7 dias de la semana se le paga el dia de descanso (tarifa diaria + premio).
                 Cada falta descuenta un dia de sueldo mas la penalizacion fija.
               </p>
             </div>
           )}
-          <div className="rounded-lg border border-gray-100 p-3 space-y-3">
+          <div className="rounded-lg border border-border-soft p-3 space-y-3">
             <label className="flex items-center gap-3 text-sm font-medium">
-              <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-gray-200 text-violet-600" />
+              <input type="checkbox" {...form.register('active')} className="h-4 w-4 rounded border-border-soft text-violet-600" />
               Activo
             </label>
             {!watchedActive && (
@@ -7455,7 +7470,7 @@ function EmployeeEditModal({
               </TextField>
             )}
             {!watchedActive && employee.deactivationReason && (
-              <p className="text-xs text-gray-500">Motivo anterior: {employee.deactivationReason}</p>
+              <p className="text-xs text-ink-500">Motivo anterior: {employee.deactivationReason}</p>
             )}
           </div>
           {error && <ErrorMessage message={error} />}
@@ -7753,7 +7768,7 @@ function AttendanceScreen() {
       </div>
 
       <Panel title="Registros del día">
-        <div className="overflow-hidden rounded-xl border border-gray-100">
+        <div className="overflow-hidden rounded-xl border border-border-soft">
           <table className="tl-tbl zebra">
             <thead>
               <tr>
@@ -7807,7 +7822,7 @@ function AttendanceScreen() {
 
       {notRecorded.length > 0 && (
         <Panel title="Sin registrar">
-          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+          <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border-soft">
             {notRecorded.map((emp) => (
               <div key={emp.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
                 <span className="text-sm font-medium">{emp.fullName}</span>
@@ -7826,7 +7841,7 @@ function AttendanceScreen() {
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-base font-semibold">Registrar salida</h3>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-700">Hora de salida</span>
+              <span className="mb-1 block text-sm font-medium text-ink-700">Hora de salida</span>
               <input
                 type="time"
                 value={clockOutTime}
