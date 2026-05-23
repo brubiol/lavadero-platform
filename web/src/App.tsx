@@ -1815,12 +1815,12 @@ function EndOfDayScreen() {
             <SummaryRow label="Turnos cerrados" value={String(closedShifts.length)} />
             <SummaryRow
               label="Resultado"
-              value={daily ? money(daily.result, 'MXN') : '…'}
+              value={daily ? money(daily.result, 'MXN') : <span className="tl-skeleton-dark sm" />}
               vTone={result == null ? undefined : result >= 0 ? 'good' : 'bad'}
             />
             <SummaryRow
               label="Diferencia caja"
-              value={cashVar == null ? 'Pendiente' : money(daily!.cashVariance, 'MXN')}
+              value={!daily ? <span className="tl-skeleton-dark sm" /> : cashVar == null ? 'Pendiente' : money(daily.cashVariance, 'MXN')}
               vTone={cashVar == null ? undefined : cashVar >= 0 ? 'good' : 'bad'}
             />
             <div className="mt-4">
@@ -5424,10 +5424,18 @@ function ReportsScreen() {
 
           <Panel tone="feature" title="Resumen mensual">
             <div className="flex flex-col gap-2">
-              <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : '…'} />
-              <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? '…')} />
-              <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : '…'} />
-              <SummaryRow label="Resultado" value={monthly.data ? money(monthly.data.result, 'MXN') : '…'} />
+              {(() => {
+                const sk = <span className="tl-skeleton-dark sm" />
+                const m = monthly.data
+                return (
+                  <>
+                    <SummaryRow label="Mes" value={m ? `${m.year}-${String(m.month).padStart(2, '0')}` : sk} />
+                    <SummaryRow label="Carros" value={m ? String(m.carsWashed) : sk} />
+                    <SummaryRow label="Ingresos" value={m ? money(m.ticketRevenue, 'MXN') : sk} />
+                    <SummaryRow label="Resultado" value={m ? money(m.result, 'MXN') : sk} />
+                  </>
+                )
+              })()}
             </div>
           </Panel>
         </aside>
@@ -6403,7 +6411,7 @@ function PayrollScreen() {
                     <span>{money(selectedEntry.netPay, 'MXN')}</span>
                   </div>
                   <div className="my-2 border-t border-border-soft" />
-                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '…'} />
+                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : <span className="tl-metric-skeleton" />} />
                 </div>
                 <div className="overflow-hidden rounded-xl border border-border-soft">
                   <table className="tl-tbl zebra">
