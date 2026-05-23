@@ -1815,7 +1815,7 @@ function EndOfDayScreen() {
             <SummaryRow label="Turnos cerrados" value={String(closedShifts.length)} />
             <SummaryRow
               label="Resultado"
-              value={daily ? money(daily.result, 'MXN') : 'â¦'}
+              value={daily ? money(daily.result, 'MXN') : '…'}
               vTone={result == null ? undefined : result >= 0 ? 'good' : 'bad'}
             />
             <SummaryRow
@@ -5424,10 +5424,10 @@ function ReportsScreen() {
 
           <Panel tone="feature" title="Resumen mensual">
             <div className="flex flex-col gap-2">
-              <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : 'â¦'} />
-              <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? 'â¦')} />
-              <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : 'â¦'} />
-              <SummaryRow label="Resultado" value={monthly.data ? money(monthly.data.result, 'MXN') : 'â¦'} />
+              <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : '…'} />
+              <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? '…')} />
+              <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : '…'} />
+              <SummaryRow label="Resultado" value={monthly.data ? money(monthly.data.result, 'MXN') : '…'} />
             </div>
           </Panel>
         </aside>
@@ -6403,7 +6403,7 @@ function PayrollScreen() {
                     <span>{money(selectedEntry.netPay, 'MXN')}</span>
                   </div>
                   <div className="my-2 border-t border-border-soft" />
-                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : 'â¦'} />
+                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '…'} />
                 </div>
                 <div className="overflow-hidden rounded-xl border border-border-soft">
                   <table className="tl-tbl zebra">
