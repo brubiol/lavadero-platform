@@ -2025,9 +2025,10 @@ function AiScreen() {
           {/* Chat header — mode toggle */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
             <div className="flex items-center gap-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9.5 2A2.5 2.5 0 007 4.5v15A2.5 2.5 0 009.5 22H10a2 2 0 002-2v-1M14.5 2A2.5 2.5 0 0117 4.5v15a2.5 2.5 0 01-2.5 2.5H14a2 2 0 01-2-2v-1" />
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 via-violet-600 to-violet-800 text-white shadow-[0_2px_8px_rgba(124,58,237,0.30)]">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l1.6 4 4 1.6-4 1.6L12 14l-1.6-4-4-1.6 4-1.6L12 3z" />
+                  <path d="M19 14l.8 2 2 .8-2 .8L19 20l-.8-2-2-.8 2-.8z" />
                 </svg>
               </span>
               <div>
@@ -2041,20 +2042,29 @@ function AiScreen() {
               <button
                 type="button"
                 onClick={() => setChatMode('quick')}
+                title="Respuestas rápidas"
                 className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-semibold transition-colors ${
                   chatMode === 'quick' ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
                 }`}
               >
-                ⚡ Rápido
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
+                </svg>
+                Rápido
               </button>
               <button
                 type="button"
                 onClick={() => setChatMode('deep')}
+                title="Investigación con evidencia"
                 className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-semibold transition-colors ${
                   chatMode === 'deep' ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
                 }`}
               >
-                🔍 Profundo
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M21 21l-4.3-4.3" />
+                </svg>
+                Profundo
               </button>
               {messages.length > 0 && (
                 <button
@@ -2077,14 +2087,14 @@ function AiScreen() {
             {messages.length === 0 && !ask.isPending && (
               <div className="space-y-4">
                 <div className="flex flex-col items-center text-center py-3">
-                  <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 text-violet-700">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.24" />
-                      <path d="M12 8v4l3 3M21 4v4h-4" />
+                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-violet-600 to-violet-800 text-white shadow-[0_8px_24px_-8px_rgba(124,58,237,0.5)]">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l1.6 4 4 1.6-4 1.6L12 14l-1.6-4-4-1.6 4-1.6L12 3z" />
+                      <path d="M19 14l.8 2 2 .8-2 .8L19 20l-.8-2-2-.8 2-.8z" />
                     </svg>
                   </div>
-                  <p className="text-[14.5px] font-bold text-ink-900">¿En qué te puedo ayudar hoy?</p>
-                  <p className="mt-0.5 max-w-sm text-[12.5px] text-ink-500">
+                  <p className="text-[15px] font-bold text-ink-900">¿En qué te puedo ayudar hoy?</p>
+                  <p className="mt-1 max-w-sm text-[12.5px] text-ink-500">
                     Pregunta sobre ventas, lavadores, caja o inventario. Usa <strong>Profundo</strong> para
                     investigación con evidencia paso a paso.
                   </p>
@@ -2194,12 +2204,18 @@ function AiScreen() {
                 <button
                   type="button"
                   onClick={() => setShowPrompts((v) => !v)}
-                  className="font-semibold text-violet-600 hover:text-violet-700"
+                  className="font-semibold text-primary-600 hover:text-primary-700"
                 >
-                  {showPrompts ? '× Cerrar sugerencias' : '✨ Sugerencias'}
+                  {showPrompts ? 'Cerrar sugerencias' : 'Mostrar sugerencias'}
                 </button>
               ) : <span />}
-              <span>Enter para enviar · Shift+Enter para nueva línea</span>
+              <span className="flex items-center gap-1.5">
+                <kbd className="rounded border border-border-soft bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-700 shadow-sm">Enter</kbd>
+                enviar
+                <span className="text-ink-300">·</span>
+                <kbd className="rounded border border-border-soft bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-700 shadow-sm">⇧+Enter</kbd>
+                salto
+              </span>
             </div>
           </form>
         </div>
@@ -2368,7 +2384,12 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
 
   return (
     <div className="flex items-start gap-2.5">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 text-white text-[12px] font-bold">AI</div>
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 via-violet-600 to-violet-800 text-white shadow-[0_2px_8px_rgba(124,58,237,0.35)]">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3l1.6 4 4 1.6-4 1.6L12 14l-1.6-4-4-1.6 4-1.6L12 3z" />
+          <path d="M19 14l.8 2 2 .8-2 .8L19 20l-.8-2-2-.8 2-.8z" />
+        </svg>
+      </div>
       <div className="max-w-[88%] flex-1 space-y-3 rounded-2xl rounded-tl-md bg-ink-50 px-4 py-3 ring-1 ring-border-soft">
         {msg.mode === 'quick' ? (
           <>
@@ -2392,7 +2413,7 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
                       key={q}
                       type="button"
                       onClick={() => onAskAgain(q)}
-                      className="rounded-full bg-white px-2.5 py-1 text-[11.5px] font-semibold text-violet-700 ring-1 ring-violet-100 transition hover:bg-violet-50 hover:ring-violet-300"
+                      className="rounded-full border border-border-soft bg-white px-3 py-1 text-[11.5px] text-ink-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
                     >
                       {q}
                     </button>
@@ -2405,18 +2426,11 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
           <>
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1"><AiMarkdown text={msg.data.conclusion} /></div>
-              <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-bold ${
-                msg.data.confidence === 'HIGH' ? 'bg-emerald-100 text-emerald-700'
-                  : msg.data.confidence === 'MEDIUM' ? 'bg-amber-100 text-amber-700'
-                  : 'bg-rose-100 text-rose-700'
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${
-                  msg.data.confidence === 'HIGH' ? 'bg-emerald-500'
-                    : msg.data.confidence === 'MEDIUM' ? 'bg-amber-500'
-                    : 'bg-rose-500'
-                }`} />
-                {msg.data.confidence === 'HIGH' ? 'Alta' : msg.data.confidence === 'MEDIUM' ? 'Media' : 'Baja'} confianza
-              </span>
+              <div className="shrink-0">
+                <Pill tone={msg.data.confidence === 'HIGH' ? 'good' : msg.data.confidence === 'MEDIUM' ? 'warn' : 'bad'}>
+                  {msg.data.confidence === 'HIGH' ? 'Alta' : msg.data.confidence === 'MEDIUM' ? 'Media' : 'Baja'} confianza
+                </Pill>
+              </div>
             </div>
             {msg.data.evidence.length > 0 && (
               <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
@@ -2476,8 +2490,24 @@ function AiTodayCard({
         </button>
       </div>
       <div className="p-4 space-y-3">
-        {loading && <p className="text-[12.5px] text-ink-400">Cargando brief…</p>}
-        {briefError && <p className="rounded-lg bg-rose-50 p-2 text-[12px] text-rose-700">{briefError}</p>}
+        {loading && !today && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {[0, 1].map((i) => (
+                <div key={i} className="rounded-lg bg-ink-50/60 px-3 py-2">
+                  <span className="tl-metric-skeleton narrow" />
+                  <div className="mt-1.5"><span className="tl-metric-skeleton wide" /></div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="tl-metric-skeleton" style={{ width: `${80 - i * 10}%`, display: 'block' }} />
+              ))}
+            </div>
+          </>
+        )}
+        {briefError && <p className="rounded-lg bg-bad-50 p-2 text-[12px] text-bad-700">{briefError}</p>}
         {today && (
           <>
             {/* Day-summary mini-stats with vs-ayer deltas */}
