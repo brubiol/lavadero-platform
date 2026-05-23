@@ -1774,77 +1774,524 @@ function testidSlug(label: string): string {
 function AiScreen() {
   const queryClient = useQueryClient()
   const [date, setDate] = useState(today)
-  const [from, setFrom] = useState(today)
-  const [to, setTo] = useState(today)
-  const aiBrief = useQuery({
-    queryKey: ['ai-daily-brief', date],
-    queryFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}`, { method: 'POST' }),
+  const [chatMode, setChatMode] = useState<'quick' | 'deep'>('quick')
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [showPrompts, setShowPrompts] = useState(false)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  // Aggregated today endpoint — brief + alerts + day summary in one call
+  const todayData = useQuery({
+    queryKey: ['ai-today', date],
+    queryFn: () => api<TodayResponse>(`/api/v1/ai/today?date=${date}`),
   })
-  const aiInsights = useQuery({
-    queryKey: ['ai-insights', 'dashboard', date],
-    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?status=NEW&from=${date}&to=${date}`),
-  })
+
+  // Recent history (last 30 days, capped to 20 displayed)
   const history = useQuery({
-    queryKey: ['ai-insights', 'command-center', from, to],
-    queryFn: () => api<AiInsight[]>(`/api/v1/ai/insights?from=${from}&to=${to}`),
+    queryKey: ['ai-insights', 'history', date],
+    queryFn: () => {
+      const from = new Date(date + 'T00:00:00')
+      from.setDate(from.getDate() - 30)
+      const fromIso = from.toISOString().slice(0, 10)
+      return api<AiInsight[]>(`/api/v1/ai/insights?from=${fromIso}&to=${date}`)
+    },
   })
+
+  // Quick-prompt library
+  const prompts = useQuery({
+    queryKey: ['ai-quick-prompts'],
+    queryFn: () => api<QuickPromptsResponse>('/api/v1/ai/quick-prompts'),
+  })
+
   const refreshBrief = useMutation({
     mutationFn: () => api<AiInsight>(`/api/v1/ai/briefs/daily?date=${date}&force=true`, { method: 'POST' }),
     onSuccess: async () => {
       await invalidateAi(queryClient)
     },
   })
-  const runAlerts = useMutation({
-    mutationFn: () => api<AiInsight[]>(`/api/v1/ai/alerts/run?from=${date}&to=${date}`, { method: 'POST' }),
-    onSuccess: async () => {
+
+  const ask = useMutation({
+    mutationFn: async ({ message, mode }: { message: string; mode: 'quick' | 'deep' }) => {
+      if (mode === 'quick') {
+        return { mode, data: await api<AnalystChatResponse>('/api/v1/ai/chat', {
+          method: 'POST',
+          body: JSON.stringify({ message, from: date, to: date }),
+        }) } as const
+      }
+      return { mode, data: await api<InvestigationResponse>('/api/v1/ai/investigations', {
+        method: 'POST',
+        body: JSON.stringify({ question: message, from: date, to: date }),
+      }) } as const
+    },
+    onSuccess: async (result) => {
+      setMessages((prev) => [...prev, {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        mode: result.mode,
+        // Cast is fine — discriminated union by mode handles the rest
+        data: result.data as never,
+        ts: Date.now(),
+      }])
       await invalidateAi(queryClient)
     },
+    onError: (err: Error) => {
+      setMessages((prev) => [...prev, {
+        id: `e-${Date.now()}`,
+        role: 'assistant',
+        mode: 'error',
+        text: err.message,
+        ts: Date.now(),
+      }])
+    },
   })
-  const alerts = (aiInsights.data ?? []).filter((insight) => insight.featureType === 'ANOMALY_ALERT')
-  const historyRows = history.data ?? []
 
-  const briefDetail = aiBrief.data ? 'Disponible' : aiBrief.isLoading ? 'Generando...' : 'Pendiente'
-  const briefTone = aiBrief.data ? 'info' : aiBrief.isLoading ? 'purple' : 'warn'
-  const alertsTone = alerts.length > 0 ? 'warn' : 'good'
-  const alertsDetail = alerts.length === 1 ? 'requiere revision' : 'requieren revision'
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages.length, ask.isPending])
+
+  const submitMessage = (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || ask.isPending) return
+    const mode = chatMode
+    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', text: trimmed, mode, ts: Date.now() }])
+    setInput('')
+    setShowPrompts(false)
+    ask.mutate({ message: trimmed, mode })
+  }
+
+  const today_ = todayData.data
+  const alerts = today_?.alerts ?? []
+  const critical = today_?.criticalCount ?? 0
+  const warnings = today_?.warningCount ?? 0
+  const historyRows = (history.data ?? []).filter((i) => i.featureType !== 'ANOMALY_ALERT' && i.featureType !== 'DAILY_BRIEF')
 
   return (
     <section className="space-y-5">
-      <PageHead
-        tone="hero"
-        title="AI Command Center"
-        subtitle="Brief diario, alertas operativas, analisis de reportes e investigaciones con evidencia. La AI solo guarda insights; no modifica tickets, caja, gastos, nomina ni inventario."
-        actions={<Pill tone="purple" dot={false}>Asesor operativo</Pill>}
-      />
-
-      <div className="tl-stagger grid gap-3 md:grid-cols-3">
-        <StatStrip tone={briefTone} label="Brief seleccionado" value={date} sub={briefDetail} />
-        <StatStrip tone={alertsTone} label="Alertas nuevas" value={String(alerts.length)} sub={alertsDetail} pulse={alerts.length > 0} />
-        <StatStrip tone="purple" label="Rango analista" value={`${from} / ${to}`} sub={`${historyRows.length} insights en historial`} />
+      {/* ─── Editorial header ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            Asistente · {today_?.date ?? date}
+          </p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
+            AI Command Center
+          </h2>
+          <p className="mt-1 text-[12.5px] text-ink-500 max-w-xl">
+            Pregúntale al asistente, revisa el brief del día y las alertas. La AI guarda insights pero no modifica
+            tickets, caja, gastos, nómina ni inventario.
+          </p>
+        </div>
+        <div className="flex items-end gap-3">
+          {(critical > 0 || warnings > 0) && (
+            <div className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12px] font-bold ${
+              critical > 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              <span className={`relative flex h-2 w-2`}>
+                <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${critical > 0 ? 'bg-rose-400' : 'bg-amber-400'} opacity-75`} />
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${critical > 0 ? 'bg-rose-500' : 'bg-amber-500'}`} />
+              </span>
+              {critical > 0 ? `${critical} crítica${critical === 1 ? '' : 's'}` : `${warnings} alerta${warnings === 1 ? '' : 's'}`}
+            </div>
+          )}
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Fecha</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="tl-input" />
+          </label>
+        </div>
       </div>
 
-      <AiBriefSection
-        date={date}
-        setDate={setDate}
-        brief={aiBrief.data}
-        loading={aiBrief.isLoading}
-        error={aiBrief.error?.message || refreshBrief.error?.message}
-        onReload={() => refreshBrief.mutate()}
-        reloading={refreshBrief.isPending}
-      />
-      <AiWatchdogSection
-        date={date}
-        setDate={setDate}
-        alerts={alerts}
-        loading={aiInsights.isLoading}
-        error={aiInsights.error?.message || runAlerts.error?.message}
-        onRun={() => runAlerts.mutate()}
-        running={runAlerts.isPending}
-      />
-      <AiAnalystSection from={from} to={to} setFrom={setFrom} setTo={setTo} />
-      <AiInvestigationSection from={from} to={to} />
-      <AiHistorySection from={from} to={to} rows={historyRows} loading={history.isLoading} error={history.error?.message} />
+      <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+        {/* ─── Main chat panel ─────────────────────────────────── */}
+        <div className="tl-panel overflow-hidden flex flex-col" style={{ minHeight: 580 }}>
+          {/* Chat header — mode toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+            <div className="flex items-center gap-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9.5 2A2.5 2.5 0 007 4.5v15A2.5 2.5 0 009.5 22H10a2 2 0 002-2v-1M14.5 2A2.5 2.5 0 0117 4.5v15a2.5 2.5 0 01-2.5 2.5H14a2 2 0 01-2-2v-1" />
+                </svg>
+              </span>
+              <div>
+                <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Asistente</h3>
+                <p className="text-[10.5px] text-ink-500">
+                  {chatMode === 'quick' ? 'Respuestas rápidas con números visibles' : 'Investigación profunda con evidencia y pasos'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 rounded-full bg-white border border-border-soft p-1">
+              <button
+                type="button"
+                onClick={() => setChatMode('quick')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-semibold transition-colors ${
+                  chatMode === 'quick' ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+                }`}
+              >
+                ⚡ Rápido
+              </button>
+              <button
+                type="button"
+                onClick={() => setChatMode('deep')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-semibold transition-colors ${
+                  chatMode === 'deep' ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+                }`}
+              >
+                🔍 Profundo
+              </button>
+            </div>
+          </div>
+
+          {/* Messages scroll area */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4" style={{ maxHeight: 520 }}>
+            {messages.length === 0 && !ask.isPending && (
+              <div className="flex h-full min-h-[200px] flex-col items-center justify-center text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 text-violet-700">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.24" />
+                    <path d="M12 8v4l3 3M21 4v4h-4" />
+                  </svg>
+                </div>
+                <p className="text-[14.5px] font-bold text-ink-900">¿En qué te puedo ayudar hoy?</p>
+                <p className="mt-1 max-w-sm text-[12.5px] text-ink-500">
+                  Pregunta sobre ventas, lavadores, caja o inventario. Usa <strong>Profundo</strong> para investigación
+                  con evidencia paso a paso.
+                </p>
+              </div>
+            )}
+
+            {messages.map((m) => (
+              <AiChatMessage key={m.id} msg={m} onAskAgain={(q) => { setInput(q); setShowPrompts(false) }} />
+            ))}
+
+            {ask.isPending && (
+              <div className="flex items-center gap-2 text-[12.5px] text-ink-500">
+                <span className="flex gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '120ms' }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '240ms' }} />
+                </span>
+                Asistente está pensando…
+              </div>
+            )}
+          </div>
+
+          {/* Quick prompts (expandable) */}
+          {showPrompts && prompts.data && (
+            <div className="border-t border-border-soft bg-ink-50/40 p-4 space-y-3 max-h-[260px] overflow-y-auto">
+              {prompts.data.categories.map((cat) => (
+                <div key={cat.key}>
+                  <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                    <span className="mr-1">{cat.icon}</span>{cat.name}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cat.prompts.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => submitMessage(p)}
+                        disabled={ask.isPending}
+                        className="rounded-full border border-border-soft bg-white px-3 py-1 text-[11.5px] text-ink-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Composer */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); submitMessage(input) }}
+            className="border-t border-border-soft bg-white p-4 space-y-2"
+          >
+            <div className="flex items-end gap-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    submitMessage(input)
+                  }
+                }}
+                rows={2}
+                placeholder={chatMode === 'quick' ? 'Pregunta rápida — ej. ¿Cómo fue el día?' : 'Pregunta profunda — ej. ¿Qué explica la diferencia de caja?'}
+                disabled={ask.isPending}
+                className="tl-input flex-1 resize-none"
+              />
+              <Button
+                kind={chatMode === 'deep' ? 'go' : 'primary'}
+                type="submit"
+                loading={ask.isPending}
+                disabled={!input.trim()}
+              >
+                {chatMode === 'quick' ? 'Preguntar' : 'Investigar'}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-ink-400">
+              <button
+                type="button"
+                onClick={() => setShowPrompts((v) => !v)}
+                className="font-semibold text-violet-600 hover:text-violet-700"
+              >
+                {showPrompts ? '× Cerrar sugerencias' : '✨ Sugerencias'}
+              </button>
+              <span>Enter para enviar · Shift+Enter para nueva línea</span>
+            </div>
+          </form>
+        </div>
+
+        {/* ─── Right rail: Today + Alerts + Bitácora ─────────── */}
+        <aside className="space-y-4">
+          <AiTodayCard
+            today={today_}
+            loading={todayData.isLoading}
+            onReloadBrief={() => refreshBrief.mutate()}
+            reloading={refreshBrief.isPending}
+            briefError={refreshBrief.error?.message}
+          />
+          <AiAlertsCard alerts={alerts} loading={todayData.isLoading} />
+          <AiHistoryCard rows={historyRows} loading={history.isLoading} />
+        </aside>
+      </div>
     </section>
+  )
+}
+
+// ── Single chat message ────────────────────────────────────────
+function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: string) => void }) {
+  const time = new Date(msg.ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+  if (msg.role === 'user') {
+    return (
+      <div className="flex items-start justify-end gap-2.5">
+        <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-ink-900 px-4 py-2.5 text-[13.5px] text-white">
+          <p className="whitespace-pre-wrap leading-6">{msg.text}</p>
+          <p className="mt-1 text-[10px] text-white/40 text-right">
+            <span className="font-semibold uppercase tracking-wider">{msg.mode === 'quick' ? '⚡ Rápido' : '🔍 Profundo'}</span> · {time}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (msg.mode === 'error') {
+    return (
+      <div className="flex items-start gap-2.5">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-700">!</div>
+        <div className="max-w-[80%] rounded-2xl rounded-tl-md bg-rose-50 px-4 py-2.5 text-[13.5px] text-rose-700 ring-1 ring-rose-100">
+          <p>{msg.text}</p>
+          <p className="mt-1 text-[10px] text-rose-500">Error · {time}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 text-white text-[12px] font-bold">AI</div>
+      <div className="max-w-[88%] flex-1 space-y-3 rounded-2xl rounded-tl-md bg-ink-50 px-4 py-3 ring-1 ring-border-soft">
+        {msg.mode === 'quick' ? (
+          <>
+            <p className="whitespace-pre-wrap text-[13.5px] leading-6 text-ink-800">{msg.data.answer}</p>
+            {msg.data.supportingNumbers.length > 0 && (
+              <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Números usados</p>
+                <ul className="mt-1.5 space-y-1 text-[12.5px] leading-5 text-ink-700">
+                  {msg.data.supportingNumbers.map((n, i) => (
+                    <li key={i} className="flex items-start gap-1.5"><span className="text-violet-400 mt-0.5">·</span>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {msg.data.suggestedFollowUps.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Siguiente pregunta</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {msg.data.suggestedFollowUps.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => onAskAgain(q)}
+                      className="rounded-full bg-white px-2.5 py-1 text-[11.5px] font-semibold text-violet-700 ring-1 ring-violet-100 transition hover:bg-violet-50 hover:ring-violet-300"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex items-start justify-between gap-2">
+              <p className="whitespace-pre-wrap text-[13.5px] font-semibold leading-6 text-ink-900">{msg.data.conclusion}</p>
+              <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-bold ${
+                msg.data.confidence === 'HIGH' ? 'bg-emerald-100 text-emerald-700'
+                  : msg.data.confidence === 'MEDIUM' ? 'bg-amber-100 text-amber-700'
+                  : 'bg-rose-100 text-rose-700'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  msg.data.confidence === 'HIGH' ? 'bg-emerald-500'
+                    : msg.data.confidence === 'MEDIUM' ? 'bg-amber-500'
+                    : 'bg-rose-500'
+                }`} />
+                {msg.data.confidence === 'HIGH' ? 'Alta' : msg.data.confidence === 'MEDIUM' ? 'Media' : 'Baja'} confianza
+              </span>
+            </div>
+            {msg.data.evidence.length > 0 && (
+              <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Evidencia</p>
+                <ul className="mt-1.5 space-y-1 text-[12.5px] leading-5 text-ink-700">
+                  {msg.data.evidence.map((n, i) => (
+                    <li key={i} className="flex items-start gap-1.5"><span className="text-violet-400 mt-0.5">·</span>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {msg.data.steps.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Pasos realizados</p>
+                <ol className="space-y-1 pl-5 list-decimal text-[12px] leading-5 text-ink-600">
+                  {msg.data.steps.map((s) => <li key={s}>{s}</li>)}
+                </ol>
+              </div>
+            )}
+          </>
+        )}
+        <p className="text-[10px] text-ink-400">{time}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Today / Brief rail card ─────────────────────────────────────
+function AiTodayCard({
+  today,
+  loading,
+  onReloadBrief,
+  reloading,
+  briefError,
+}: {
+  today?: TodayResponse
+  loading: boolean
+  onReloadBrief: () => void
+  reloading: boolean
+  briefError?: string
+}) {
+  const summaryLines = today?.brief ? aiSummaryLines(today.brief.summary) : []
+  return (
+    <div className="tl-panel overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-violet-700" />
+          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Brief del día</h3>
+        </div>
+        <button
+          type="button"
+          onClick={onReloadBrief}
+          disabled={reloading}
+          className="text-[11px] font-semibold text-violet-600 hover:text-violet-700 disabled:opacity-50"
+        >
+          {reloading ? 'Generando…' : '↻ Recargar'}
+        </button>
+      </div>
+      <div className="p-4 space-y-3">
+        {loading && <p className="text-[12.5px] text-ink-400">Cargando brief…</p>}
+        {briefError && <p className="rounded-lg bg-rose-50 p-2 text-[12px] text-rose-700">{briefError}</p>}
+        {today && (
+          <>
+            {/* Day-summary mini-stats */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-ink-50/60 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Carros</p>
+                <p className="font-display text-[18px] font-bold leading-none tabular-nums text-ink-900">{today.summary.carsWashed}</p>
+              </div>
+              <div className="rounded-lg bg-ink-50/60 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Resultado</p>
+                <p className={`font-display text-[18px] font-bold leading-none tabular-nums ${today.summary.result >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {money(today.summary.result, 'MXN')}
+                </p>
+              </div>
+            </div>
+            {summaryLines.length > 0 && (
+              <ul className="space-y-1 text-[12.5px] leading-5 text-ink-700">
+                {summaryLines.slice(0, 5).map((line, i) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="text-violet-400 mt-0.5">·</span>{line}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Alerts rail card ───────────────────────────────────────────
+function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boolean }) {
+  if (loading && alerts.length === 0) return null
+  if (!loading && alerts.length === 0) {
+    return (
+      <div className="tl-panel overflow-hidden">
+        <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+          <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
+          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Alertas</h3>
+        </div>
+        <div className="p-4 flex items-center gap-2 text-[12.5px] text-emerald-700">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">✓</span>
+          Sin alertas para hoy.
+        </div>
+      </div>
+    )
+  }
+  const sorted = [...alerts].sort((a, b) => {
+    const order = { CRITICAL: 0, WARNING: 1, INFO: 2 }
+    return order[a.severity] - order[b.severity]
+  })
+  const topSeverity = sorted[0]?.severity
+  const colorMap = topSeverity === 'CRITICAL'
+    ? 'from-rose-400 to-rose-600'
+    : topSeverity === 'WARNING'
+    ? 'from-amber-400 to-amber-600'
+    : 'from-violet-400 to-violet-600'
+  return (
+    <div className="tl-panel overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className={`h-[18px] w-[3px] rounded-full bg-gradient-to-b ${colorMap}`} />
+          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Alertas</h3>
+        </div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[10.5px] font-bold text-ink-700">
+          {sorted.length}
+        </span>
+      </div>
+      <div className="p-4 space-y-2 max-h-[420px] overflow-y-auto">
+        {sorted.map((a) => <AiInsightCard key={a.id} insight={a} compact />)}
+      </div>
+    </div>
+  )
+}
+
+// ── History rail card ──────────────────────────────────────────
+function AiHistoryCard({ rows, loading }: { rows: AiInsight[]; loading: boolean }) {
+  if (loading || rows.length === 0) return null
+  return (
+    <div className="tl-panel overflow-hidden">
+      <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+        <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-ink-400 to-ink-600" />
+        <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Bitácora reciente</h3>
+      </div>
+      <div className="p-4 space-y-2 max-h-[360px] overflow-y-auto">
+        {rows.slice(0, 8).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
+      </div>
+    </div>
   )
 }
 
@@ -5884,300 +6331,6 @@ function FormButton({ label, loading }: { label: string; loading: boolean }) {
   )
 }
 
-function AiWorkflowSection({
-  eyebrow,
-  title,
-  description,
-  action,
-  children,
-}: {
-  eyebrow: string
-  title: string
-  description: string
-  action?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <Panel
-      title={(
-        <>
-          <span className="tl-eyebrow">{eyebrow}</span>
-          <span className="block text-[16px] font-bold text-ink-900 tracking-[-0.012em]" style={{ fontFamily: 'var(--font-display)' }}>{title}</span>
-        </>
-      )}
-      subtitle={description}
-      actions={action}
-    >
-      <div className="space-y-4">{children}</div>
-    </Panel>
-  )
-}
-
-function AiDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <Field label={label}>
-      <input
-        type="date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        style={{ width: 'auto', minWidth: 160 }}
-      />
-    </Field>
-  )
-}
-
-function AiActionButton({
-  label,
-  loadingLabel,
-  loading,
-  onClick,
-  tone = 'slate',
-}: {
-  label: string
-  loadingLabel: string
-  loading: boolean
-  onClick: () => void
-  tone?: 'slate' | 'sky' | 'emerald' | 'amber'
-}) {
-  const kind = tone === 'emerald' ? 'go' : tone === 'sky' ? 'primary' : tone === 'amber' ? 'secondary' : 'secondary'
-  return (
-    <Button kind={kind} onClick={onClick} disabled={loading}>
-      {loading ? loadingLabel : label}
-    </Button>
-  )
-}
-
-function AiBriefSection({
-  date,
-  setDate,
-  brief,
-  loading,
-  error,
-  onReload,
-  reloading,
-}: {
-  date: string
-  setDate: (value: string) => void
-  brief?: AiInsight
-  loading: boolean
-  error?: string
-  onReload: () => void
-  reloading: boolean
-}) {
-  return (
-    <AiWorkflowSection
-      eyebrow="1. Brief del dia"
-      title="Resumen practico para abrir el dia"
-      description="Ventas, caja, lavadores, inventario y acciones del dueno en un bloque legible."
-      action={(
-        <>
-          <AiDateInput label="Fecha" value={date} onChange={setDate} />
-          <AiActionButton label="Generar / recargar" loadingLabel="Generando..." loading={reloading} onClick={onReload} tone="sky" />
-        </>
-      )}
-    >
-      {error && <ErrorMessage message={error} />}
-      {loading && <AiEmptyState text="Preparando brief diario..." />}
-      {!loading && brief && <AiInsightCard insight={brief} compact={false} />}
-      {!loading && !brief && !error && <AiEmptyState text="Todavia no hay brief para esta fecha." />}
-    </AiWorkflowSection>
-  )
-}
-
-function AiWatchdogSection({
-  date,
-  setDate,
-  alerts,
-  loading,
-  error,
-  onRun,
-  running,
-}: {
-  date: string
-  setDate: (value: string) => void
-  alerts: AiInsight[]
-  loading: boolean
-  error?: string
-  onRun: () => void
-  running: boolean
-}) {
-  return (
-    <AiWorkflowSection
-      eyebrow="2. Watchdog de alertas"
-      title="Alertas no financieras que necesitan revision"
-      description="Detecta diferencias de caja, bajas de ingresos, cortesia/voids altos, gastos raros e inventario bajo."
-      action={(
-        <>
-          <AiDateInput label="Fecha" value={date} onChange={setDate} />
-          <AiActionButton label="Correr watchdog" loadingLabel="Revisando..." loading={running} onClick={onRun} tone="amber" />
-        </>
-      )}
-    >
-      {error && <ErrorMessage message={error} />}
-      {loading && <AiEmptyState text="Cargando alertas nuevas..." />}
-      {!loading && alerts.length === 0 && !error && <AiEmptyState text="Sin alertas nuevas para esta fecha." />}
-      {alerts.length > 0 && (
-        <div className="space-y-3">
-          {alerts.map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
-        </div>
-      )}
-    </AiWorkflowSection>
-  )
-}
-
-function AiAnalystSection({
-  from,
-  to,
-  setFrom,
-  setTo,
-}: {
-  from: string
-  to: string
-  setFrom: (value: string) => void
-  setTo: (value: string) => void
-}) {
-  const queryClient = useQueryClient()
-  const chatForm = useForm<AnalystChatFormValues>({
-    resolver: zodResolver(analystChatSchema) as Resolver<AnalystChatFormValues>,
-    defaultValues: { message: '' },
-  })
-  const chat = useMutation({
-    mutationFn: (values: AnalystChatFormValues) => api<AnalystChatResponse>('/api/v1/ai/chat', {
-      method: 'POST',
-      body: JSON.stringify({ message: values.message, from, to }),
-    }),
-    onSuccess: async () => {
-      await invalidateAi(queryClient)
-    },
-  })
-
-  return (
-    <AiWorkflowSection
-      eyebrow="3. Analista AI"
-      title="Preguntas rapidas sobre el negocio"
-      description="Responde con numeros visibles del rango seleccionado y sugiere siguientes preguntas."
-      action={(
-        <>
-          <AiDateInput label="Desde" value={from} onChange={setFrom} />
-          <AiDateInput label="Hasta" value={to} onChange={setTo} />
-        </>
-      )}
-    >
-      <form className="space-y-4" onSubmit={chatForm.handleSubmit((values) => chat.mutate(values))}>
-        <TextField label="Pregunta" error={chatForm.formState.errors.message?.message}>
-          <textarea rows={4} placeholder="Ej. Por que esta semana estuvo mas baja?" {...chatForm.register('message')} />
-        </TextField>
-        {chat.error && <ErrorMessage message={chat.error.message} />}
-        <Button kind="primary" type="submit" disabled={chat.isPending}>
-          {chat.isPending ? 'Analizando...' : 'Preguntar al analista'}
-        </Button>
-      </form>
-
-      {chat.data && (
-        <div className="tl-ai-response tl-ai-response-analyst">
-          <AiLabeledText label="Conclusion" text={chat.data.answer} />
-          <AiEvidenceList title="Numeros usados" rows={chat.data.supportingNumbers} />
-          {chat.data.suggestedFollowUps.length > 0 && (
-            <div className="mt-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-500">Siguientes preguntas</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {chat.data.suggestedFollowUps.map((question) => (
-                  <button
-                    key={question}
-                    type="button"
-                    onClick={() => chatForm.setValue('message', question)}
-                    className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-primary-700 ring-1 ring-primary-100 transition hover:bg-primary-50 hover:ring-primary-500"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </AiWorkflowSection>
-  )
-}
-
-function AiInvestigationSection({ from, to }: { from: string; to: string }) {
-  const queryClient = useQueryClient()
-  const investigationForm = useForm<InvestigationFormValues>({
-    resolver: zodResolver(investigationSchema) as Resolver<InvestigationFormValues>,
-    defaultValues: { question: '' },
-  })
-  const investigation = useMutation({
-    mutationFn: (values: InvestigationFormValues) => api<InvestigationResponse>('/api/v1/ai/investigations', {
-      method: 'POST',
-      body: JSON.stringify({ question: values.question, from, to }),
-    }),
-    onSuccess: async () => {
-      await invalidateAi(queryClient)
-    },
-  })
-
-  return (
-    <AiWorkflowSection
-      eyebrow="4. Investigacion con agente"
-      title="Investigacion trazable con herramientas internas"
-      description={`Usa resumen diario, historial, caja, lavadores e inventario para el rango ${from} a ${to}.`}
-    >
-      <form className="space-y-4" onSubmit={investigationForm.handleSubmit((values) => investigation.mutate(values))}>
-        <TextField label="Pregunta a investigar" error={investigationForm.formState.errors.question?.message}>
-          <textarea rows={4} placeholder="Ej. Que explica la diferencia de efectivo de este rango?" {...investigationForm.register('question')} />
-        </TextField>
-        {investigation.error && <ErrorMessage message={investigation.error.message} />}
-        <Button kind="go" type="submit" disabled={investigation.isPending}>
-          {investigation.isPending ? 'Investigando...' : 'Investigar'}
-        </Button>
-      </form>
-
-      {investigation.data && (
-        <div className="tl-ai-response tl-ai-response-investigation">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <AiLabeledText label="Conclusion" text={investigation.data.conclusion} />
-            <Pill tone="good">Confianza {confidenceLabel(investigation.data.confidence)}</Pill>
-          </div>
-          <AiEvidenceList title="Evidencia" rows={investigation.data.evidence} />
-          <AiEvidenceList title="Pasos realizados" rows={investigation.data.steps} ordered />
-        </div>
-      )}
-    </AiWorkflowSection>
-  )
-}
-
-function AiHistorySection({
-  from,
-  to,
-  rows,
-  loading,
-  error,
-}: {
-  from: string
-  to: string
-  rows: AiInsight[]
-  loading: boolean
-  error?: string
-}) {
-  const sortedRows = [...rows].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
-
-  return (
-    <AiWorkflowSection
-      eyebrow="5. Historial de insights"
-      title="Bitacora reciente de AI"
-      description={`Insights guardados del ${from} al ${to}, con estado y acciones de revision.`}
-    >
-      {error && <ErrorMessage message={error} />}
-      {loading && <AiEmptyState text="Cargando historial..." />}
-      {!loading && sortedRows.length === 0 && !error && <AiEmptyState text="Sin historial de AI para este rango." />}
-      {sortedRows.length > 0 && (
-        <div className="space-y-3">
-          {sortedRows.slice(0, 8).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
-        </div>
-      )}
-    </AiWorkflowSection>
-  )
-}
 
 function AiInsightCard({ insight, compact }: { insight: AiInsight; compact: boolean }) {
   const queryClient = useQueryClient()
