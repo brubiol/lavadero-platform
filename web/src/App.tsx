@@ -2334,22 +2334,25 @@ function AutoTextarea({
 }
 
 // Delta chip for "vs ayer" comparisons
-function AiVsYesterday({ today, yesterday, isMoney }: { today: number; yesterday: number | null | undefined; isMoney?: boolean }) {
+function AiVsYesterday({ today, yesterday }: { today: number; yesterday: number | null | undefined; isMoney?: boolean }) {
   if (yesterday == null) return null
   if (yesterday === 0 && today === 0) return null
   if (yesterday === 0) {
-    return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-700">nuevo</span>
+    return <span className="inline-flex items-center gap-1 rounded-full bg-good-100 px-1.5 py-0.5 text-[9.5px] font-bold text-good-700">nuevo</span>
   }
   const diff = today - yesterday
   const pct = Math.round((diff / Math.abs(yesterday)) * 100)
   if (pct === 0) return <span className="text-[10px] text-ink-400">igual</span>
   const up = diff > 0
-  // For expenses-like fields (where up is bad), caller can flip via isMoney inverted — we keep neutral coloring on numeric KPIs (cars/result).
+  // Caller decides whether "up" is good or bad — we just show direction.
+  // For result/cars (up=good), the colors read naturally. Expenses are not
+  // currently shown with this chip; if added, the caller can wrap with a
+  // sign flip.
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold ${
-      up ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+      up ? 'bg-good-100 text-good-700' : 'bg-bad-100 text-bad-700'
     }`}>
-      {up ? '▲' : '▼'} {Math.abs(pct)}%{isMoney ? '' : ''}
+      {up ? '▲' : '▼'} {Math.abs(pct)}%
     </span>
   )
 }
