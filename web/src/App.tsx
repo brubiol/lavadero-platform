@@ -1815,7 +1815,7 @@ function EndOfDayScreen() {
             <SummaryRow label="Turnos cerrados" value={String(closedShifts.length)} />
             <SummaryRow
               label="Resultado"
-              value={daily ? money(daily.result, 'MXN') : '...'}
+              value={daily ? money(daily.result, 'MXN') : 'â¦'}
               vTone={result == null ? undefined : result >= 0 ? 'good' : 'bad'}
             />
             <SummaryRow
@@ -3631,40 +3631,45 @@ function CatalogsScreen() {
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           <Panel title="Lavadores">
-            <form className="grid gap-3 md:grid-cols-[1fr_160px_140px_140px_140px_auto]" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
-              <TextField label="Nombre" error={employeeForm.formState.errors.fullName?.message}>
-                <input placeholder="Ej. Juan Perez" {...employeeForm.register('fullName')} />
-              </TextField>
-              <TextField label="Teléfono" error={employeeForm.formState.errors.phone?.message}>
-                <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Opcional" {...employeeForm.register('phone')} />
-              </TextField>
-              <SelectField label="Regla" error={employeeForm.formState.errors.payrollType?.message}>
-                <select {...employeeForm.register('payrollType')}>
-                  <option value="COMMISSION">Comision</option>
-                  <option value="SALARY">Sueldo</option>
-                </select>
-              </SelectField>
-              <TextField label="Sueldo base" error={employeeForm.formState.errors.baseWeeklySalary?.message}>
-                <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
-              </TextField>
-              <TextField label="$ por carro" error={employeeForm.formState.errors.commissionRate?.message}>
-                <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('commissionRate')} />
-              </TextField>
-              <TextField label="Bono/carro" error={employeeForm.formState.errors.productivityBonusRate?.message}>
-                <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('productivityBonusRate')} />
-              </TextField>
-              <FormButton label="Agregar" loading={createEmployee.isPending} />
+            <form className="space-y-3" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField label="Nombre" error={employeeForm.formState.errors.fullName?.message}>
+                  <input placeholder="Ej. Juan Perez" {...employeeForm.register('fullName')} />
+                </TextField>
+                <TextField label="Teléfono" error={employeeForm.formState.errors.phone?.message}>
+                  <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Opcional" {...employeeForm.register('phone')} />
+                </TextField>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <SelectField label="Regla" error={employeeForm.formState.errors.payrollType?.message}>
+                  <select {...employeeForm.register('payrollType')}>
+                    <option value="COMMISSION">Comision</option>
+                    <option value="SALARY">Sueldo</option>
+                  </select>
+                </SelectField>
+                <TextField label="Sueldo base/sem" error={employeeForm.formState.errors.baseWeeklySalary?.message}>
+                  <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
+                </TextField>
+                <TextField label="$ por carro" error={employeeForm.formState.errors.commissionRate?.message}>
+                  <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('commissionRate')} />
+                </TextField>
+                <TextField label="Bono/carro" error={employeeForm.formState.errors.productivityBonusRate?.message}>
+                  <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('productivityBonusRate')} />
+                </TextField>
+              </div>
+              {createEmployee.error && <ErrorMessage message={createEmployee.error.message} />}
+              <div className="flex justify-end">
+                <Button kind="go" type="submit" disabled={createEmployee.isPending}>
+                  {createEmployee.isPending ? 'Guardando…' : '+ Agregar lavador'}
+                </Button>
+              </div>
             </form>
-            {createEmployee.error && <ErrorMessage message={createEmployee.error.message} />}
+            <div className="my-4 border-t border-border-soft" />
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-ink-600">Lavadores registrados</span>
-              <button
-                type="button"
-                onClick={() => setShowInactiveEmployees(!showInactiveEmployees)}
-                className="text-xs text-violet-600 hover:underline"
-              >
+              <Button kind="ghost" size="sm" onClick={() => setShowInactiveEmployees(!showInactiveEmployees)}>
                 {showInactiveEmployees ? 'Solo activos' : 'Ver todos'}
-              </button>
+              </Button>
             </div>
             <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border-soft">
               {employees.filter(e => showInactiveEmployees || e.active).length === 0 && (
@@ -3839,17 +3844,13 @@ function CatalogsScreen() {
               <TextField label="Fecha" error={operationsForm.formState.errors.businessDate?.message}>
                 <input type="date" {...operationsForm.register('businessDate')} />
               </TextField>
-              <button
-                type="submit"
-                disabled={openBusinessDay.isPending}
-                className="w-full tl-btn tl-btn-primary"
-              >
-                {openBusinessDay.isPending ? 'Abriendo...' : 'Abrir dia'}
-              </button>
+              <Button kind="primary" type="submit" block disabled={openBusinessDay.isPending}>
+                {openBusinessDay.isPending ? 'Abriendo…' : 'Abrir dia'}
+              </Button>
             </form>
             {openBusinessDay.error && <ErrorMessage message={openBusinessDay.error.message} />}
             <div className="rounded-md bg-ink-50 p-3 text-sm">
-              <p className="text-ink-400">Dia abierto</p>
+              <p className="text-ink-400">DÃ­a abierto</p>
               <p className="font-semibold">{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</p>
             </div>
           </Panel>
@@ -3862,13 +3863,9 @@ function CatalogsScreen() {
                   <option value="VESPERTINO">Vespertino (tarde)</option>
                 </select>
               </SelectField>
-              <button
-                type="submit"
-                disabled={openShift.isPending || !data.currentBusinessDay}
-                className="w-full tl-btn tl-btn-primary"
-              >
-                {openShift.isPending ? 'Abriendo...' : 'Abrir turno'}
-              </button>
+              <Button kind="primary" type="submit" block disabled={openShift.isPending || !data.currentBusinessDay}>
+                {openShift.isPending ? 'Abriendo…' : 'Abrir turno'}
+              </Button>
             </form>
             {openShift.error && <ErrorMessage message={openShift.error.message} />}
             <SimpleList
@@ -5382,10 +5379,10 @@ function ReportsScreen() {
 
           <Panel tone="feature" title="Resumen mensual">
             <div className="flex flex-col gap-2">
-              <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : '...'} />
-              <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? '...')} />
-              <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : '...'} />
-              <SummaryRow label="Resultado" value={monthly.data ? money(monthly.data.result, 'MXN') : '...'} />
+              <SummaryRow label="Mes" value={monthly.data ? `${monthly.data.year}-${String(monthly.data.month).padStart(2, '0')}` : 'â¦'} />
+              <SummaryRow label="Carros" value={String(monthly.data?.carsWashed ?? 'â¦')} />
+              <SummaryRow label="Ingresos" value={monthly.data ? money(monthly.data.ticketRevenue, 'MXN') : 'â¦'} />
+              <SummaryRow label="Resultado" value={monthly.data ? money(monthly.data.result, 'MXN') : 'â¦'} />
             </div>
           </Panel>
         </aside>
@@ -5405,10 +5402,18 @@ function ReportsScreen() {
           {historical.error && <ErrorMessage message={historical.error.message} />}
 
           <div className="grid gap-4 md:grid-cols-4">
-            <Metric label="Dias" value={String(historical.data?.totalDays ?? '...')} />
-            <Metric label="Carros" value={String(historical.data?.totalCars ?? '...')} />
-            <Metric label="Ingresos" value={historical.data ? money(historical.data.totalRevenue, 'MXN') : '...'} variant="success" />
-            <Metric label="Resultado" value={historical.data ? money(historical.data.totalResultado, 'MXN') : '...'} variant="info" />
+            {(() => {
+              const sk = (wide?: boolean) => <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} />
+              const h = historical.data
+              return (
+                <>
+                  <Metric label="Días" value={h ? String(h.totalDays) : sk()} />
+                  <Metric label="Carros" value={h ? String(h.totalCars) : sk()} />
+                  <Metric label="Ingresos" tone="good" value={h ? money(h.totalRevenue, 'MXN') : sk(true)} />
+                  <Metric label="Resultado" tone="info" value={h ? money(h.totalResultado, 'MXN') : sk(true)} />
+                </>
+              )
+            })()}
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border-soft">
@@ -6353,7 +6358,7 @@ function PayrollScreen() {
                     <span>{money(selectedEntry.netPay, 'MXN')}</span>
                   </div>
                   <div className="my-2 border-t border-border-soft" />
-                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : '...'} />
+                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : 'â¦'} />
                 </div>
                 <div className="overflow-hidden rounded-xl border border-border-soft">
                   <table className="tl-tbl zebra">
@@ -7401,13 +7406,18 @@ function EmployeeEditModal({
   const watchedActive = form.watch('active')
   const watchedPayrollType = form.watch('payrollType')
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold">Editar lavador — {employee.fullName}</h3>
-          <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-600">✕</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-[var(--shadow-lg)] overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border-soft bg-white px-6 py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-400">Lavador</p>
+            <h3 className="text-[17px] font-bold tracking-tight text-ink-900">{employee.fullName}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="tl-icon-btn" aria-label="Cerrar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
-        <form className="space-y-4" onSubmit={form.handleSubmit(onSave)}>
+        <form className="space-y-4 p-6" onSubmit={form.handleSubmit(onSave)}>
           <div className="grid gap-3 md:grid-cols-2">
             <TextField label="Nombre" error={form.formState.errors.fullName?.message}>
               <input {...form.register('fullName')} />
