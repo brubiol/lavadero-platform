@@ -12,7 +12,7 @@ async function seedDiscountFixture(request: APIRequestContext) {
 async function fillBaseTicket(page: Page, catalog: Catalog, description: string) {
   await expect(page.getByLabel('Turno')).not.toHaveValue('0', { timeout: 15_000 })
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
-  await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
+  await page.getByLabel('Tamaño de vehículo').selectOption({ label: catalog.sizeName })
   await page.getByPlaceholder('Ej. Tsuru rojo, Tacoma blanca').fill(description)
   await page.getByTestId('ticket-advanced-toggle').click()
   await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)

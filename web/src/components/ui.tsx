@@ -413,7 +413,9 @@ export function StatStrip({
   return (
     <div className={`tl-stat-strip ${toneCls}`.trim()} data-testid={slug ? `stat-${slug}` : undefined}>
       <div className="label">{label}{pulse && <span className="pulse" aria-hidden />}</div>
-      <div className="value">{value}</div>
+      {/* Second test id mirrors the SummaryRow contract so E2E tests written
+          against summary-{slug}-value keep resolving after this swap. */}
+      <div className="value" data-testid={slug ? `summary-${slug}-value` : undefined}>{value}</div>
       {sub && <div className="sub">{sub}</div>}
     </div>
   )

@@ -3095,7 +3095,7 @@ function ExpenseLedgerScreen() {
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-rose-500/20 blur-3xl" />
         <div className="pointer-events-none absolute right-6 top-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Salidas</div>
         <div className="tl-stagger relative grid grid-cols-1 gap-6 sm:grid-cols-4 sm:gap-8">
-          <div>
+          <div data-testid="metric-total-salida">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Total salida</p>
             <p className="font-display mt-2 text-[40px] font-black leading-none tracking-[-0.03em] text-rose-300 tabular-nums">
               {money(animCombined, 'MXN')}
@@ -3126,7 +3126,7 @@ function ExpenseLedgerScreen() {
       </div>
 
       {/* ─── Filter bar (inline, no panel) ────────────────────────── */}
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border-soft bg-white p-3">
+      <div data-testid="panel-filtros" className="flex flex-wrap items-end gap-3 rounded-2xl border border-border-soft bg-white p-3">
         <TextField label="Desde">
           <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
         </TextField>

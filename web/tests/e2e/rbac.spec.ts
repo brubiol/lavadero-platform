@@ -28,7 +28,7 @@ test('GERENTE can access payroll but not DUENO-only reports and audit', async ({
   await expect(page.getByTestId('nav-reportes')).not.toBeVisible()
 
   await page.getByTestId('nav-nomina').click()
-  await expect(page.getByRole('heading', { name: 'Nomina' })).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Nómina' })).toBeVisible({ timeout: 8_000 })
 
   await page.goto('/auditoria')
   await expect(page.getByText('Sin permiso')).toBeVisible()

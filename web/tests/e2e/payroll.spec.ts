@@ -19,7 +19,7 @@ test('payroll period lifecycle supports compute, adjustment, lock, and export', 
 
   await loginAsDueno(page)
   await page.getByTestId('nav-nomina').click()
-  await expect(page.getByRole('heading', { name: 'Nomina' })).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Nómina' })).toBeVisible({ timeout: 8_000 })
 
   await page.getByTestId('payroll-start-date').fill(startDate)
   await page.getByTestId('payroll-create-period').click()
