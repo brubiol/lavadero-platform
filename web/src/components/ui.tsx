@@ -196,6 +196,7 @@ export function Button({
   block,
   type = 'button',
   disabled,
+  loading,
   className = '',
   testId,
   style,
@@ -208,6 +209,7 @@ export function Button({
   block?: boolean
   type?: 'button' | 'submit' | 'reset'
   disabled?: boolean
+  loading?: boolean
   className?: string
   testId?: string
   style?: CSSProperties
@@ -219,12 +221,12 @@ export function Button({
     <button
       type={type}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || loading}
       data-testid={testId}
       style={style}
       className={`tl-btn tl-btn-${kind} ${sizeCls} ${blockCls} ${iconOnly} ${className}`.trim()}
     >
-      {icon}
+      {loading ? <span className="tl-btn-spinner" /> : icon}
       {children}
     </button>
   )
