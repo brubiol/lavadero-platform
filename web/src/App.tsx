@@ -1596,6 +1596,7 @@ function TicketWorkspace({
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
   const [selectedExtras, setSelectedExtras] = useState<string[]>([])
+  const [lavadorQuery, setLavadorQuery] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(() =>
     Boolean(
       ticket && (
@@ -1710,6 +1711,7 @@ function TicketWorkspace({
       await queryClient.invalidateQueries({ queryKey: ['tickets'] })
       setToast(mode === 'edit' ? 'Ticket actualizado' : 'Ticket guardado')
       setSelectedExtras([])
+      setLavadorQuery('')
       setTimeout(onSaved, 500)
     },
   })
@@ -1781,9 +1783,11 @@ function TicketWorkspace({
                     ))}
                   </select>
                 </SelectField>
-                <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
-                  <input placeholder="Ej. 41703" {...form.register('internalRef')} />
-                </TextField>
+                {!watched.courtesy && (
+                  <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
+                    <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+                  </TextField>
+                )}
                 <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
                   <select {...form.register('serviceTypeId')}>
                     <option value={0}>Selecciona servicio</option>
@@ -1818,7 +1822,7 @@ function TicketWorkspace({
                 </TextField>
               </div>
 
-              {/* Lavadores — avatar chips */}
+              {/* Lavadores — typeahead combobox */}
               {(() => {
                 const allLavadores = (data.employees.data ?? [])
                   .filter((e) => e.active)
@@ -1827,47 +1831,72 @@ function TicketWorkspace({
                 const toggle = (id: number) => {
                   const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
                   form.setValue('employeeIds', next, { shouldValidate: true })
+                  setLavadorQuery('')
                 }
+                const filtered = lavadorQuery.trim()
+                  ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
+                  : []
+                const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
                 return (
-                  <div className="rounded-xl border border-border-soft bg-ink-50/50 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Lavadores</span>
-                      {selectedIds.length > 0 && (
-                        <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">
-                          {selectedIds.length} seleccionado{selectedIds.length > 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {allLavadores.map((e) => {
-                        const active = selectedIds.includes(e.id)
-                        const initials = e.fullName.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
-                        return (
+                  <div className="rounded-xl border border-border-soft bg-ink-50/50 p-4 space-y-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Lavadores</span>
+
+                    {/* Selected chips */}
+                    {selectedEmployees.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedEmployees.map((e) => (
                           <button
                             key={e.id}
                             type="button"
                             onClick={() => toggle(e.id)}
-                            className={`flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-[12.5px] font-semibold transition-all duration-150 ${
-                              active
-                                ? 'border-violet-400 bg-violet-600 text-white shadow-[0_2px_10px_rgba(124,58,237,0.32)]'
-                                : 'border-border-soft bg-white text-ink-700 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'
-                            }`}
+                            className="flex items-center gap-1 rounded-full border border-violet-300 bg-violet-600 py-0.5 pl-2 pr-1.5 text-[12px] font-semibold text-white"
                           >
-                            <span className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                              active ? 'bg-white/25 text-white' : 'bg-ink-100 text-ink-500'
-                            }`}>
-                              {initials}
-                            </span>
                             {e.fullName}
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-[10px] leading-none">×</span>
                           </button>
-                        )
-                      })}
-                      {allLavadores.length === 0 && (
-                        <p className="text-xs text-ink-400">No hay lavadores registrados</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Search input */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={lavadorQuery}
+                        onChange={(e) => setLavadorQuery(e.target.value)}
+                        placeholder="Escribe para buscar..."
+                        className="w-full"
+                      />
+                      {filtered.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
+                          {filtered.map((e) => {
+                            const active = selectedIds.includes(e.id)
+                            const initials = e.fullName.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
+                            return (
+                              <button
+                                key={e.id}
+                                type="button"
+                                onClick={() => toggle(e.id)}
+                                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors ${
+                                  active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
+                                }`}
+                              >
+                                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                                  active ? 'bg-violet-200 text-violet-700' : 'bg-ink-100 text-ink-500'
+                                }`}>
+                                  {initials}
+                                </span>
+                                {e.fullName}
+                                {active && <span className="ml-auto text-[11px] text-violet-500">✓</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
+
                     {form.formState.errors.employeeIds?.message && (
-                      <p className="mt-2 text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
+                      <p className="text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
                     )}
                   </div>
                 )
