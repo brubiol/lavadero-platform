@@ -25,7 +25,7 @@ async function fillTicketForm(page: Page, catalog: Catalog) {
   await expect(page.getByLabel('Turno')).not.toHaveValue('0', { timeout: 15_000 })
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
   await page.getByLabel('Tamano de vehiculo').selectOption({ label: catalog.sizeName })
-  await page.getByPlaceholder('Escribe para buscar...').fill(catalog.employeeName)
+  await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
   await expect(page.locator('button').filter({ hasText: catalog.employeeName }).first()).toBeVisible({ timeout: 10_000 })
   await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
