@@ -84,10 +84,11 @@ public class TicketService {
         BigDecimal[] resolved = resolvePrice(serviceType.getId(), vehicleSize.getId(), request.currency(), businessDay,
                 courtesy, request.courtesyReason(), discount);
         BigDecimal originalPriceAmount = resolved[1];
+        BigDecimal surcharge = surchargeOf(courtesy, request.surchargeAmount());
         BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
                 && request.priceOverride().compareTo(ZERO) > 0)
                 ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
-                : resolved[0];
+                : resolved[0].add(surcharge).setScale(2, RoundingMode.HALF_UP);
 
         PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
                 : (request.paymentMethod() != null ? request.paymentMethod() : PaymentMethod.CASH);
@@ -103,9 +104,18 @@ public class TicketService {
         if (request.priceOverride() != null && request.priceOverride().compareTo(ZERO) > 0) {
             ticket.setPriceOverride(request.priceOverride().setScale(2, RoundingMode.HALF_UP));
         }
+        ticket.setSurchargeAmount(surcharge);
+        ticket.setSurchargeReason(normalizeSurchargeReason(courtesy, request.surchargeReason()));
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         Ticket saved = tickets.save(ticket);
         audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
+        if (courtesy) {
+            audit.record("TICKET_COURTESY", "TICKET", saved.getId(),
+                    request.courtesyReason(), saved.getNotaNumber());
+        } else if (discount.compareTo(ZERO) > 0) {
+            audit.record("TICKET_DISCOUNT", "TICKET", saved.getId(),
+                    discount + "%", saved.getNotaNumber());
+        }
         return saved;
     }
 
@@ -168,10 +178,14 @@ public class TicketService {
         BigDecimal[] resolved = resolvePrice(serviceType.getId(), vehicleSize.getId(), currency, ticket.getBusinessDay(),
                 courtesy, courtesyReason, discount);
         BigDecimal originalPriceAmount = resolved[1];
+        // Surcharge: explicit field beats prior value; null leaves it untouched. Cortesía forces zero.
+        BigDecimal surcharge = courtesy ? ZERO
+                : (request.surchargeAmount() != null ? request.surchargeAmount().setScale(2, RoundingMode.HALF_UP)
+                        : ticket.getSurchargeAmount());
         BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
                 && request.priceOverride().compareTo(ZERO) > 0)
                 ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
-                : resolved[0];
+                : resolved[0].add(surcharge).setScale(2, RoundingMode.HALF_UP);
         BigDecimal override = (!courtesy && request.priceOverride() != null
                 && request.priceOverride().compareTo(ZERO) > 0)
                 ? request.priceOverride().setScale(2, RoundingMode.HALF_UP) : ticket.getPriceOverride();
@@ -179,11 +193,31 @@ public class TicketService {
                 currency, paymentMethod, courtesy, courtesyReason, request.occurredAt(), request.internalRef(),
                 request.notes());
         ticket.setPriceOverride(override);
+        ticket.setSurchargeAmount(surcharge);
+        if (courtesy) {
+            ticket.setSurchargeReason(null);
+        } else if (request.surchargeReason() != null) {
+            ticket.setSurchargeReason(request.surchargeReason().isBlank() ? null : request.surchargeReason().trim());
+        }
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }
         audit.record("TICKET_EDITED", "TICKET", ticket.getId(), null, ticket.getNotaNumber());
         return ticket;
+    }
+
+    private BigDecimal surchargeOf(boolean courtesy, BigDecimal raw) {
+        if (courtesy || raw == null || raw.signum() <= 0) {
+            return ZERO;
+        }
+        return raw.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String normalizeSurchargeReason(boolean courtesy, String raw) {
+        if (courtesy || raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim();
     }
 
     @Transactional

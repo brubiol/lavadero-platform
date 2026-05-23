@@ -178,6 +178,8 @@ type Ticket = {
   occurredAt?: string | null
   internalRef?: string | null
   priceOverride?: number | null
+  surchargeAmount?: number | null
+  surchargeReason?: string | null
   notes?: string | null
 }
 
@@ -328,6 +330,46 @@ type AuditEvent = {
   severity: 'INFO' | 'FLAGGED'
   reviewedAt?: string | null
   reviewedBy?: string | null
+}
+
+type ActorActivity = {
+  actor: string
+  ticketsCreated: number
+  ticketsEdited: number
+  ticketsVoided: number
+  ticketsCourtesy: number
+  ticketsDiscount: number
+  expensesCreated: number
+  withdrawalsCreated: number
+  advancesCreated: number
+  shiftsClosed: number
+  payrollAdjustments: number
+}
+
+type ShiftShortage = {
+  shiftCloseId: number
+  shiftId: number
+  shiftType: 'MATUTINO' | 'VESPERTINO'
+  businessDate: string
+  variance: number
+  expectedCash: number
+  totalCounted: number
+  closingReason?: string | null
+  closedAt: string
+}
+
+type OversightPatterns = {
+  from: string
+  to: string
+  totalCortesias: number
+  totalVoided: number
+  totalFastEdits: number
+  totalShortageVariance: number
+  totalOffHoursActions: number
+  byActor: ActorActivity[]
+  fastEdits: AuditEvent[]
+  offHoursActions: AuditEvent[]
+  shortages: ShiftShortage[]
 }
 
 type MovementType = 'SALE' | 'FIADO' | 'PURCHASE' | 'ADJUSTMENT' | 'OPENING_COUNT' | 'CLOSING_COUNT'
@@ -583,6 +625,8 @@ const ticketSchema = z.object({
   occurredAt: z.string().optional(),
   internalRef: z.string().max(40, 'Maximo 40 caracteres').optional(),
   priceOverride: z.coerce.number().min(0.01, 'Minimo $0.01').optional().or(z.literal('')),
+  surchargeAmount: z.coerce.number().min(0, 'Minimo $0').optional().or(z.literal('')),
+  surchargeReason: z.string().max(120, 'Maximo 120 caracteres').optional(),
 })
 
 type TicketFormValues = z.infer<typeof ticketSchema>
@@ -916,6 +960,7 @@ const ROUTE_META: Record<string, { title: string; section: string }> = {
   '/reportes':      { title: 'Reportes',      section: 'Dueño'     },
   '/ai':            { title: 'AI',            section: 'Dueño'     },
   '/auditoria':     { title: 'Auditoría',     section: 'Dueño'     },
+  '/vigilancia':    { title: 'Vigilancia',    section: 'Dueño'     },
 }
 
 function routeMeta(pathname: string) {
@@ -965,6 +1010,7 @@ function AppShell() {
           <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
           <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
           <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
+          <Route path="/vigilancia" element={<RequireRole role="DUENO"><VigilanciaScreen /></RequireRole>} />
           <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
           <Route path="/asistencia" element={<RequireRole role="OPERADOR"><AttendanceScreen /></RequireRole>} />
         </Routes>
@@ -2607,6 +2653,9 @@ function TicketWorkspace({
     occurredAt: toLocalTimeValue(ticket?.occurredAt),
     internalRef: ticket?.internalRef ?? '',
     priceOverride: (ticket?.priceOverride ? Number(ticket.priceOverride) : '') as number | '',
+    surchargeAmount: (ticket?.surchargeAmount && Number(ticket.surchargeAmount) > 0
+      ? Number(ticket.surchargeAmount) : '') as number | '',
+    surchargeReason: ticket?.surchargeReason ?? '',
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [ticket?.id])
 
@@ -2643,12 +2692,18 @@ function TicketWorkspace({
     )?.amount
     if (base === undefined) return undefined
     const pct = watched.discountPercent ?? 0
-    return pct > 0 ? Math.round(base * (1 - pct / 100) * 100) / 100 : base
-  }, [data.prices.data, watched.courtesy, watched.serviceTypeId, watched.vehicleSizeId, watched.discountPercent])
+    const afterDiscount = pct > 0 ? base * (1 - pct / 100) : base
+    const surcharge = watched.surchargeAmount !== '' && watched.surchargeAmount != null
+      ? Number(watched.surchargeAmount) : 0
+    return Math.round((afterDiscount + (surcharge > 0 ? surcharge : 0)) * 100) / 100
+  }, [data.prices.data, watched.courtesy, watched.serviceTypeId, watched.vehicleSizeId,
+      watched.discountPercent, watched.surchargeAmount])
 
   const save = useMutation({
     mutationFn: (values: TicketFormValues) => {
       const override = values.priceOverride !== '' && values.priceOverride != null ? Number(values.priceOverride) : undefined
+      const surcharge = !values.courtesy && values.surchargeAmount !== '' && values.surchargeAmount != null
+        ? Number(values.surchargeAmount) : 0
       const baseDate = mode === 'edit' && ticket?.occurredAt
         ? (() => { const d = new Date(ticket.occurredAt!); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
         : (data.currentBusinessDay?.businessDate ?? today)
@@ -2667,6 +2722,9 @@ function TicketWorkspace({
         occurredAt: values.occurredAt ? localTimeToIso(values.occurredAt, baseDate) : undefined,
         internalRef: values.internalRef?.trim() || undefined,
         priceOverride: override,
+        surchargeAmount: surcharge > 0 ? surcharge : 0,
+        surchargeReason: !values.courtesy && surcharge > 0
+          ? (values.surchargeReason?.trim() || undefined) : undefined,
         notes: [
           values.notes?.trim(),
           selectedExtras.length > 0 ? `Extras: ${selectedExtras.join(', ')}` : '',
@@ -3085,6 +3143,35 @@ function TicketWorkspace({
                     )}
                   </div>
                 </div>
+
+                {/* Cargo extra (exceso de lodo, vehiculo extra sucio, etc.) */}
+                <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+                  <TextField label="Cargo extra ($)" error={form.formState.errors.surchargeAmount?.message}>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="0"
+                      disabled={watched.courtesy}
+                      data-testid="ticket-surcharge-amount"
+                      {...form.register('surchargeAmount')}
+                    />
+                  </TextField>
+                  <TextField label="Motivo del cargo" error={form.formState.errors.surchargeReason?.message}>
+                    <input
+                      type="text"
+                      placeholder="Ej. Lleno de lodo, mascotas, vomito..."
+                      maxLength={120}
+                      disabled={watched.courtesy || !(Number(watched.surchargeAmount) > 0)}
+                      {...form.register('surchargeReason')}
+                    />
+                  </TextField>
+                </div>
+                {Number(watched.surchargeAmount) > 0 && !watched.courtesy && (
+                  <p className="-mt-2 text-xs font-medium text-amber-700">
+                    Se sumara {money(Number(watched.surchargeAmount), 'MXN')} al precio del servicio.
+                  </p>
+                )}
 
                 {/* Extras */}
                 <div>
@@ -4326,25 +4413,344 @@ function ShiftCloseScreen() {
   )
 }
 
+// ─── Vigilancia (owner-only theft prevention) ─────────────────────────────────
+function VigilanciaScreen() {
+  const [from, setFrom] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 7)
+    return d.toISOString().slice(0, 10)
+  })
+  const [to, setTo] = useState(today)
+
+  const patterns = useQuery({
+    queryKey: ['oversight-patterns', from, to],
+    queryFn: () => api<OversightPatterns>(`/api/v1/oversight/patterns?from=${from}&to=${to}`),
+  })
+
+  const data = patterns.data
+  const animCortesias = useCountUp(data?.totalCortesias ?? 0)
+  const animVoided = useCountUp(data?.totalVoided ?? 0)
+  const animFastEdits = useCountUp(data?.totalFastEdits ?? 0)
+  const animShortage = useCountUp(Math.abs(data?.totalShortageVariance ?? 0))
+
+  // Severity heuristic: 4+ cortesias + 2+ voids or shortage > 100 ⇒ red
+  const overall = data
+    ? (Math.abs(data.totalShortageVariance) > 200 || data.totalCortesias > 8 || data.totalVoided > 5 || data.totalFastEdits > 5)
+      ? 'red'
+      : (data.totalCortesias > 3 || data.totalVoided > 2 || data.totalShortageVariance < 0 || data.totalFastEdits > 1)
+        ? 'amber'
+        : 'green'
+    : 'green'
+
+  return (
+    <section className="space-y-5">
+      {/* Editorial header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            Solo dueño · {from} → {to}
+          </p>
+          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
+            Vigilancia
+          </h2>
+          <p className="mt-1 max-w-xl text-[12.5px] text-ink-500">
+            Patrones que ayudan a detectar irregularidades: cortesías, cancelaciones, ediciones rápidas,
+            faltantes de caja y acciones fuera de horario.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12px] font-bold ${
+            overall === 'red'
+              ? 'bg-rose-100 text-rose-700'
+              : overall === 'amber'
+              ? 'bg-amber-100 text-amber-700'
+              : 'bg-emerald-100 text-emerald-700'
+          }`}>
+            <span className="relative flex h-2 w-2">
+              <span className={`absolute inline-flex h-full w-full ${overall !== 'green' ? 'animate-ping' : ''} rounded-full opacity-75 ${
+                overall === 'red' ? 'bg-rose-400' : overall === 'amber' ? 'bg-amber-400' : 'bg-emerald-400'
+              }`} />
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${
+                overall === 'red' ? 'bg-rose-500' : overall === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'
+              }`} />
+            </span>
+            {overall === 'red' ? 'Revisar urgente' : overall === 'amber' ? 'Atención' : 'Normal'}
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Desde</span>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="tl-input" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Hasta</span>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="tl-input" />
+          </label>
+        </div>
+      </div>
+
+      {patterns.error && <ErrorMessage message={patterns.error.message} />}
+
+      {/* Red-flag KPI tiles */}
+      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className={`tl-lift rounded-2xl border px-4 py-3.5 ${
+          (data?.totalCortesias ?? 0) > 3 ? 'border-amber-200 bg-gradient-to-br from-amber-50/80 to-white' : 'border-border-soft bg-white'
+        }`}>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Cortesías</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">
+            {Math.round(animCortesias)}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-500">
+            {(data?.byActor.filter((a) => a.ticketsCourtesy > 0).length ?? 0) > 0
+              ? `Top: ${[...(data?.byActor ?? [])].sort((a, b) => b.ticketsCourtesy - a.ticketsCourtesy)[0]?.actor} (${[...(data?.byActor ?? [])].sort((a, b) => b.ticketsCourtesy - a.ticketsCourtesy)[0]?.ticketsCourtesy})`
+              : 'sin cortesías'}
+          </p>
+        </div>
+        <div className={`tl-lift rounded-2xl border px-4 py-3.5 ${
+          (data?.totalVoided ?? 0) > 2 ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-white' : 'border-border-soft bg-white'
+        }`}>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Cancelados</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">
+            {Math.round(animVoided)}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-500">
+            {(data?.byActor.filter((a) => a.ticketsVoided > 0).length ?? 0) > 0
+              ? `Top: ${[...(data?.byActor ?? [])].sort((a, b) => b.ticketsVoided - a.ticketsVoided)[0]?.actor} (${[...(data?.byActor ?? [])].sort((a, b) => b.ticketsVoided - a.ticketsVoided)[0]?.ticketsVoided})`
+              : 'sin cancelaciones'}
+          </p>
+        </div>
+        <div className={`tl-lift rounded-2xl border px-4 py-3.5 ${
+          (data?.totalFastEdits ?? 0) > 1 ? 'border-violet-200 bg-gradient-to-br from-violet-50/80 to-white' : 'border-border-soft bg-white'
+        }`}>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Edits &lt; 1h</p>
+          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">
+            {Math.round(animFastEdits)}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-500">Ediciones poco después de crear ticket</p>
+        </div>
+        <div className={`tl-lift rounded-2xl border px-4 py-3.5 ${
+          (data?.totalShortageVariance ?? 0) < 0 ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-white' : 'border-border-soft bg-white'
+        }`}>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Faltantes</p>
+          <p className={`font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums ${
+            (data?.totalShortageVariance ?? 0) < 0 ? 'text-rose-700' : 'text-ink-900'
+          }`}>
+            {money(animShortage, 'MXN')}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-500">
+            {(data?.shortages.length ?? 0)} corte{data?.shortages.length === 1 ? '' : 's'} con faltante
+          </p>
+        </div>
+      </div>
+
+      {/* Per-actor activity */}
+      <div className="tl-panel overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-violet-700" />
+            <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Actividad por usuario</h3>
+          </div>
+          <span className="text-[11px] text-ink-400">{data?.byActor.length ?? 0} usuarios activos</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="tl-tbl zebra">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th className="r">Tickets</th>
+                <th className="r">Editados</th>
+                <th className="r">Cancelados</th>
+                <th className="r">Cortesías</th>
+                <th className="r">Descuentos</th>
+                <th className="r">Gastos</th>
+                <th className="r">Retiros</th>
+                <th className="r">Préstamos</th>
+                <th className="r">Cortes</th>
+                <th className="r">Ajustes nómina</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.byActor ?? []).map((a) => {
+                const flag = (n: number, threshold: number) => n >= threshold ? 'font-bold text-rose-700' : ''
+                return (
+                  <tr key={a.actor}>
+                    <td className="font-semibold">{a.actor}</td>
+                    <td className="r tabular-nums">{a.ticketsCreated}</td>
+                    <td className={`r tabular-nums ${flag(a.ticketsEdited, 3)}`}>{a.ticketsEdited}</td>
+                    <td className={`r tabular-nums ${flag(a.ticketsVoided, 3)}`}>{a.ticketsVoided}</td>
+                    <td className={`r tabular-nums ${flag(a.ticketsCourtesy, 4)}`}>{a.ticketsCourtesy}</td>
+                    <td className="r tabular-nums">{a.ticketsDiscount}</td>
+                    <td className="r tabular-nums">{a.expensesCreated}</td>
+                    <td className={`r tabular-nums ${flag(a.withdrawalsCreated, 3)}`}>{a.withdrawalsCreated}</td>
+                    <td className="r tabular-nums">{a.advancesCreated}</td>
+                    <td className="r tabular-nums">{a.shiftsClosed}</td>
+                    <td className={`r tabular-nums ${flag(a.payrollAdjustments, 1)}`}>{a.payrollAdjustments}</td>
+                  </tr>
+                )
+              })}
+              {(data?.byActor.length ?? 0) === 0 && !patterns.isLoading && (
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-ink-400">Sin actividad en este rango.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Two-column detail */}
+      <div className="grid gap-4 xl:grid-cols-2">
+        {/* Shortages */}
+        <div className="tl-panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-rose-400 to-rose-600" />
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Cortes con faltante</h3>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10.5px] font-bold text-rose-700">
+              {data?.shortages.length ?? 0}
+            </span>
+          </div>
+          <div className="p-4 space-y-2 max-h-[420px] overflow-y-auto">
+            {(data?.shortages ?? []).map((s) => (
+              <div key={s.shiftCloseId} className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[12.5px] font-semibold text-ink-900">
+                      <span className="font-mono tabular-nums">{s.businessDate}</span>
+                      <span className="mx-1.5 text-ink-300">·</span>
+                      {s.shiftType === 'MATUTINO' ? 'Matutino' : 'Vespertino'}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-ink-500">
+                      Esperado <span className="font-mono">{money(s.expectedCash, 'MXN')}</span> · Contado <span className="font-mono">{money(s.totalCounted, 'MXN')}</span>
+                    </p>
+                  </div>
+                  <span className="font-mono text-[14px] font-bold tabular-nums text-rose-700">
+                    {money(s.variance, 'MXN')}
+                  </span>
+                </div>
+                {s.closingReason && (
+                  <p className="mt-2 rounded-md bg-white px-2.5 py-1.5 text-[11.5px] italic text-ink-600 ring-1 ring-rose-100">
+                    "{s.closingReason}"
+                  </p>
+                )}
+              </div>
+            ))}
+            {(data?.shortages.length ?? 0) === 0 && !patterns.isLoading && (
+              <p className="text-[12.5px] text-emerald-700 flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">✓</span>
+                Todos los cortes cuadraron en este rango.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Off-hours actions */}
+        <div className="tl-panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-amber-400 to-amber-600" />
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Fuera de horario</h3>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-bold text-amber-700">
+              {data?.offHoursActions.length ?? 0}
+            </span>
+          </div>
+          <div className="p-4 space-y-2 max-h-[420px] overflow-y-auto">
+            {(data?.offHoursActions ?? []).slice(0, 20).map((e) => (
+              <div key={e.id} className="rounded-xl border border-border-soft bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <AuditActionPill action={e.action} />
+                  <span className="font-mono text-[11px] text-ink-500 tabular-nums">
+                    {new Date(e.occurredAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', hour12: false })}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[12.5px] text-ink-700">
+                  <span className="font-semibold">{e.actorUsername || 'sistema'}</span>
+                  {e.entityId && <span className="ml-1 text-ink-400">#{e.entityId}</span>}
+                  {e.reason && <span className="ml-2 italic text-ink-500">— {e.reason}</span>}
+                </p>
+              </div>
+            ))}
+            {(data?.offHoursActions.length ?? 0) === 0 && !patterns.isLoading && (
+              <p className="text-[12.5px] text-emerald-700 flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">✓</span>
+                Sin acciones fuera de horario.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Fast edits — full width */}
+      {(data?.fastEdits.length ?? 0) > 0 && (
+        <div className="tl-panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-violet-400 to-violet-600" />
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Tickets editados &lt; 1h después de crear</h3>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10.5px] font-bold text-violet-700">
+              {data?.fastEdits.length}
+            </span>
+          </div>
+          <div className="p-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(data?.fastEdits ?? []).map((e) => (
+              <div key={e.id} className="rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-bold text-violet-700">#{e.entityId} · {e.details ?? ''}</span>
+                  <span className="font-mono text-[11px] text-ink-500 tabular-nums">
+                    {new Date(e.occurredAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11.5px] text-ink-600">por <span className="font-semibold">{e.actorUsername}</span></p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function AuditActionPill({ action }: { action: string }) {
   const cfg: Record<string, { bg: string; text: string; label: string }> = {
-    TICKET_VOID:        { bg: 'bg-red-50',     text: 'text-red-700',    label: 'Anulado' },
-    TICKET_COURTESY:    { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Cortesia' },
-    TICKET_CREATE:      { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket' },
-    TICKET_UPDATE:      { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket edit' },
-    SHIFT_OPEN:         { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Turno abierto' },
-    SHIFT_CLOSE:        { bg: 'bg-violet-50',     text: 'text-violet-700',    label: 'Turno cerrado' },
-    DAY_OPEN:           { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Dia abierto' },
-    DAY_CLOSE:          { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Dia cerrado' },
-    EXPENSE_CREATE:     { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Gasto' },
-    WITHDRAWAL_CREATE:  { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Retiro' },
-    ADVANCE_CREATE:     { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Prestamo' },
-    CASH_COUNT_SAVE:    { bg: 'bg-purple-50',  text: 'text-purple-700', label: 'Corte caja' },
-    INVENTORY_IN:       { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Entrada inv.' },
-    INVENTORY_OUT:      { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Salida inv.' },
-    INVENTORY_ADJ:      { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Ajuste inv.' },
-    PAYROLL_PERIOD:     { bg: 'bg-violet-50',     text: 'text-violet-700',    label: 'Nomina' },
-    PAYROLL_ADJUSTMENT: { bg: 'bg-violet-50',     text: 'text-violet-700',    label: 'Ajuste nomina' },
+    // Backend-emitted actions (canonical)
+    TICKET_CREATED:               { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket' },
+    TICKET_EDITED:                { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Ticket edit' },
+    TICKET_VOIDED:                { bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Cancelado' },
+    TICKET_COURTESY:              { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Cortesía' },
+    TICKET_DISCOUNT:              { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Descuento' },
+    SHIFT_CLOSED:                 { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Turno cerrado' },
+    SHIFT_REOPENED:               { bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Turno reabierto' },
+    EXPENSE_CREATED:              { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Gasto' },
+    WITHDRAWAL_CREATED:           { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Retiro' },
+    ADVANCE_CREATED:              { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Préstamo' },
+    DEBT_PAYMENT_CREATED:         { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Pago deuda' },
+    CASH_COUNT_CREATED:           { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Conteo caja' },
+    EMPLOYEE_CREATED_SALARIED:    { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Empleado salario' },
+    EMPLOYEE_COMP_CHANGED:        { bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Cambio sueldo' },
+    PAYROLL_PERIOD_CREATED:       { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Nómina período' },
+    PAYROLL_COMPUTED:             { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Nómina calc.' },
+    PAYROLL_LOCKED:               { bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Nómina bloqueada' },
+    PAYROLL_UNLOCKED:             { bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Nómina desbloqueada' },
+    PAYROLL_ADJUSTMENT_CREATED:   { bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Ajuste nómina' },
+    PAYROLL_ADJUSTMENT_LARGE:     { bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Ajuste grande' },
+    PAYROLL_ADJUSTMENT_DELETED:   { bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Ajuste eliminado' },
+    PAYROLL_EXPORTED:             { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Nómina export' },
+    // Legacy keys kept for backward compat
+    TICKET_VOID:        { bg: 'bg-rose-50',     text: 'text-rose-700',   label: 'Cancelado' },
+    TICKET_CREATE:      { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Ticket' },
+    TICKET_UPDATE:      { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Ticket edit' },
+    SHIFT_OPEN:         { bg: 'bg-slate-100',   text: 'text-slate-600',  label: 'Turno abierto' },
+    SHIFT_CLOSE:        { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Turno cerrado' },
+    DAY_OPEN:           { bg: 'bg-slate-100',   text: 'text-slate-600',  label: 'Día abierto' },
+    DAY_CLOSE:          { bg: 'bg-slate-100',   text: 'text-slate-600',  label: 'Día cerrado' },
+    EXPENSE_CREATE:     { bg: 'bg-amber-50',    text: 'text-amber-700',  label: 'Gasto' },
+    WITHDRAWAL_CREATE:  { bg: 'bg-amber-50',    text: 'text-amber-700',  label: 'Retiro' },
+    ADVANCE_CREATE:     { bg: 'bg-amber-50',    text: 'text-amber-700',  label: 'Préstamo' },
+    CASH_COUNT_SAVE:    { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Corte caja' },
+    INVENTORY_IN:       { bg: 'bg-emerald-50',  text: 'text-emerald-700', label: 'Entrada inv.' },
+    INVENTORY_OUT:      { bg: 'bg-emerald-50',  text: 'text-emerald-700', label: 'Salida inv.' },
+    INVENTORY_ADJ:      { bg: 'bg-emerald-50',  text: 'text-emerald-700', label: 'Ajuste inv.' },
+    PAYROLL_PERIOD:     { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Nómina' },
+    PAYROLL_ADJUSTMENT: { bg: 'bg-violet-50',   text: 'text-violet-700', label: 'Ajuste nómina' },
   }
   const style = cfg[action] ?? { bg: 'bg-gray-100', text: 'text-gray-600', label: action.replace(/_/g, ' ') }
   return (

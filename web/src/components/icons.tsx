@@ -47,6 +47,9 @@ export const IAi = (p: IconProps) => (
 export const IAudit = (p: IconProps) => (
   <svg {...base(p)}><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
 )
+export const IShield = (p: IconProps) => (
+  <svg {...base(p)}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+)
 export const ISearch = (p: IconProps) => (
   <svg {...base(p)}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
 )

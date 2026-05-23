@@ -21,4 +21,6 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
             """)
     List<AuditEvent> search(@Param("from") Instant from, @Param("to") Instant to,
             @Param("entityType") String entityType, @Param("entityId") Long entityId);
+
+    List<AuditEvent> findByOccurredAtBetweenOrderByOccurredAtAsc(Instant from, Instant to);
 }

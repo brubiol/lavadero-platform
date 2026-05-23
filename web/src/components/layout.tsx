@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   IDashboard, ITicketNew, ITickets, IMoney, ICut, IPayroll, IInventory, ICatalog,
-  IReports, IAi, IAudit, ICalendar, ISearch, ILogout, IPlus,
+  IReports, IAi, IAudit, IShield, ICalendar, ISearch, ILogout, IPlus,
 } from './icons'
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -38,9 +38,10 @@ const NAV_MGMT: NavItem[] = [
 ]
 
 const NAV_OWNER: NavItem[] = [
-  { id: 'reportes',  to: '/reportes',  label: 'Reportes',  icon: <IReports />, roles: ['DUENO'] },
-  { id: 'ai',        to: '/ai',        label: 'AI',        icon: <IAi />,      roles: ['DUENO'] },
-  { id: 'auditoria', to: '/auditoria', label: 'Auditoría', icon: <IAudit />,   roles: ['DUENO'] },
+  { id: 'reportes',   to: '/reportes',   label: 'Reportes',   icon: <IReports />, roles: ['DUENO'] },
+  { id: 'ai',         to: '/ai',         label: 'AI',         icon: <IAi />,      roles: ['DUENO'] },
+  { id: 'vigilancia', to: '/vigilancia', label: 'Vigilancia', icon: <IShield />,  roles: ['DUENO'] },
+  { id: 'auditoria',  to: '/auditoria',  label: 'Auditoría',  icon: <IAudit />,   roles: ['DUENO'] },
 ]
 
 function inRole(role: NavRole, allowed: NavRole[]) {
