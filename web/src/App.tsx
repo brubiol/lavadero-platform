@@ -1432,7 +1432,7 @@ function Dashboard() {
       </div>
 
       {/* ─── Secondary metric strip ────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Metric label="Efectivo" value={<MetricVal v={data ? money(data.cashRevenue, 'MXN') : undefined} wide />} variant="success" />
         <Metric label="Tarjeta" value={<MetricVal v={data ? money(data.cardRevenue, 'MXN') : undefined} wide />} variant="info" />
         <Metric label="Deposito" value={<MetricVal v={data ? money(data.transferRevenue, 'MXN') : undefined} wide />} variant="warn" />
@@ -3010,7 +3010,7 @@ function ExpenseLedgerScreen() {
         <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-rose-500/20 blur-3xl" />
         <div className="pointer-events-none absolute right-6 top-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Salidas</div>
-        <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-4 sm:gap-8">
+        <div className="tl-stagger relative grid grid-cols-1 gap-6 sm:grid-cols-4 sm:gap-8">
           <div>
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Total salida</p>
             <p className="font-display mt-2 text-[40px] font-black leading-none tracking-[-0.03em] text-rose-300 tabular-nums">
@@ -4114,7 +4114,7 @@ function InventoryScreen() {
       {(products.error || snapshot.error) && <ErrorMessage message={(products.error || snapshot.error)!.message} />}
 
       {/* ─── Hero stats ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="tl-stagger grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Productos activos</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totalProducts}</p>
@@ -4680,7 +4680,7 @@ function PayrollScreen() {
 
       {/* ─── KPI strip ────────────────────────────────────────────── */}
       {selectedPeriod && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Carros</p>
             <p className="font-display mt-1 text-[22px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totals.cars}</p>
@@ -5365,7 +5365,7 @@ function TicketsBrowser() {
       </div>
 
       {/* ─── Snapshot strip ───────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="tl-stagger grid grid-cols-3 gap-3">
         <div className="rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Activos</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{activeList.length}</p>
