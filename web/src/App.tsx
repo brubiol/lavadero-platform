@@ -5,7 +5,7 @@ import { useForm, type Resolver, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Frame, MobileNav, MobileTopbar, Sidebar, Topbar, type NavRole } from './components/layout'
-import { IAudit, ICash, IPayroll, IReports } from './components/icons'
+import { IAudit, ICalendar, ICash, IPayroll, IReports } from './components/icons'
 import {
   Avatars,
   Banner,
@@ -6586,6 +6586,10 @@ function AttendanceScreen() {
   const attendedIds = new Set((records.data ?? []).map((r) => r.employeeId))
   const activeEmployees = (employees.data ?? []).filter((e) => e.active)
   const notRecorded = activeEmployees.filter((e) => !attendedIds.has(e.id))
+  const recList = records.data ?? []
+  const onShiftCount = recList.filter((r) => !r.absence && !r.clockOut).length
+  const completedCount = recList.filter((r) => !r.absence && r.clockOut).length
+  const absentCount = recList.filter((r) => r.absence).length
 
   const clockIn = useMutation({
     mutationFn: (employeeId: number) =>
@@ -6656,7 +6660,14 @@ function AttendanceScreen() {
 
       {records.error && <ErrorMessage message={records.error.message} />}
 
-      <Panel title="Registros del dia">
+      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatStrip tone="good" label="En turno" value={String(onShiftCount)} sub="con entrada sin salida" />
+        <StatStrip tone="info" label="Completos" value={String(completedCount)} sub="entrada y salida hoy" />
+        <StatStrip tone="bad" label="Faltas" value={String(absentCount)} sub="falta registrada" pulse={absentCount > 0} />
+        <StatStrip tone="warn" label="Sin registrar" value={String(notRecorded.length)} sub="activos sin marcar" />
+      </div>
+
+      <Panel title="Registros del día">
         <div className="overflow-hidden rounded-xl border border-gray-100">
           <table className="tl-tbl zebra">
             <thead>
@@ -6676,30 +6687,31 @@ function AttendanceScreen() {
                   <td>{record.absence ? '—' : formatLocalTime(record.clockOut)}</td>
                   <td>
                     {record.absence ? (
-                      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Falta</span>
+                      <Pill tone="bad">Falta</Pill>
                     ) : record.clockOut ? (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Completo</span>
+                      <Pill tone="gray">Completo</Pill>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">En turno</span>
+                      <Pill tone="good">En turno</Pill>
                     )}
                   </td>
                   <td>
                     {!record.absence && !record.clockOut && (
-                      <button
-                        type="button"
-                        onClick={() => handleClockOut(record.id)}
-                        className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                      >
+                      <Button kind="secondary" size="sm" onClick={() => handleClockOut(record.id)}>
                         Registrar salida
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>
               ))}
               {!records.isLoading && (records.data ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
-                    No hay registros para esta fecha.
+                  <td colSpan={5}>
+                    <EmptyState
+                      icon={<ICalendar size={20} />}
+                      title="Sin registros para esta fecha"
+                      description="Marca entradas desde la lista de abajo para empezar el día."
+                      tone="info"
+                    />
                   </td>
                 </tr>
               )}
