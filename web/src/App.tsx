@@ -1271,6 +1271,30 @@ function DayStatusCard() {
   )
 }
 
+function useCountUp(target: number, duration = 700): number {
+  const [value, setValue] = useState(target)
+  const valueRef = useRef(target)
+  useEffect(() => {
+    const from = valueRef.current
+    if (from === target) return
+    const start = performance.now()
+    let raf = 0
+    const tick = (t: number) => {
+      const elapsed = t - start
+      const progress = Math.min(1, elapsed / duration)
+      const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+      const current = from + (target - from) * eased
+      valueRef.current = current
+      setValue(current)
+      if (progress < 1) raf = requestAnimationFrame(tick)
+      else valueRef.current = target
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target, duration])
+  return value
+}
+
 function HeroDelta({ today, yesterday }: { today: number; yesterday: number | undefined }) {
   if (yesterday == null) return null
   if (yesterday === 0 && today === 0) return null
@@ -1344,6 +1368,11 @@ function Dashboard() {
   const monthDate = new Date()
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate()
 
+  // Animated count-up for hero KPIs
+  const animCars = useCountUp(data?.carsWashed ?? 0)
+  const animRevenue = useCountUp(data?.ticketRevenue ?? 0)
+  const animResult = useCountUp(data?.result ?? 0)
+
   return (
     <section className="space-y-6">
       {/* ─── Header: greeting + date picker ─────────────────────────── */}
@@ -1402,8 +1431,8 @@ function Dashboard() {
               </span>
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Carros lavados</p>
             </div>
-            <p data-testid="metric-carros-lavados-value" className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
-              {isLoading ? '—' : (data?.carsWashed ?? 0)}
+            <p data-testid="metric-carros-lavados-value" className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white tabular-nums">
+              {isLoading ? <span className="tl-skeleton-dark lg" /> : Math.round(animCars)}
             </p>
             <div className="mt-2.5 flex items-center gap-2">
               {data && yest && <HeroDelta today={data.carsWashed} yesterday={yest.carsWashed} />}
@@ -1425,8 +1454,8 @@ function Dashboard() {
               </span>
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Ingresos</p>
             </div>
-            <p data-testid="metric-ingresos-autos-value" className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white">
-              {isLoading ? '—' : money(data?.ticketRevenue ?? 0, 'MXN')}
+            <p data-testid="metric-ingresos-autos-value" className="font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] text-white tabular-nums">
+              {isLoading ? <span className="tl-skeleton-dark lg" /> : money(animRevenue, 'MXN')}
             </p>
             <div className="mt-2.5 flex items-center gap-2">
               {data && yest && <HeroDelta today={data.ticketRevenue} yesterday={yest.ticketRevenue} />}
@@ -1443,8 +1472,8 @@ function Dashboard() {
               </span>
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Resultado</p>
             </div>
-            <p className={`font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] ${resultPositive ? 'text-emerald-300' : 'text-rose-300'}`}>
-              {isLoading ? '—' : money(data?.result ?? 0, 'MXN')}
+            <p className={`font-display mt-3 text-[52px] font-black leading-none tracking-[-0.03em] tabular-nums ${resultPositive ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {isLoading ? <span className="tl-skeleton-dark lg" /> : money(animResult, 'MXN')}
             </p>
             <div className="mt-2.5 flex items-center gap-2">
               {data && yest && <HeroDelta today={data.result} yesterday={yest.result} />}

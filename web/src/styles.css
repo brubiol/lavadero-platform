@@ -733,6 +733,24 @@ html, body, #root { height: 100%; }
 .tl-lift { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform; }
 .tl-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
+/* Shimmer skeleton — dark variant for use on dark gradient hero panels */
+.tl-skeleton-dark {
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.05) 0%,
+    rgba(255,255,255,0.18) 50%,
+    rgba(255,255,255,0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: tl-shimmer 1.4s ease infinite;
+}
+.tl-skeleton-dark.sm { height: 18px; width: 60px; }
+.tl-skeleton-dark.md { height: 30px; width: 110px; }
+.tl-skeleton-dark.lg { height: 44px; width: 180px; }
+
 /* Modal entrance — backdrop fades, content scales+fades up */
 @keyframes tl-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tl-modal-scale-in {
