@@ -1934,21 +1934,84 @@ function TicketWorkspace({
     .some((field) => form.formState.errors[field])
   const effectiveShowAdvanced = showAdvanced || hasAdvancedError
 
+  // Live clock for header (updates every minute)
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  const clockStr = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+  // Tickets today counter
+  const ticketsTodayCount = useQuery({
+    queryKey: ['daily-summary', today],
+    queryFn: () => api<DailySummary>(`/api/v1/reports/daily-summary?date=${today}`),
+    enabled: mode === 'create',
+  })
+
+  // Compact notes accordion state
+  const [showFullNotes, setShowFullNotes] = useState(() => Boolean(ticket?.notes))
+
+  // Turno is locked by default — auto-selected by time of day. User can unlock if needed.
+  const [shiftLocked, setShiftLocked] = useState(mode === 'create')
+
+  // Auto-select the appropriate shift by current time when creating a ticket
+  useEffect(() => {
+    if (mode !== 'create' || !shiftLocked) return
+    if (openShifts.length === 0) return
+    const preferred = now.getHours() < 14 ? 'MATUTINO' : 'VESPERTINO'
+    const match = openShifts.find((s) => s.shiftType === preferred) ?? openShifts[0]
+    if (match && Number(form.getValues('shiftId')) !== match.id) {
+      form.setValue('shiftId', match.id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openShifts.length, shiftLocked, now.getHours()])
+
+  // SectionHeader helper — numbered chip + color rail + title + optional aside
+  const SectionHeader = ({ num, color, title, aside }: { num: number; color: string; title: string; aside?: React.ReactNode }) => (
+    <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+      <div className="flex items-center gap-3">
+        <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm ${color}`}>
+          {num}
+        </span>
+        <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{title}</h3>
+      </div>
+      {aside}
+    </div>
+  )
+
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
 
-      {/* Page header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* ─── Editorial header ─────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-ink-900">
-            {mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}
-          </h2>
-          <p className="mt-0.5 text-[13.5px] text-ink-500">Captura rapida para operacion de mostrador.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            {mode === 'edit' ? 'Edición' : 'Captura'} · {data.currentBusinessDay?.businessDate ?? 'Sin día abierto'}
+          </p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <h2 className="font-display text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
+              {mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}
+            </h2>
+            {mode === 'create' && ticketsTodayCount.data && (
+              <span className="text-[12.5px] font-semibold text-ink-400">
+                · {ticketsTodayCount.data.recentTickets.length} hoy
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border-soft bg-white px-4 py-2 shadow-xs">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 7px rgba(52,211,153,0.85)' }} />
-          <span className="text-[13px] font-semibold text-ink-700">{data.currentBusinessDay?.businessDate ?? 'Sin abrir'}</span>
+        <div className="flex items-center gap-3 rounded-2xl border border-border-soft bg-white px-4 py-2.5 shadow-xs">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </span>
+          <div className="leading-tight">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">
+              {openShifts[0]?.shiftType === 'MATUTINO' ? 'Turno Matutino' : openShifts[0]?.shiftType === 'VESPERTINO' ? 'Turno Vespertino' : 'Sin turno'}
+            </p>
+            <p className="font-mono text-[13.5px] font-semibold tabular-nums text-ink-900">{clockStr}</p>
+          </div>
         </div>
       </div>
 
@@ -1959,179 +2022,261 @@ function TicketWorkspace({
       <form className="grid gap-5 xl:grid-cols-[1fr_340px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
         <div className="space-y-4">
 
-          {/* ── Datos del servicio ───────────────────────────────── */}
+          {/* ── 1. Datos del servicio ──────────────────────────────── */}
           <div className="tl-panel overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-              <div className="flex items-center gap-2.5">
-                <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-violet-500 to-violet-700" />
-                <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Datos del servicio</h3>
-              </div>
-              {/* Cortesia pill toggle */}
-              <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
-                watched.courtesy
-                  ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]'
-                  : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
-              }`}>
-                {/* Invisible overlay covers the full pill so Playwright (and pointer clicks) always hit the checkbox, not the visual span */}
-                <input type="checkbox" {...form.register('courtesy')} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Marcar como cortesia" />
-                <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
-                Cortesia
-              </label>
-            </div>
+            <SectionHeader
+              num={1}
+              color="bg-gradient-to-b from-violet-500 to-violet-700"
+              title="Datos del servicio"
+              aside={
+                <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+                  watched.courtesy
+                    ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]'
+                    : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
+                }`}>
+                  <input type="checkbox" {...form.register('courtesy')} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Marcar como cortesia" />
+                  <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
+                  Cortesía
+                </label>
+              }
+            />
 
-            <div className="space-y-4 p-5">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <SelectField label="Turno" error={form.formState.errors.shiftId?.message}>
-                  <select {...form.register('shiftId')} disabled={Boolean(disabledReason)}>
-                    <option value={0}>Selecciona turno</option>
-                    {openShifts.map((shift) => (
-                      <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
-                    ))}
-                  </select>
-                </SelectField>
-                {!watched.courtesy && (
-                  <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
-                    <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+            <div className="space-y-5 p-5">
+              {/* Servicio subgroup — these drive the price */}
+              <div>
+                <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Servicio · determina el precio</p>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="block text-[12px] font-semibold text-ink-700">Turno</label>
+                      <button
+                        type="button"
+                        onClick={() => setShiftLocked((v) => !v)}
+                        className={`text-[10.5px] font-semibold ${shiftLocked ? 'text-violet-600 hover:text-violet-700' : 'text-ink-500 hover:text-ink-700'}`}
+                      >
+                        {shiftLocked ? 'Cambiar' : 'Volver a auto'}
+                      </button>
+                    </div>
+                    {shiftLocked ? (
+                      <>
+                        <div className="flex h-[38px] items-center gap-2 rounded-xl border border-border-soft bg-ink-50/60 px-3.5">
+                          <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                            <rect x="5" y="11" width="14" height="10" rx="2" />
+                            <path d="M8 11V8a4 4 0 018 0v3" />
+                          </svg>
+                          <span className="text-[13px] font-semibold text-ink-800">
+                            {(() => {
+                              const sel = openShifts.find((s) => s.id === Number(watched.shiftId))
+                              if (!sel) return 'Sin turno'
+                              return sel.shiftType === 'MATUTINO' ? 'Mañana (auto)' : 'Tarde (auto)'
+                            })()}
+                          </span>
+                        </div>
+                        {/* Hidden select kept in the DOM so form state + accessibility + E2E selectors keep working */}
+                        <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno" className="sr-only">
+                          <option value={0}>Selecciona turno</option>
+                          {openShifts.map((shift) => (
+                            <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
+                          ))}
+                        </select>
+                      </>
+                    ) : (
+                      <>
+                        <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno">
+                          <option value={0}>Selecciona turno</option>
+                          {openShifts.map((shift) => (
+                            <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
+                          ))}
+                        </select>
+                        {form.formState.errors.shiftId?.message && (
+                          <p className="mt-1 text-xs text-red-600">{form.formState.errors.shiftId.message}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
+                    <select {...form.register('serviceTypeId')}>
+                      <option value={0}>Selecciona servicio</option>
+                      {(data.services.data ?? []).map((service) => (
+                        <option key={service.id} value={service.id}>{service.name}</option>
+                      ))}
+                    </select>
+                  </SelectField>
+                  <SelectField label="Tamaño de vehículo" error={form.formState.errors.vehicleSizeId?.message}>
+                    <select {...form.register('vehicleSizeId')}>
+                      <option value={0}>Selecciona tamaño</option>
+                      {(data.sizes.data ?? []).map((size) => (
+                        <option key={size.id} value={size.id}>{size.name}</option>
+                      ))}
+                    </select>
+                  </SelectField>
+                  <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
+                    <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
+                      <option value="CASH">Efectivo</option>
+                      <option value="CARD">Tarjeta</option>
+                      <option value="TRANSFER">Depósito</option>
+                    </select>
+                  </SelectField>
+                </div>
+              </div>
+
+              {/* Detalle subgroup — context fields */}
+              <div className="border-t border-border-soft pt-5">
+                <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Detalle del lavado</p>
+                <div className={`grid gap-4 sm:grid-cols-2 ${watched.courtesy ? 'xl:grid-cols-2' : 'xl:grid-cols-3'}`}>
+                  {!watched.courtesy && (
+                    <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
+                      <input placeholder="Ej. 41703" {...form.register('internalRef')} />
+                    </TextField>
+                  )}
+                  <TextField label="Vehículo" error={form.formState.errors.vehicleDescription?.message}>
+                    <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
                   </TextField>
-                )}
-                <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
-                  <select {...form.register('serviceTypeId')}>
-                    <option value={0}>Selecciona servicio</option>
-                    {(data.services.data ?? []).map((service) => (
-                      <option key={service.id} value={service.id}>{service.name}</option>
-                    ))}
-                  </select>
-                </SelectField>
-                <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
-                  <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
-                    <option value="CASH">Efectivo</option>
-                    <option value="CARD">Tarjeta</option>
-                    <option value="TRANSFER">Windows</option>
-                  </select>
-                </SelectField>
+                  <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
+                    <input type="time" {...form.register('occurredAt')} />
+                  </TextField>
+                </div>
               </div>
+            </div>
+          </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <TextField label="Vehiculo" error={form.formState.errors.vehicleDescription?.message}>
-                  <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-                </TextField>
-                <SelectField label="Tamano de vehiculo" error={form.formState.errors.vehicleSizeId?.message}>
-                  <select {...form.register('vehicleSizeId')}>
-                    <option value={0}>Selecciona tamano</option>
-                    {(data.sizes.data ?? []).map((size) => (
-                      <option key={size.id} value={size.id}>{size.name}</option>
-                    ))}
-                  </select>
-                </SelectField>
-                <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
-                  <input type="time" {...form.register('occurredAt')} />
-                </TextField>
-              </div>
-
-              {/* Lavadores — typeahead combobox */}
-              {(() => {
-                const allLavadores = (data.employees.data ?? [])
-                  .filter((e) => e.active)
-                  .filter((e) => !/tia\s*gabi/i.test(e.fullName))
-                const selectedIds = (watched.employeeIds ?? []).map(Number)
-                const toggle = (id: number) => {
-                  const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
-                  form.setValue('employeeIds', next, { shouldValidate: true })
-                  setLavadorQuery('')
-                }
-                const filtered = lavadorQuery.trim()
-                  ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
-                  : allLavadores
-                const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
-                return (
-                  <div className="rounded-xl border border-border-soft bg-ink-50/50 p-4 space-y-3">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Lavadores</span>
-
-                    {/* Selected chips */}
-                    {selectedEmployees.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedEmployees.map((e) => (
+          {/* ── 2. Lavadores asignados ─────────────────────────────── */}
+          {(() => {
+            const allLavadores = (data.employees.data ?? [])
+              .filter((e) => e.active)
+              .filter((e) => !/tia\s*gabi/i.test(e.fullName))
+            const selectedIds = (watched.employeeIds ?? []).map(Number)
+            const toggle = (id: number) => {
+              const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
+              form.setValue('employeeIds', next, { shouldValidate: true })
+              setLavadorQuery('')
+            }
+            const filtered = lavadorQuery.trim()
+              ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
+              : allLavadores
+            const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
+            return (
+              <div className="tl-panel overflow-hidden">
+                <SectionHeader
+                  num={2}
+                  color="bg-gradient-to-b from-violet-500 to-violet-700"
+                  title="Lavadores asignados"
+                  aside={
+                    selectedEmployees.length > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-bold text-violet-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                        {selectedEmployees.length} seleccionado{selectedEmployees.length === 1 ? '' : 's'}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-ink-400">Ninguno seleccionado</span>
+                    )
+                  }
+                />
+                <div className="space-y-3 p-5">
+                  {selectedEmployees.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedEmployees.map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => toggle(e.id)}
+                          className="flex items-center gap-1 rounded-full border border-violet-300 bg-violet-600 py-0.5 pl-2 pr-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-violet-700"
+                        >
+                          {e.fullName}
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-[10px] leading-none">×</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={lavadorQuery}
+                    onChange={(e) => setLavadorQuery(e.target.value)}
+                    onFocus={() => setLavadorFocused(true)}
+                    onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
+                    placeholder="Buscar lavador..."
+                    className="w-full"
+                  />
+                  {lavadorFocused && filtered.length > 0 && (
+                    <div className="overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
+                      {filtered.map((e) => {
+                        const active = selectedIds.includes(e.id)
+                        return (
                           <button
                             key={e.id}
                             type="button"
                             onClick={() => toggle(e.id)}
-                            className="flex items-center gap-1 rounded-full border border-violet-300 bg-violet-600 py-0.5 pl-2 pr-1.5 text-[12px] font-semibold text-white"
+                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${
+                              active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
+                            }`}
                           >
                             {e.fullName}
-                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-[10px] leading-none">×</span>
+                            {active && <span className="text-[11px] text-violet-500">✓</span>}
                           </button>
-                        ))}
-                      </div>
-                    )}
+                        )
+                      })}
+                    </div>
+                  )}
+                  {form.formState.errors.employeeIds?.message && (
+                    <p className="text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
-                    {/* Search input */}
-                    <input
-                      type="text"
-                      value={lavadorQuery}
-                      onChange={(e) => setLavadorQuery(e.target.value)}
-                      onFocus={() => setLavadorFocused(true)}
-                      onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
-                      placeholder="Buscar lavador..."
-                      className="w-full"
-                    />
-                    {lavadorFocused && filtered.length > 0 && (
-                      <div className="mt-1 overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
-                        {filtered.map((e) => {
-                          const active = selectedIds.includes(e.id)
-                          return (
-                            <button
-                              key={e.id}
-                              type="button"
-                              onClick={() => toggle(e.id)}
-                              className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${
-                                active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
-                              }`}
-                            >
-                              {e.fullName}
-                              {active && <span className="text-[11px] text-violet-500">✓</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {form.formState.errors.employeeIds?.message && (
-                      <p className="text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
-                    )}
-                  </div>
-                )
-              })()}
-            </div>
-          </div>
-
-          {/* ── Notas ────────────────────────────────────────────── */}
+          {/* ── 3. Notas (compact accordion) ───────────────────────── */}
           <div className="tl-panel overflow-hidden">
-            <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-              <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
-              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Notas</h3>
-            </div>
+            <SectionHeader
+              num={3}
+              color="bg-gradient-to-b from-emerald-400 to-emerald-600"
+              title="Notas"
+              aside={
+                <button
+                  type="button"
+                  onClick={() => setShowFullNotes((v) => !v)}
+                  className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
+                >
+                  {showFullNotes ? 'Compactar −' : 'Detalladas +'}
+                </button>
+              }
+            />
             <div className="p-5">
-              <textarea
-                rows={3}
-                placeholder="Ej. cliente frecuente, pago con billete grande, lavar con cuidado..."
-                {...form.register('notes')}
-                className="tl-input resize-none"
-              />
+              {showFullNotes ? (
+                <textarea
+                  rows={3}
+                  placeholder="Ej. cliente frecuente, pago con billete grande, lavar con cuidado..."
+                  {...form.register('notes')}
+                  className="tl-input resize-none"
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Nota corta (opcional)..."
+                  {...form.register('notes')}
+                  className="tl-input"
+                />
+              )}
             </div>
           </div>
 
-          {/* ── Mas opciones toggle ───────────────────────────────── */}
+          {/* ── 4. Mas opciones toggle ─────────────────────────────── */}
           <button
             type="button"
             onClick={() => setShowAdvanced((v) => !v)}
             data-testid="ticket-advanced-toggle"
             className={`flex w-full items-center justify-between rounded-xl border px-5 py-3.5 text-[13.5px] font-semibold transition-all duration-150 ${
               effectiveShowAdvanced
-                ? 'border-violet-200 bg-violet-50 text-violet-800'
-                : 'border-border-soft bg-white text-ink-500 hover:border-violet-200 hover:bg-violet-50/70 hover:text-violet-700'
+                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/70 hover:text-amber-700'
             }`}
           >
-            <span>{effectiveShowAdvanced ? 'Ocultar opciones avanzadas' : 'Mas opciones — precio especial, descuento, extras'}</span>
+            <div className="flex items-center gap-3">
+              <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm bg-gradient-to-b from-amber-400 to-amber-600`}>
+                4
+              </span>
+              <span>{effectiveShowAdvanced ? 'Ocultar opciones avanzadas' : 'Más opciones — precio especial, descuento, extras'}</span>
+            </div>
             <svg
               className={`h-4 w-4 shrink-0 transition-transform duration-200 ${effectiveShowAdvanced ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -2143,10 +2288,11 @@ function TicketWorkspace({
           {/* ── Opciones avanzadas ────────────────────────────────── */}
           {effectiveShowAdvanced && (
             <div className="tl-panel overflow-hidden">
-              <div className="flex items-center gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-                <span className="h-[18px] w-[3px] rounded-full bg-gradient-to-b from-amber-400 to-amber-600" />
-                <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Opciones avanzadas</h3>
-              </div>
+              <SectionHeader
+                num={4}
+                color="bg-gradient-to-b from-amber-400 to-amber-600"
+                title="Opciones avanzadas"
+              />
               <div className="space-y-5 p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
@@ -2230,12 +2376,56 @@ function TicketWorkspace({
               className="relative px-6 py-6 text-center"
               style={{ background: 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(140deg, #1a0f2e 0%, #3b1d5c 50%, #1f8a3d 130%)' }}
             >
-              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">
-                {watched.courtesy ? 'Cortesia' : 'Total a cobrar'}
+              {/* dot grid texture */}
+              <div
+                className="pointer-events-none absolute inset-0 opacity-[0.07]"
+                style={{
+                  backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
+                  backgroundSize: '18px 18px',
+                }}
+              />
+              {/* Nota stamp */}
+              {watched.internalRef && (
+                <div className="absolute right-3 top-3 rotate-[8deg]">
+                  <span className="inline-block rounded border-2 border-emerald-300/60 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                    Nº {watched.internalRef}
+                  </span>
+                </div>
+              )}
+              <p className="relative mb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">
+                {watched.courtesy ? 'Cortesía' : 'Total a cobrar'}
               </p>
-              <p className="font-display text-[48px] font-black leading-none tracking-[-0.03em] text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {livePrice === undefined ? '—' : watched.courtesy ? 'GRATIS' : money(livePrice, 'MXN')}
-              </p>
+              {livePrice === undefined ? (
+                <p className="font-display text-[24px] font-bold leading-none tracking-tight text-white/40">
+                  Selecciona servicio y tamaño…
+                </p>
+              ) : watched.discountPercent > 0 && !watched.courtesy ? (
+                <div className="relative">
+                  {/* Original price strikethrough */}
+                  {(() => {
+                    const base = (data.prices.data ?? []).find((p) =>
+                      p.serviceTypeId === Number(watched.serviceTypeId) &&
+                      p.vehicleSizeId === Number(watched.vehicleSizeId) &&
+                      p.currency === 'MXN'
+                    )?.amount
+                    return base ? (
+                      <p className="font-mono text-[14px] font-medium text-white/40 line-through">
+                        {money(base, 'MXN')}
+                      </p>
+                    ) : null
+                  })()}
+                  <p className="font-display text-[48px] font-black leading-none tracking-[-0.03em] text-emerald-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {money(livePrice, 'MXN')}
+                  </p>
+                  <span className="mt-2.5 inline-block rounded-full border border-amber-400/30 bg-amber-400/20 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
+                    -{watched.discountPercent}% descuento
+                  </span>
+                </div>
+              ) : (
+                <p className="relative font-display text-[48px] font-black leading-none tracking-[-0.03em] text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {watched.courtesy ? 'GRATIS' : money(livePrice, 'MXN')}
+                </p>
+              )}
               {/* Hidden element preserving the legacy testid + text format for E2E assertions */}
               <span data-testid="summary-precio-preview-value" className="sr-only">
                 {livePrice === undefined
@@ -2246,11 +2436,13 @@ function TicketWorkspace({
                       ? `${money(livePrice, 'MXN')} (-${watched.discountPercent}%)`
                       : money(livePrice, 'MXN')}
               </span>
-              {watched.discountPercent > 0 && !watched.courtesy && (
-                <span className="mt-2.5 inline-block rounded-full border border-amber-400/30 bg-amber-400/20 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
-                  -{watched.discountPercent}% descuento aplicado
-                </span>
-              )}
+            </div>
+
+            {/* Perforated divider */}
+            <div className="relative">
+              <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
+              <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
+              <div className="border-t border-dashed border-border-soft" />
             </div>
 
             {/* Receipt details */}
@@ -2269,13 +2461,13 @@ function TicketWorkspace({
               <div className="flex items-center justify-between py-2.5">
                 <span className="text-ink-400">Tipo</span>
                 <span className={`font-semibold ${watched.courtesy ? 'text-amber-600' : 'text-ink-800'}`}>
-                  {watched.courtesy ? 'Cortesia' : 'Venta'}
+                  {watched.courtesy ? 'Cortesía' : 'Venta'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2.5">
                 <span className="text-ink-400">Pago</span>
                 <span className="font-semibold text-ink-800">
-                  {watched.courtesy ? 'N/A' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Windows' : 'Efectivo'}
+                  {watched.courtesy ? 'N/A' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Depósito' : 'Efectivo'}
                 </span>
               </div>
             </div>
@@ -2299,6 +2491,13 @@ function TicketWorkspace({
                   {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
                 </Button>
               )}
+            </div>
+
+            {/* Perforated bottom edge — receipt-stub vibe */}
+            <div className="relative -mb-2 h-3 overflow-hidden">
+              <svg width="100%" height="12" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 text-white">
+                <path d="M0,0 L0,12 L4,8 L8,12 L12,8 L16,12 L20,8 L24,12 L28,8 L32,12 L36,8 L40,12 L44,8 L48,12 L52,8 L56,12 L60,8 L64,12 L68,8 L72,12 L76,8 L80,12 L84,8 L88,12 L92,8 L96,12 L100%,12 L100%,0 Z" fill="currentColor" />
+              </svg>
             </div>
           </div>
         </aside>
