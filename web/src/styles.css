@@ -792,6 +792,46 @@ html, body, #root { height: 100%; }
   .tl-login-bg { grid-template-columns: 1fr; }
 }
 
+.tl-login-card {
+  position: relative;
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.6) inset,
+    0 30px 60px -20px rgba(15,8,32,0.55),
+    0 18px 38px -12px rgba(124,58,237,0.35),
+    0 8px 22px -8px rgba(34,197,94,0.22);
+}
+.tl-login-card-brand-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    var(--brand-purple) 0%,
+    var(--primary-600) 35%,
+    var(--brand-green) 70%,
+    var(--brand-green-bright) 100%);
+  box-shadow: 0 1px 8px rgba(124,58,237,0.45);
+}
+.tl-login-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255,255,255,0.4), transparent 55%),
+    linear-gradient(140deg, var(--primary-600) 0%, var(--brand-purple) 60%, var(--brand-green) 130%);
+  color: #fff;
+  box-shadow:
+    0 6px 18px rgba(124,58,237,0.35),
+    0 1px 0 rgba(255,255,255,0.25) inset;
+}
+
 /* Mobile topbar page title badge */
 .tl-mob-page-label {
   font-size: 11.5px;
