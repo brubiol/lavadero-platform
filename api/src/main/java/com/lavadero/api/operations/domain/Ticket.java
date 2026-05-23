@@ -96,6 +96,12 @@ public class Ticket extends AuditedEntity {
     @Column(name = "price_override", precision = 10, scale = 2)
     private BigDecimal priceOverride;
 
+    @Column(name = "surcharge_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal surchargeAmount = BigDecimal.ZERO;
+
+    @Column(name = "surcharge_reason", length = 120)
+    private String surchargeReason;
+
     @Column(length = 500)
     private String notes;
 
@@ -171,6 +177,22 @@ public class Ticket extends AuditedEntity {
 
     public BigDecimal getOriginalPriceAmount() {
         return originalPriceAmount;
+    }
+
+    public BigDecimal getSurchargeAmount() {
+        return surchargeAmount == null ? BigDecimal.ZERO : surchargeAmount;
+    }
+
+    public void setSurchargeAmount(BigDecimal surchargeAmount) {
+        this.surchargeAmount = surchargeAmount == null ? BigDecimal.ZERO : surchargeAmount;
+    }
+
+    public String getSurchargeReason() {
+        return surchargeReason;
+    }
+
+    public void setSurchargeReason(String surchargeReason) {
+        this.surchargeReason = surchargeReason;
     }
 
     public TicketCurrency getCurrency() {

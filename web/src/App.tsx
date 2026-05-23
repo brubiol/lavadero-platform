@@ -71,11 +71,14 @@ type ServiceType = {
   active: boolean
 }
 
+type VehicleSizeCategory = 'AUTO' | 'MOTO' | 'RAZR' | 'PERSONAL'
+
 type VehicleSize = {
   id: number
   code: string
   name: string
   sortOrder: number
+  category?: VehicleSizeCategory | string
   active: boolean
 }
 
@@ -2932,10 +2935,32 @@ function TicketWorkspace({
                   </SelectField>
                   <SelectField label="Tamaño de vehículo" error={form.formState.errors.vehicleSizeId?.message}>
                     <select {...form.register('vehicleSizeId')}>
-                      <option value={0}>Selecciona tamaño</option>
-                      {(data.sizes.data ?? []).map((size) => (
-                        <option key={size.id} value={size.id}>{size.name}</option>
-                      ))}
+                      <option value={0}>Selecciona vehículo</option>
+                      {(() => {
+                        const labels: Record<string, string> = {
+                          AUTO: 'Autos y camionetas',
+                          MOTO: 'Motos',
+                          RAZR: 'RAZR',
+                          PERSONAL: 'Camionetas de personal',
+                        }
+                        const order = ['AUTO', 'MOTO', 'RAZR', 'PERSONAL']
+                        const byCat: Record<string, VehicleSize[]> = {}
+                        for (const size of (data.sizes.data ?? []).filter((s) => s.active !== false)) {
+                          const cat = (size.category as string) || 'AUTO'
+                          ;(byCat[cat] ||= []).push(size)
+                        }
+                        const cats = [...new Set([...order, ...Object.keys(byCat)])]
+                          .filter((c) => byCat[c]?.length)
+                        return cats.map((cat) => (
+                          <optgroup key={cat} label={labels[cat] ?? cat}>
+                            {byCat[cat]
+                              .sort((a, b) => a.sortOrder - b.sortOrder)
+                              .map((size) => (
+                                <option key={size.id} value={size.id}>{size.name}</option>
+                              ))}
+                          </optgroup>
+                        ))
+                      })()}
                     </select>
                   </SelectField>
                   <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>

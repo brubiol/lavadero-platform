@@ -24,6 +24,9 @@ public class VehicleSize extends AuditedEntity {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder = 0;
 
+    @Column(nullable = false, length = 20)
+    private String category = "AUTO";
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -34,6 +37,11 @@ public class VehicleSize extends AuditedEntity {
         this.code = code;
         this.name = name;
         this.sortOrder = sortOrder == null ? 0 : sortOrder;
+    }
+
+    public VehicleSize(String code, String name, Integer sortOrder, String category) {
+        this(code, name, sortOrder);
+        this.category = category == null || category.isBlank() ? "AUTO" : category;
     }
 
     public Long getId() {
@@ -50,6 +58,10 @@ public class VehicleSize extends AuditedEntity {
 
     public Integer getSortOrder() {
         return sortOrder;
+    }
+
+    public String getCategory() {
+        return category == null ? "AUTO" : category;
     }
 
     public boolean isActive() {

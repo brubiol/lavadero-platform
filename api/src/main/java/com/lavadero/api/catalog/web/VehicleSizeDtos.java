@@ -23,12 +23,12 @@ public final class VehicleSizeDtos {
             Boolean active) {
     }
 
-    public record VehicleSizeResponse(Long id, String code, String name, Integer sortOrder, boolean active,
-            Instant createdAt, Instant updatedAt) {
+    public record VehicleSizeResponse(Long id, String code, String name, Integer sortOrder, String category,
+            boolean active, Instant createdAt, Instant updatedAt) {
         public static VehicleSizeResponse from(VehicleSize vehicleSize) {
             return new VehicleSizeResponse(vehicleSize.getId(), vehicleSize.getCode(), vehicleSize.getName(),
-                    vehicleSize.getSortOrder(), vehicleSize.isActive(), vehicleSize.getCreatedAt(),
-                    vehicleSize.getUpdatedAt());
+                    vehicleSize.getSortOrder(), vehicleSize.getCategory(), vehicleSize.isActive(),
+                    vehicleSize.getCreatedAt(), vehicleSize.getUpdatedAt());
         }
     }
 }
