@@ -3103,21 +3103,21 @@ function ExpenseLedgerScreen() {
           </div>
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Gastos</p>
-            <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+            <p data-testid="metric-gastos-value" className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
               {money(animExpenses, 'MXN')}
             </p>
             <p className="mt-1.5 text-[11px] text-white/40">{counts.expenses} registro{counts.expenses === 1 ? '' : 's'}</p>
           </div>
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Retiros</p>
-            <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+            <p data-testid="metric-retiros-value" className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
               {money(animWithdrawals, 'MXN')}
             </p>
             <p className="mt-1.5 text-[11px] text-white/40">{counts.withdrawals} registro{counts.withdrawals === 1 ? '' : 's'}</p>
           </div>
           <div className="sm:border-l sm:border-white/10 sm:pl-8">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">Préstamos</p>
-            <p className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+            <p data-testid="metric-prestamos-value" className="font-display mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
               {money(animAdvances, 'MXN')}
             </p>
             <p className="mt-1.5 text-[11px] text-white/40">{counts.advances} registro{counts.advances === 1 ? '' : 's'}</p>
