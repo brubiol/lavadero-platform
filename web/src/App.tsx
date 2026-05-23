@@ -3628,8 +3628,8 @@ function CatalogsScreen() {
               <TextField label="Nombre" error={employeeForm.formState.errors.fullName?.message}>
                 <input placeholder="Ej. Juan Perez" {...employeeForm.register('fullName')} />
               </TextField>
-              <TextField label="Telefono" error={employeeForm.formState.errors.phone?.message}>
-                <input placeholder="Opcional" {...employeeForm.register('phone')} />
+              <TextField label="Teléfono" error={employeeForm.formState.errors.phone?.message}>
+                <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Opcional" {...employeeForm.register('phone')} />
               </TextField>
               <SelectField label="Regla" error={employeeForm.formState.errors.payrollType?.message}>
                 <select {...employeeForm.register('payrollType')}>
@@ -5181,12 +5181,19 @@ function ReportsScreen() {
       )}
 
       <div className="tl-stagger grid gap-4 md:grid-cols-3 xl:grid-cols-6" data-testid="reports-range-metrics">
-        <Metric label="Ingresos" tone="good" value={range ? money(range.ticketRevenue, 'MXN') : '...'} />
-        <Metric label="Salidas" tone="bad" value={range ? money(range.expensesTotal, 'MXN') : '...'} />
-        <Metric label="Resultado" variant={resultTone} value={range ? money(range.result, 'MXN') : '...'} />
-        <Metric label="Carros" tone="info" value={String(range?.carsWashed ?? '...')} />
-        <Metric label="Cortesias" value={String(range?.courtesyCount ?? '...')} />
-        <Metric label="Anulados" tone="warn" value={String(range?.voidedCount ?? '...')} />
+        {(() => {
+          const sk = (wide?: boolean) => <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} />
+          return (
+            <>
+              <Metric label="Ingresos" tone="good" value={range ? money(range.ticketRevenue, 'MXN') : sk(true)} />
+              <Metric label="Salidas" tone="bad" value={range ? money(range.expensesTotal, 'MXN') : sk(true)} />
+              <Metric label="Resultado" variant={resultTone} value={range ? money(range.result, 'MXN') : sk(true)} />
+              <Metric label="Carros" tone="info" value={range ? String(range.carsWashed) : sk()} />
+              <Metric label="Cortesias" value={range ? String(range.courtesyCount) : sk()} />
+              <Metric label="Anulados" tone="warn" value={range ? String(range.voidedCount) : sk()} />
+            </>
+          )
+        })()}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
@@ -5277,8 +5284,8 @@ function ReportsScreen() {
 
           <Panel tone="accent" title="Varianza de caja">
             <div className="tl-stagger grid gap-4 md:grid-cols-3" data-testid="reports-cash-variance">
-              <Metric label="Esperado" tone="info" value={cashVariance.data ? money(cashVariance.data.expectedCash, 'MXN') : '...'} />
-              <Metric label="Contado" tone="info" value={cashVariance.data ? money(cashVariance.data.totalCounted, 'MXN') : '...'} />
+              <Metric label="Esperado" tone="info" value={cashVariance.data ? money(cashVariance.data.expectedCash, 'MXN') : <span className="tl-metric-skeleton wide" />} />
+              <Metric label="Contado" tone="info" value={cashVariance.data ? money(cashVariance.data.totalCounted, 'MXN') : <span className="tl-metric-skeleton wide" />} />
               <Metric
                 label="Diferencia"
                 tone={
@@ -5288,7 +5295,7 @@ function ReportsScreen() {
                       ? 'good'
                       : 'bad'
                 }
-                value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : '...'}
+                value={cashVariance.data ? money(cashVariance.data.variance, 'MXN') : <span className="tl-metric-skeleton wide" />}
               />
             </div>
             <div className="overflow-hidden rounded-xl border border-gray-100">
@@ -6373,7 +6380,7 @@ function CashInput({
 }) {
   return (
     <TextField label={label}>
-      <input type="number" min={0} step={1} {...form.register(name)} data-testid={`cash-input-${String(name)}`} />
+      <input type="number" inputMode="numeric" min={0} step={1} {...form.register(name)} data-testid={`cash-input-${String(name)}`} />
     </TextField>
   )
 }
@@ -6944,7 +6951,7 @@ function VoidDialog({ ticket, onClose, onVoided }: { ticket: Ticket; onClose: ()
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
         <div className="flex justify-end gap-2">
           <Button kind="ghost" onClick={onClose}>Volver</Button>
-          <Button kind="danger" type="submit">Confirmar cancelacion</Button>
+          <Button kind="danger" type="submit">Confirmar cancelación</Button>
         </div>
       </form>
     </Modal>
@@ -7371,8 +7378,8 @@ function EmployeeEditModal({
             <TextField label="Nombre" error={form.formState.errors.fullName?.message}>
               <input {...form.register('fullName')} />
             </TextField>
-            <TextField label="Telefono" error={form.formState.errors.phone?.message}>
-              <input {...form.register('phone')} />
+            <TextField label="Teléfono" error={form.formState.errors.phone?.message}>
+              <input type="tel" inputMode="tel" autoComplete="tel" {...form.register('phone')} />
             </TextField>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
@@ -7566,8 +7573,8 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
       aria-labelledby={titleId}
       data-testid={`modal-${slug}`}
     >
-      <div className={`tl-modal-content flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-5xl'}`}>
-        <div className="flex items-start gap-3 border-b border-border-soft px-6 py-4">
+      <div className={`tl-modal-content flex max-h-[calc(100vh-64px)] flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5 ${narrow ? 'w-full max-w-lg' : 'w-full max-w-5xl'}`}>
+        <div className="flex shrink-0 items-start gap-3 border-b border-border-soft px-6 py-4">
           <div>
             <h3 id={titleId} className="text-base font-bold tracking-tight text-ink-900">{title}</h3>
           </div>
@@ -7582,7 +7589,7 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
             </svg>
           </button>
         </div>
-        <div className="overflow-auto p-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       </div>
     </div>
   )
