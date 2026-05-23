@@ -29,7 +29,10 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,12 +40,22 @@ import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TicketService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
+
+    /** Tickets can be edited freely within this many minutes of creation. After that, only DUENO can edit. */
+    private static final int EDIT_GRACE_MINUTES = 10;
+
+    /** Audit-flag soft cap on cortesías per actor per day. Going over still allowed but the courtesy audit event is FLAGGED. */
+    private static final int COURTESY_DAILY_CAP = 5;
+
+    private static final ZoneId MX_ZONE = ZoneId.of("America/Monterrey");
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final DateTimeFormatter NOTA_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
@@ -110,8 +123,15 @@ public class TicketService {
         Ticket saved = tickets.save(ticket);
         audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
         if (courtesy) {
-            audit.record("TICKET_COURTESY", "TICKET", saved.getId(),
-                    request.courtesyReason(), saved.getNotaNumber());
+            long courtesyToday = audit.countActorActionToday("TICKET_COURTESY");
+            if (courtesyToday >= COURTESY_DAILY_CAP) {
+                audit.recordFlagged("TICKET_COURTESY", "TICKET", saved.getId(),
+                        "Excede el límite diario de cortesías (" + COURTESY_DAILY_CAP + ")",
+                        saved.getNotaNumber() + " · " + (request.courtesyReason() == null ? "" : request.courtesyReason()));
+            } else {
+                audit.record("TICKET_COURTESY", "TICKET", saved.getId(),
+                        request.courtesyReason(), saved.getNotaNumber());
+            }
         } else if (discount.compareTo(ZERO) > 0) {
             audit.record("TICKET_DISCOUNT", "TICKET", saved.getId(),
                     discount + "%", saved.getNotaNumber());
@@ -159,6 +179,17 @@ public class TicketService {
             throw new IllegalArgumentException("Voided tickets cannot be edited");
         }
 
+        // Edit grace window — only DUENO can edit older tickets
+        long minutesSinceCreation = Duration.between(ticket.getCreatedAt(), Instant.now()).toMinutes();
+        if (minutesSinceCreation > EDIT_GRACE_MINUTES && !isDueno()) {
+            throw new IllegalArgumentException(
+                    "Este ticket ya pasó el límite de edición (" + EDIT_GRACE_MINUTES
+                            + " min). Solo el dueño puede editarlo. Cancélalo y crea uno nuevo.");
+        }
+
+        // Capture before-snapshot for audit trail
+        String beforeSnap = snapshotOf(ticket);
+
         ServiceType serviceType = request.serviceTypeId() == null
                 ? ticket.getServiceType()
                 : serviceTypes.get(request.serviceTypeId());
@@ -202,8 +233,25 @@ public class TicketService {
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }
-        audit.record("TICKET_EDITED", "TICKET", ticket.getId(), null, ticket.getNotaNumber());
+        String afterSnap = snapshotOf(ticket);
+        String diff = beforeSnap.equals(afterSnap) ? null : "ANTES: " + beforeSnap + " | DESPUÉS: " + afterSnap;
+        audit.record("TICKET_EDITED", "TICKET", ticket.getId(), ticket.getNotaNumber(), diff);
         return ticket;
+    }
+
+    private static String snapshotOf(Ticket t) {
+        return String.format("nota=%s precio=%s cortesia=%s desc=%s pago=%s",
+                t.getNotaNumber(),
+                t.getPriceAmount() == null ? "-" : t.getPriceAmount().toPlainString(),
+                t.isCourtesy(),
+                t.getDiscountPercent() == null ? "-" : t.getDiscountPercent().toPlainString(),
+                t.getPaymentMethod());
+    }
+
+    private static boolean isDueno() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a -> "ROLE_DUENO".equals(a.getAuthority()));
     }
 
     private BigDecimal surchargeOf(boolean courtesy, BigDecimal raw) {

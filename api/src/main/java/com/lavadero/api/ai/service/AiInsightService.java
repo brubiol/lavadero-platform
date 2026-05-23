@@ -17,6 +17,8 @@ import com.lavadero.api.ai.web.AiDtos.PromptCategory;
 import com.lavadero.api.ai.web.AiDtos.QuickPromptsResponse;
 import com.lavadero.api.ai.web.AiDtos.TodayResponse;
 import com.lavadero.api.ai.web.AiDtos.TodaySummary;
+import com.lavadero.api.audit.domain.AuditEvent;
+import com.lavadero.api.audit.repository.AuditEventRepository;
 import com.lavadero.api.inventory.service.InventoryService;
 import com.lavadero.api.inventory.web.InventoryDtos.InventorySnapshotResponse;
 import com.lavadero.api.inventory.web.InventoryDtos.ProductSnapshotResponse;
@@ -29,11 +31,14 @@ import com.lavadero.api.reports.web.DailySummaryDtos.HistoricalRangeResponse;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,14 +58,21 @@ public class AiInsightService {
     private final InventoryService inventory;
     private final AiProvider aiProvider;
     private final ObjectMapper objectMapper;
+    private final AuditEventRepository auditEvents;
+
+    // Actor-pattern thresholds for watchdog alerts (per-range)
+    private static final int ACTOR_COURTESY_THRESHOLD = 5;
+    private static final int ACTOR_WITHDRAWAL_THRESHOLD = 3;
+    private static final int LATE_EDIT_MINUTES = 60;
 
     public AiInsightService(AiInsightRepository insights, DailySummaryService reports, InventoryService inventory,
-            AiProvider aiProvider, ObjectMapper objectMapper) {
+            AiProvider aiProvider, ObjectMapper objectMapper, AuditEventRepository auditEvents) {
         this.insights = insights;
         this.reports = reports;
         this.inventory = inventory;
         this.aiProvider = aiProvider;
         this.objectMapper = objectMapper;
+        this.auditEvents = auditEvents;
     }
 
     @Transactional(readOnly = true)
@@ -349,6 +361,67 @@ public class AiInsightService {
                             item.product().name(), number(item.quantityOnHand())),
                     Map.of("productId", item.product().id(), "quantityOnHand", item.quantityOnHand())));
         }
+
+        // ── Actor-based fraud patterns from audit events ─────────────
+        Instant startInstant = from.atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant endInstant = to.plusDays(1).atStartOfDay().minusNanos(1).toInstant(ZoneOffset.UTC);
+        List<AuditEvent> auditInRange = auditEvents.findByOccurredAtBetweenOrderByOccurredAtAsc(startInstant, endInstant);
+
+        Map<String, Integer> courtesyByActor = new HashMap<>();
+        Map<String, Integer> withdrawalByActor = new HashMap<>();
+        Map<Long, Instant> ticketCreatedAt = new HashMap<>();
+        List<AuditEvent> lateEdits = new ArrayList<>();
+
+        for (AuditEvent e : auditInRange) {
+            String actor = e.getActorUsername() == null ? "system" : e.getActorUsername();
+            switch (e.getAction()) {
+                case "TICKET_COURTESY" -> courtesyByActor.merge(actor, 1, Integer::sum);
+                case "WITHDRAWAL_CREATED" -> withdrawalByActor.merge(actor, 1, Integer::sum);
+                case "TICKET_CREATED" -> {
+                    if (e.getEntityId() != null) ticketCreatedAt.put(e.getEntityId(), e.getOccurredAt());
+                }
+                case "TICKET_EDITED" -> {
+                    if (e.getEntityId() != null) {
+                        Instant t0 = ticketCreatedAt.get(e.getEntityId());
+                        if (t0 != null && Duration.between(t0, e.getOccurredAt()).toMinutes() > LATE_EDIT_MINUTES) {
+                            lateEdits.add(e);
+                        }
+                    }
+                }
+                default -> { /* ignored */ }
+            }
+        }
+
+        courtesyByActor.entrySet().stream()
+                .filter(en -> en.getValue() >= ACTOR_COURTESY_THRESHOLD)
+                .forEach(en -> candidates.add(new AlertCandidate(AiInsightSeverity.WARNING,
+                        "Cortesías concentradas en un usuario: " + en.getKey(),
+                        "%s registró %d cortesías entre %s y %s. Revisa que cada una tenga razón válida."
+                                .formatted(en.getKey(), en.getValue(), from, to),
+                        Map.of("actor", en.getKey(), "courtesyCount", en.getValue()))));
+
+        withdrawalByActor.entrySet().stream()
+                .filter(en -> en.getValue() >= ACTOR_WITHDRAWAL_THRESHOLD)
+                .forEach(en -> candidates.add(new AlertCandidate(AiInsightSeverity.WARNING,
+                        "Retiros frecuentes por: " + en.getKey(),
+                        "%s registró %d retiros entre %s y %s. Verifica los motivos y montos."
+                                .formatted(en.getKey(), en.getValue(), from, to),
+                        Map.of("actor", en.getKey(), "withdrawalCount", en.getValue()))));
+
+        if (!lateEdits.isEmpty()) {
+            int n = lateEdits.size();
+            String actors = lateEdits.stream()
+                    .map(e -> e.getActorUsername() == null ? "system" : e.getActorUsername())
+                    .distinct()
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            candidates.add(new AlertCandidate(AiInsightSeverity.CRITICAL,
+                    "Tickets editados después de " + LATE_EDIT_MINUTES + " min",
+                    "%d ticket%s editad%s tarde por %s. Posible ajuste retroactivo de precio."
+                            .formatted(n, n == 1 ? "" : "s", n == 1 ? "o" : "os", actors),
+                    Map.of("count", n, "actors", actors)));
+        }
+
         return candidates;
     }
 

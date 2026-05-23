@@ -6,6 +6,7 @@ import com.lavadero.api.audit.repository.AuditEventRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import org.springframework.security.core.Authentication;
@@ -53,6 +54,15 @@ public class AuditService {
                 ? Instant.parse("9999-12-31T23:59:59Z")
                 : to.plusDays(1).atStartOfDay().minusNanos(1).toInstant(ZoneOffset.UTC);
         return events.search(start, end, normalize(entityType), entityId);
+    }
+
+    /** Counts how many times the current actor has triggered `action` today (America/Monterrey day). */
+    @Transactional(readOnly = true)
+    public long countActorActionToday(String action) {
+        ZoneId zone = ZoneId.of("America/Monterrey");
+        Instant start = LocalDate.now(zone).atStartOfDay(zone).toInstant();
+        Instant end = Instant.now();
+        return events.countByActorUsernameAndActionAndOccurredAtBetween(currentActor(), action, start, end);
     }
 
     private String currentActor() {

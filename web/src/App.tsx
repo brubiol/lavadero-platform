@@ -4446,10 +4446,17 @@ function VigilanciaScreen() {
     return d.toISOString().slice(0, 10)
   })
   const [to, setTo] = useState(today)
+  const [drillActor, setDrillActor] = useState<string | null>(null)
 
   const patterns = useQuery({
     queryKey: ['oversight-patterns', from, to],
     queryFn: () => api<OversightPatterns>(`/api/v1/oversight/patterns?from=${from}&to=${to}`),
+  })
+
+  const actorEvents = useQuery({
+    queryKey: ['audit-events', from, to, drillActor],
+    enabled: Boolean(drillActor),
+    queryFn: () => api<AuditEvent[]>(`/api/v1/audit-events?from=${from}&to=${to}`),
   })
 
   const data = patterns.data
@@ -4596,8 +4603,8 @@ function VigilanciaScreen() {
               {(data?.byActor ?? []).map((a) => {
                 const flag = (n: number, threshold: number) => n >= threshold ? 'font-bold text-rose-700' : ''
                 return (
-                  <tr key={a.actor}>
-                    <td className="font-semibold">{a.actor}</td>
+                  <tr key={a.actor} onClick={() => setDrillActor(a.actor)} className="cursor-pointer">
+                    <td className="font-semibold text-violet-700 hover:text-violet-900">{a.actor} →</td>
                     <td className="r tabular-nums">{a.ticketsCreated}</td>
                     <td className={`r tabular-nums ${flag(a.ticketsEdited, 3)}`}>{a.ticketsEdited}</td>
                     <td className={`r tabular-nums ${flag(a.ticketsVoided, 3)}`}>{a.ticketsVoided}</td>
@@ -4729,6 +4736,81 @@ function VigilanciaScreen() {
             ))}
           </div>
         </div>
+      )}
+
+      {drillActor && (
+        <Modal title={`Actividad de ${drillActor}`} onClose={() => setDrillActor(null)}>
+          <div className="space-y-4">
+            <p className="text-[12.5px] text-ink-500">
+              Últimas acciones de <span className="font-semibold text-ink-800">{drillActor}</span> entre{' '}
+              <span className="font-mono tabular-nums">{from}</span> y{' '}
+              <span className="font-mono tabular-nums">{to}</span>.
+            </p>
+            {actorEvents.isLoading && <p className="text-[12.5px] text-ink-400">Cargando…</p>}
+            {actorEvents.error && <ErrorMessage message={actorEvents.error.message} />}
+            {actorEvents.data && (() => {
+              const filtered = actorEvents.data
+                .filter((e) => (e.actorUsername || 'system') === drillActor)
+                .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+              if (filtered.length === 0) {
+                return <p className="text-[12.5px] text-ink-400">Sin eventos en este rango.</p>
+              }
+              // Group by action for the top stats
+              const counts: Record<string, number> = {}
+              filtered.forEach((e) => { counts[e.action] = (counts[e.action] ?? 0) + 1 })
+              const topActions = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6)
+              return (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {topActions.map(([action, n]) => (
+                      <span key={action} className="inline-flex items-center gap-1.5 rounded-full bg-ink-100 px-2.5 py-1 text-[11.5px] font-semibold text-ink-700">
+                        <AuditActionPill action={action} />
+                        <span className="font-mono tabular-nums">{n}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="max-h-[480px] overflow-y-auto rounded-xl border border-border-soft">
+                    <table className="tl-tbl">
+                      <thead>
+                        <tr>
+                          <th className="w-32">Hora</th>
+                          <th>Acción</th>
+                          <th>Entidad</th>
+                          <th>Detalle</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.slice(0, 200).map((e) => (
+                          <tr key={e.id}>
+                            <td className="font-mono text-[11.5px] text-ink-500 tabular-nums">
+                              {new Date(e.occurredAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', hour12: false })}
+                            </td>
+                            <td><AuditActionPill action={e.action} /></td>
+                            <td className="text-[12px] text-ink-600">
+                              {e.entityType}
+                              {e.entityId != null && <span className="ml-1 text-ink-400">#{e.entityId}</span>}
+                            </td>
+                            <td className="text-[12px] text-ink-700">
+                              {e.reason ? <span className="italic">{e.reason}</span> : null}
+                              {e.reason && e.details ? <span className="mx-1 text-ink-300">·</span> : null}
+                              {e.details ? <span className="font-mono text-[11px] text-ink-500">{e.details}</span> : null}
+                              {!e.reason && !e.details ? <span className="text-ink-300">—</span> : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filtered.length > 200 && (
+                    <p className="text-[11.5px] text-ink-400 text-center">
+                      Mostrando 200 de {filtered.length} eventos.
+                    </p>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+        </Modal>
       )}
     </section>
   )

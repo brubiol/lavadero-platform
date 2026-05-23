@@ -23,4 +23,7 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
             @Param("entityType") String entityType, @Param("entityId") Long entityId);
 
     List<AuditEvent> findByOccurredAtBetweenOrderByOccurredAtAsc(Instant from, Instant to);
+
+    long countByActorUsernameAndActionAndOccurredAtBetween(String actorUsername, String action,
+            Instant from, Instant to);
 }
