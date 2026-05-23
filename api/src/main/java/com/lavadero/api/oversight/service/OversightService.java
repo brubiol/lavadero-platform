@@ -129,6 +129,7 @@ public class OversightService {
         final String actor;
         int created, edited, voided, courtesy, discount;
         int expenses, withdrawals, advances, shiftsClosed, payrollAdjustments;
+        int priceOverrides, highDiscounts;
 
         ActorBuilder(String actor) {
             this.actor = actor;
@@ -141,6 +142,8 @@ public class OversightService {
                 case "TICKET_VOIDED" -> voided++;
                 case "TICKET_COURTESY" -> courtesy++;
                 case "TICKET_DISCOUNT" -> discount++;
+                case "TICKET_PRICE_OVERRIDE" -> priceOverrides++;
+                case "TICKET_HIGH_DISCOUNT" -> highDiscounts++;
                 case "EXPENSE_CREATED" -> expenses++;
                 case "WITHDRAWAL_CREATED" -> withdrawals++;
                 case "ADVANCE_CREATED" -> advances++;
@@ -164,6 +167,8 @@ public class OversightService {
             s += Math.max(0, withdrawals - 2) * 3; // withdrawals beyond 2 in range
             s += Math.max(0, advances - 2) * 2;
             s += payrollAdjustments * 5;      // payroll adjustments are rare; high weight
+            s += priceOverrides * 5;          // 5 pts each — direct revenue manipulation
+            s += highDiscounts * 3;           // 3 pts each — same weight as courtesy
             return s;
         }
 

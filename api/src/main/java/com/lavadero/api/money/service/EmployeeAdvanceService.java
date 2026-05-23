@@ -9,6 +9,7 @@ import com.lavadero.api.money.service.BusinessContextResolver.Context;
 import com.lavadero.api.money.web.EmployeeAdvanceDtos.CreateEmployeeAdvanceRequest;
 import com.lavadero.api.payroll.service.DebtLedgerService;
 import jakarta.persistence.EntityNotFoundException;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EmployeeAdvanceService {
+    /** Flag when the same employee receives this many advances in one calendar day. */
+    private static final int DAILY_ADVANCE_CAP_PER_EMPLOYEE = 2;
+    /** Single advance at or above this amount is always flagged. */
+    private static final BigDecimal LARGE_ADVANCE_THRESHOLD = new BigDecimal("500");
+
     private final EmployeeAdvanceRepository advances;
     private final EmployeeRepository employees;
     private final BusinessContextResolver contextResolver;
@@ -45,6 +51,21 @@ public class EmployeeAdvanceService {
         debtLedger.recordAdvance(saved);
         audit.record("ADVANCE_CREATED", "EMPLOYEE_ADVANCE", saved.getId(), saved.getReason(),
                 employee.getFullName() + " " + saved.getAmount());
+
+        // Flag heuristics — still allowed, just surfaced for owner review
+        long advancesToday = advances.countByEmployeeIdAndAdvanceDate(employee.getId(), context.recordDate());
+        boolean overCap = advancesToday > DAILY_ADVANCE_CAP_PER_EMPLOYEE;
+        boolean largeAmount = saved.getAmount().compareTo(LARGE_ADVANCE_THRESHOLD) >= 0;
+        if (overCap || largeAmount) {
+            String why = largeAmount
+                    ? "Anticipo grande: $" + saved.getAmount() + (overCap ? " · " : "")
+                    : "";
+            why += overCap ? "Excede el límite diario de anticipos por empleado ("
+                    + DAILY_ADVANCE_CAP_PER_EMPLOYEE + ")" : "";
+            audit.recordFlagged("EMPLOYEE_ADVANCE_FLAGGED", "EMPLOYEE_ADVANCE", saved.getId(),
+                    why, employee.getFullName() + " " + saved.getAmount()
+                            + (saved.getReason() == null ? "" : " · " + saved.getReason()));
+        }
         return saved;
     }
 

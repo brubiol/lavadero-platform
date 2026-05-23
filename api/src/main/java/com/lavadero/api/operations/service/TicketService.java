@@ -55,6 +55,9 @@ public class TicketService {
     /** Audit-flag soft cap on cortesías per actor per day. Going over still allowed but the courtesy audit event is FLAGGED. */
     private static final int COURTESY_DAILY_CAP = 5;
 
+    /** Discounts at or above this percentage on non-courtesy tickets are always flagged. */
+    private static final int DISCOUNT_FLAG_THRESHOLD = 30;
+
     private static final ZoneId MX_ZONE = ZoneId.of("America/Monterrey");
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final DateTimeFormatter NOTA_DATE = DateTimeFormatter.BASIC_ISO_DATE;
@@ -121,7 +124,22 @@ public class TicketService {
         ticket.setSurchargeReason(normalizeSurchargeReason(courtesy, request.surchargeReason()));
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         Ticket saved = tickets.save(ticket);
+        String actor = currentActor();
         audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
+        // Price override — always flag when operator manually sets a price
+        if (!courtesy && saved.getPriceOverride() != null) {
+            BigDecimal catalogPrice = originalPriceAmount;
+            BigDecimal overridePrice = saved.getPriceOverride();
+            BigDecimal difference = catalogPrice.subtract(overridePrice);
+            audit.recordFlagged("TICKET_PRICE_OVERRIDE", "TICKET", saved.getId(),
+                    "Precio manual: $" + overridePrice.toPlainString()
+                            + " vs catálogo $" + catalogPrice.toPlainString()
+                            + " (diferencia $" + difference.toPlainString() + ")",
+                    "priceOverride=" + overridePrice.toPlainString()
+                            + " catalogPrice=" + catalogPrice.toPlainString()
+                            + " difference=" + difference.toPlainString()
+                            + " actor=" + actor);
+        }
         if (courtesy) {
             long courtesyToday = audit.countActorActionToday("TICKET_COURTESY");
             if (courtesyToday >= COURTESY_DAILY_CAP) {
@@ -133,6 +151,14 @@ public class TicketService {
                         request.courtesyReason(), saved.getNotaNumber());
             }
         } else if (discount.compareTo(ZERO) > 0) {
+            // High discount flag — additional flag for discounts at or above threshold
+            if (discount.intValue() >= DISCOUNT_FLAG_THRESHOLD) {
+                audit.recordFlagged("TICKET_HIGH_DISCOUNT", "TICKET", saved.getId(),
+                        "Descuento de " + discount.toPlainString() + "% en ticket #" + saved.getNotaNumber(),
+                        "discountPercent=" + discount.toPlainString()
+                                + " priceAmount=" + saved.getPriceAmount().toPlainString()
+                                + " actor=" + actor);
+            }
             audit.record("TICKET_DISCOUNT", "TICKET", saved.getId(),
                     discount + "%", saved.getNotaNumber());
         }
@@ -236,6 +262,20 @@ public class TicketService {
         String afterSnap = snapshotOf(ticket);
         String diff = beforeSnap.equals(afterSnap) ? null : "ANTES: " + beforeSnap + " | DESPUÉS: " + afterSnap;
         audit.record("TICKET_EDITED", "TICKET", ticket.getId(), ticket.getNotaNumber(), diff);
+        // Price override on edit — flag whenever a manual price is set or changed
+        if (!courtesy && override != null) {
+            BigDecimal catalogPrice = originalPriceAmount;
+            BigDecimal difference = catalogPrice.subtract(override);
+            String actor = currentActor();
+            audit.recordFlagged("TICKET_PRICE_OVERRIDE", "TICKET", ticket.getId(),
+                    "Precio manual: $" + override.toPlainString()
+                            + " vs catálogo $" + catalogPrice.toPlainString()
+                            + " (diferencia $" + difference.toPlainString() + ")",
+                    "priceOverride=" + override.toPlainString()
+                            + " catalogPrice=" + catalogPrice.toPlainString()
+                            + " difference=" + difference.toPlainString()
+                            + " actor=" + actor);
+        }
         return ticket;
     }
 
@@ -252,6 +292,12 @@ public class TicketService {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;
         return auth.getAuthorities().stream().anyMatch(a -> "ROLE_DUENO".equals(a.getAuthority()));
+    }
+
+    private static String currentActor() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null || auth.getName().isBlank()) return "system";
+        return auth.getName();
     }
 
     private BigDecimal surchargeOf(boolean courtesy, BigDecimal raw) {
