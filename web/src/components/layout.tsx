@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   IDashboard, ITicketNew, ITickets, IMoney, ICut, IPayroll, IInventory, ICatalog,
-  IReports, IAi, IAudit, IBell, ICalendar, ISearch, ILogout, IPlus,
+  IReports, IAi, IAudit, ICalendar, ISearch, ILogout, IPlus,
 } from './icons'
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -169,13 +169,9 @@ export function Topbar({
         <span className="flex-1 text-left">Buscar tickets, lavadores, gastos…</span>
       </button>
       {actions}
-      <div className="tl-icon-btn relative" title="Notificaciones">
-        <IBell size={16} />
-        <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-bad-500 ring-2 ring-white" />
-      </div>
-      <div className="tl-icon-btn" title="Calendario">
+      <NavLink to="/asistencia" className="tl-icon-btn" title="Asistencia" aria-label="Asistencia">
         <ICalendar size={16} />
-      </div>
+      </NavLink>
       <div className="h-6 w-px bg-border-soft" />
       <div className="flex items-center gap-2.5">
         <div className="tl-sb-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>
