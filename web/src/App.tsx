@@ -892,6 +892,7 @@ function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('es-MX', {
     dateStyle: 'short',
     timeStyle: 'short',
+    hour12: false,
   }).format(new Date(value))
 }
 
@@ -3102,8 +3103,12 @@ function TicketWorkspace({
                   <TextField label="Descripción del vehículo" error={form.formState.errors.vehicleDescription?.message}>
                     <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
                   </TextField>
-                  <TextField label="Hora del lavado" error={form.formState.errors.occurredAt?.message}>
-                    <input type="time" {...form.register('occurredAt')} />
+                  <TextField label="Hora del lavado" hint="Formato 24 h — ej. 14:30">
+                    <input
+                      type="time"
+                      lang="es-MX"
+                      {...form.register('occurredAt')}
+                    />
                   </TextField>
                 </div>
               </div>
