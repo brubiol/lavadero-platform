@@ -59,7 +59,8 @@ public final class AiDtos {
             List<AiInsightResponse> alerts,
             int criticalCount,
             int warningCount,
-            TodaySummary summary) {
+            TodaySummary summary,
+            TodaySummary previousDay) {
     }
 
     public record TodaySummary(long carsWashed, java.math.BigDecimal ticketRevenue,

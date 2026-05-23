@@ -245,13 +245,27 @@ public class AiInsightService {
         // Summary numbers
         DailySummaryResponse day = reports.get(date);
         TodaySummary summary = new TodaySummary(
-                Math.toIntExact(day.carsWashed()),
+                day.carsWashed(),
                 day.ticketRevenue(),
                 day.expensesTotal(),
                 day.result(),
                 day.cashVariance());
 
-        return new TodayResponse(date, brief, alerts, critical, warning, summary);
+        // Previous day for delta context
+        TodaySummary previousDay = null;
+        try {
+            DailySummaryResponse prev = reports.get(date.minusDays(1));
+            previousDay = new TodaySummary(
+                    prev.carsWashed(),
+                    prev.ticketRevenue(),
+                    prev.expensesTotal(),
+                    prev.result(),
+                    prev.cashVariance());
+        } catch (Exception ignore) {
+            // no previous day data — leave null, frontend handles gracefully
+        }
+
+        return new TodayResponse(date, brief, alerts, critical, warning, summary, previousDay);
     }
 
     @Transactional(readOnly = true)

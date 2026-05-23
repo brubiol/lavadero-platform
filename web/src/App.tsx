@@ -508,19 +508,22 @@ type QuickPromptsResponse = {
   categories: PromptCategory[]
 }
 
+type TodaySummary = {
+  carsWashed: number
+  ticketRevenue: number
+  expensesTotal: number
+  result: number
+  cashVariance: number | null
+}
+
 type TodayResponse = {
   date: string
   brief: AiInsight
   alerts: AiInsight[]
   criticalCount: number
   warningCount: number
-  summary: {
-    carsWashed: number
-    ticketRevenue: number
-    expensesTotal: number
-    result: number
-    cashVariance: number | null
-  }
+  summary: TodaySummary
+  previousDay: TodaySummary | null
 }
 
 type ChatMessage =
@@ -1940,24 +1943,64 @@ function AiScreen() {
               >
                 🔍 Profundo
               </button>
+              {messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setMessages([]); setInput('') }}
+                  title="Limpiar conversación"
+                  aria-label="Limpiar conversación"
+                  className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
           {/* Messages scroll area */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4" style={{ maxHeight: 520 }}>
             {messages.length === 0 && !ask.isPending && (
-              <div className="flex h-full min-h-[200px] flex-col items-center justify-center text-center">
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 text-violet-700">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.24" />
-                    <path d="M12 8v4l3 3M21 4v4h-4" />
-                  </svg>
+              <div className="space-y-4">
+                <div className="flex flex-col items-center text-center py-3">
+                  <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 text-violet-700">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.24" />
+                      <path d="M12 8v4l3 3M21 4v4h-4" />
+                    </svg>
+                  </div>
+                  <p className="text-[14.5px] font-bold text-ink-900">¿En qué te puedo ayudar hoy?</p>
+                  <p className="mt-0.5 max-w-sm text-[12.5px] text-ink-500">
+                    Pregunta sobre ventas, lavadores, caja o inventario. Usa <strong>Profundo</strong> para
+                    investigación con evidencia paso a paso.
+                  </p>
                 </div>
-                <p className="text-[14.5px] font-bold text-ink-900">¿En qué te puedo ayudar hoy?</p>
-                <p className="mt-1 max-w-sm text-[12.5px] text-ink-500">
-                  Pregunta sobre ventas, lavadores, caja o inventario. Usa <strong>Profundo</strong> para investigación
-                  con evidencia paso a paso.
-                </p>
+                {/* Inline prompt categories */}
+                {prompts.data && (
+                  <div className="space-y-3.5">
+                    {prompts.data.categories.map((cat) => (
+                      <div key={cat.key}>
+                        <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                          <span className="mr-1">{cat.icon}</span>{cat.name}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {cat.prompts.map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => submitMessage(p)}
+                              disabled={ask.isPending}
+                              className="rounded-full border border-border-soft bg-white px-3 py-1 text-[11.5px] text-ink-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1977,8 +2020,8 @@ function AiScreen() {
             )}
           </div>
 
-          {/* Quick prompts (expandable) */}
-          {showPrompts && prompts.data && (
+          {/* Quick prompts (re-openable once chat has started) */}
+          {showPrompts && messages.length > 0 && prompts.data && (
             <div className="border-t border-border-soft bg-ink-50/40 p-4 space-y-3 max-h-[260px] overflow-y-auto">
               {prompts.data.categories.map((cat) => (
                 <div key={cat.key}>
@@ -2009,19 +2052,20 @@ function AiScreen() {
             className="border-t border-border-soft bg-white p-4 space-y-2"
           >
             <div className="flex items-end gap-2">
-              <textarea
+              <AutoTextarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={setInput}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     submitMessage(input)
                   }
                 }}
-                rows={2}
                 placeholder={chatMode === 'quick' ? 'Pregunta rápida — ej. ¿Cómo fue el día?' : 'Pregunta profunda — ej. ¿Qué explica la diferencia de caja?'}
                 disabled={ask.isPending}
-                className="tl-input flex-1 resize-none"
+                minRows={2}
+                maxRows={6}
+                className="flex-1"
               />
               <Button
                 kind={chatMode === 'deep' ? 'go' : 'primary'}
@@ -2033,13 +2077,15 @@ function AiScreen() {
               </Button>
             </div>
             <div className="flex items-center justify-between text-[11px] text-ink-400">
-              <button
-                type="button"
-                onClick={() => setShowPrompts((v) => !v)}
-                className="font-semibold text-violet-600 hover:text-violet-700"
-              >
-                {showPrompts ? '× Cerrar sugerencias' : '✨ Sugerencias'}
-              </button>
+              {messages.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowPrompts((v) => !v)}
+                  className="font-semibold text-violet-600 hover:text-violet-700"
+                >
+                  {showPrompts ? '× Cerrar sugerencias' : '✨ Sugerencias'}
+                </button>
+              ) : <span />}
               <span>Enter para enviar · Shift+Enter para nueva línea</span>
             </div>
           </form>
@@ -2063,6 +2109,122 @@ function AiScreen() {
 }
 
 // ── Single chat message ────────────────────────────────────────
+// Lightweight markdown renderer — **bold**, *italic*, `- ` bullets at line start.
+// No external dependency; HTML-escapes the input first.
+function AiMarkdown({ text }: { text: string }) {
+  const esc = (s: string) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  // Bold
+  const inline = (s: string) => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+
+  const lines = text.split(/\n/)
+  const blocks: { type: 'p' | 'ul'; items: string[] }[] = []
+  let currentUl: string[] | null = null
+  for (const raw of lines) {
+    const m = raw.match(/^\s*[-•]\s+(.*)$/)
+    if (m) {
+      if (!currentUl) {
+        currentUl = []
+        blocks.push({ type: 'ul', items: currentUl })
+      }
+      currentUl.push(m[1])
+    } else {
+      currentUl = null
+      if (raw.trim()) blocks.push({ type: 'p', items: [raw] })
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {blocks.map((b, i) =>
+        b.type === 'p' ? (
+          <p key={i} className="text-[13.5px] leading-6 text-ink-800" dangerouslySetInnerHTML={{ __html: inline(b.items[0]) }} />
+        ) : (
+          <ul key={i} className="space-y-1 text-[12.5px] leading-5 text-ink-700">
+            {b.items.map((item, j) => (
+              <li key={j} className="flex items-start gap-1.5">
+                <span className="text-violet-400 mt-0.5">·</span>
+                <span dangerouslySetInnerHTML={{ __html: inline(item) }} />
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+    </div>
+  )
+}
+
+// Auto-resize textarea — grows from minRows to maxRows as content grows
+function AutoTextarea({
+  value,
+  onChange,
+  onKeyDown,
+  placeholder,
+  disabled,
+  minRows = 2,
+  maxRows = 6,
+  className = '',
+}: {
+  value: string
+  onChange: (v: string) => void
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  placeholder?: string
+  disabled?: boolean
+  minRows?: number
+  maxRows?: number
+  className?: string
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    const lineHeight = 20
+    const minH = minRows * lineHeight + 16
+    const maxH = maxRows * lineHeight + 16
+    const next = Math.min(maxH, Math.max(minH, el.scrollHeight))
+    el.style.height = `${next}px`
+  }, [value, minRows, maxRows])
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      disabled={disabled}
+      rows={minRows}
+      className={`tl-input resize-none ${className}`}
+      style={{ overflow: 'hidden' }}
+    />
+  )
+}
+
+// Delta chip for "vs ayer" comparisons
+function AiVsYesterday({ today, yesterday, isMoney }: { today: number; yesterday: number | null | undefined; isMoney?: boolean }) {
+  if (yesterday == null) return null
+  if (yesterday === 0 && today === 0) return null
+  if (yesterday === 0) {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-700">nuevo</span>
+  }
+  const diff = today - yesterday
+  const pct = Math.round((diff / Math.abs(yesterday)) * 100)
+  if (pct === 0) return <span className="text-[10px] text-ink-400">igual</span>
+  const up = diff > 0
+  // For expenses-like fields (where up is bad), caller can flip via isMoney inverted — we keep neutral coloring on numeric KPIs (cars/result).
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold ${
+      up ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+    }`}>
+      {up ? '▲' : '▼'} {Math.abs(pct)}%{isMoney ? '' : ''}
+    </span>
+  )
+}
+
 function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: string) => void }) {
   const time = new Date(msg.ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -2097,7 +2259,7 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
       <div className="max-w-[88%] flex-1 space-y-3 rounded-2xl rounded-tl-md bg-ink-50 px-4 py-3 ring-1 ring-border-soft">
         {msg.mode === 'quick' ? (
           <>
-            <p className="whitespace-pre-wrap text-[13.5px] leading-6 text-ink-800">{msg.data.answer}</p>
+            <AiMarkdown text={msg.data.answer} />
             {msg.data.supportingNumbers.length > 0 && (
               <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Números usados</p>
@@ -2129,7 +2291,7 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
         ) : (
           <>
             <div className="flex items-start justify-between gap-2">
-              <p className="whitespace-pre-wrap text-[13.5px] font-semibold leading-6 text-ink-900">{msg.data.conclusion}</p>
+              <div className="flex-1"><AiMarkdown text={msg.data.conclusion} /></div>
               <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-bold ${
                 msg.data.confidence === 'HIGH' ? 'bg-emerald-100 text-emerald-700'
                   : msg.data.confidence === 'MEDIUM' ? 'bg-amber-100 text-amber-700'
@@ -2205,15 +2367,21 @@ function AiTodayCard({
         {briefError && <p className="rounded-lg bg-rose-50 p-2 text-[12px] text-rose-700">{briefError}</p>}
         {today && (
           <>
-            {/* Day-summary mini-stats */}
+            {/* Day-summary mini-stats with vs-ayer deltas */}
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg bg-ink-50/60 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Carros</p>
-                <p className="font-display text-[18px] font-bold leading-none tabular-nums text-ink-900">{today.summary.carsWashed}</p>
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Carros</p>
+                  <AiVsYesterday today={today.summary.carsWashed} yesterday={today.previousDay?.carsWashed} />
+                </div>
+                <p className="font-display text-[18px] font-bold leading-none tabular-nums text-ink-900 mt-0.5">{today.summary.carsWashed}</p>
               </div>
               <div className="rounded-lg bg-ink-50/60 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Resultado</p>
-                <p className={`font-display text-[18px] font-bold leading-none tabular-nums ${today.summary.result >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Resultado</p>
+                  <AiVsYesterday today={today.summary.result} yesterday={today.previousDay?.result} isMoney />
+                </div>
+                <p className={`font-display text-[18px] font-bold leading-none tabular-nums mt-0.5 ${today.summary.result >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                   {money(today.summary.result, 'MXN')}
                 </p>
               </div>
@@ -2236,6 +2404,7 @@ function AiTodayCard({
 
 // ── Alerts rail card ───────────────────────────────────────────
 function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boolean }) {
+  const [filter, setFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL')
   if (loading && alerts.length === 0) return null
   if (!loading && alerts.length === 0) {
     return (
@@ -2255,6 +2424,12 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
     const order = { CRITICAL: 0, WARNING: 1, INFO: 2 }
     return order[a.severity] - order[b.severity]
   })
+  const counts = {
+    ALL: sorted.length,
+    CRITICAL: sorted.filter((a) => a.severity === 'CRITICAL').length,
+    WARNING: sorted.filter((a) => a.severity === 'WARNING').length,
+  }
+  const visible = filter === 'ALL' ? sorted : sorted.filter((a) => a.severity === filter)
   const topSeverity = sorted[0]?.severity
   const colorMap = topSeverity === 'CRITICAL'
     ? 'from-rose-400 to-rose-600'
@@ -2269,11 +2444,37 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
           <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Alertas</h3>
         </div>
         <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[10.5px] font-bold text-ink-700">
-          {sorted.length}
+          {visible.length}{filter !== 'ALL' && `/${counts.ALL}`}
         </span>
       </div>
+      {/* Severity filter tabs */}
+      <div className="flex items-center gap-1 border-b border-border-soft px-4 py-2">
+        {([
+          { id: 'ALL' as const, label: 'Todas', count: counts.ALL },
+          { id: 'CRITICAL' as const, label: 'Críticas', count: counts.CRITICAL },
+          { id: 'WARNING' as const, label: 'Avisos', count: counts.WARNING },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setFilter(t.id)}
+            disabled={t.count === 0 && t.id !== 'ALL'}
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${
+              filter === t.id
+                ? t.id === 'CRITICAL' ? 'bg-rose-600 text-white' : t.id === 'WARNING' ? 'bg-amber-600 text-white' : 'bg-ink-900 text-white'
+                : 'text-ink-500 hover:bg-ink-100 disabled:opacity-40 disabled:hover:bg-transparent'
+            }`}
+          >
+            {t.label}
+            <span className={`text-[9.5px] font-bold ${filter === t.id ? 'opacity-80' : 'opacity-60'}`}>{t.count}</span>
+          </button>
+        ))}
+      </div>
       <div className="p-4 space-y-2 max-h-[420px] overflow-y-auto">
-        {sorted.map((a) => <AiInsightCard key={a.id} insight={a} compact />)}
+        {visible.map((a) => <AiInsightCard key={a.id} insight={a} compact />)}
+        {visible.length === 0 && (
+          <p className="text-[12px] text-ink-400 text-center py-4">Sin alertas de este tipo.</p>
+        )}
       </div>
     </div>
   )
