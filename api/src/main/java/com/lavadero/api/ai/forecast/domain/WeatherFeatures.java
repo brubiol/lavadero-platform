@@ -9,6 +9,8 @@ import java.time.LocalDate;
  */
 public record WeatherFeatures(LocalDate date, double precipMm, double tempMaxC, double precipYesterdayMm) {
 
+    public static final int DIMENSION = 3;
+
     public double[] asVector() {
         return new double[] { precipMm, tempMaxC, precipYesterdayMm };
     }

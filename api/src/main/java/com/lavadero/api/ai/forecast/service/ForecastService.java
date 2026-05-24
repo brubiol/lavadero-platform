@@ -10,6 +10,8 @@ import com.lavadero.api.ai.forecast.domain.ForecastModel;
 import com.lavadero.api.ai.forecast.domain.ForecastPoint;
 import com.lavadero.api.ai.forecast.domain.HistoricalPoint;
 import com.lavadero.api.ai.forecast.domain.WeatherAugmentedModel;
+import com.lavadero.api.ai.calendar.service.HolidayCalendarService;
+import com.lavadero.api.ai.forecast.domain.CalendarFeatures;
 import com.lavadero.api.ai.forecast.domain.WeatherFeatures;
 import com.lavadero.api.ai.forecast.repository.DailyForecastRepository;
 import com.lavadero.api.ai.forecast.web.ForecastDtos.ForecastPointResponse;
@@ -61,11 +63,13 @@ public class ForecastService {
     private final AiInsightRepository insights;
     private final DailyWeatherRepository weather;
     private final WeatherProperties weatherProperties;
+    private final HolidayCalendarService holidayCalendar;
     private final ObjectMapper objectMapper;
 
     public ForecastService(HistoricalDailySnapshotRepository historical, DailySummaryService dailySummary,
             DailyForecastRepository forecasts, AiInsightRepository insights,
             DailyWeatherRepository weather, WeatherProperties weatherProperties,
+            HolidayCalendarService holidayCalendar,
             ObjectMapper objectMapper) {
         this.historical = historical;
         this.dailySummary = dailySummary;
@@ -73,6 +77,7 @@ public class ForecastService {
         this.insights = insights;
         this.weather = weather;
         this.weatherProperties = weatherProperties;
+        this.holidayCalendar = holidayCalendar;
         this.objectMapper = objectMapper;
     }
 
@@ -178,16 +183,21 @@ public class ForecastService {
 
     private Generated generateWithWeather(LocalDate snapshotDate, int horizonDays,
             List<HistoricalPoint> cars, List<HistoricalPoint> revenue) {
-        List<WeatherFeatures> trainWeather = weatherFeaturesForDates(carsAndRevenueDates(cars, revenue));
-        WeatherAugmentedModel carsModel = WeatherAdjustedForecaster.fit(cars, trainWeather);
-        WeatherAugmentedModel revenueModel = WeatherAdjustedForecaster.fit(revenue, trainWeather);
+        java.util.Set<LocalDate> trainingDates = carsAndRevenueDates(cars, revenue);
+        List<WeatherFeatures> trainWeather = weatherFeaturesForDates(trainingDates);
+        List<CalendarFeatures> trainCalendar = holidayCalendar.featuresForDates(trainingDates);
+        WeatherAugmentedModel carsModel = WeatherAdjustedForecaster.fit(cars, trainWeather, trainCalendar);
+        WeatherAugmentedModel revenueModel = WeatherAdjustedForecaster.fit(revenue, trainWeather, trainCalendar);
 
         LocalDate horizonStart = snapshotDate.plusDays(1);
         LocalDate horizonEnd = snapshotDate.plusDays(horizonDays);
         List<WeatherFeatures> horizonWeather = weatherFeaturesForRange(horizonStart, horizonEnd);
+        List<CalendarFeatures> horizonCalendar = holidayCalendar.featuresForRange(horizonStart, horizonEnd);
 
-        List<ForecastPoint> carPoints = WeatherAdjustedForecaster.predict(carsModel, horizonStart, horizonDays, horizonWeather);
-        List<ForecastPoint> revPoints = WeatherAdjustedForecaster.predict(revenueModel, horizonStart, horizonDays, horizonWeather);
+        List<ForecastPoint> carPoints = WeatherAdjustedForecaster.predict(
+                carsModel, horizonStart, horizonDays, horizonWeather, horizonCalendar);
+        List<ForecastPoint> revPoints = WeatherAdjustedForecaster.predict(
+                revenueModel, horizonStart, horizonDays, horizonWeather, horizonCalendar);
 
         String version = compactVersion(carsModel.seasonal(), revenueModel.seasonal(), true);
         return new Generated(carPoints, revPoints, horizonWeather,
@@ -199,7 +209,8 @@ public class ForecastService {
     }
 
     private String compactVersion(ForecastModel cars, ForecastModel revenue, boolean weatherActive) {
-        String suffix = weatherActive ? "+w" : "";
+        // +wc = weather + calendar features both active in the OLS residual model.
+        String suffix = weatherActive ? "+wc" : "";
         return "snf-1.0%s/n=%d/through=%s/sc=%.1f/sr=%.0f".formatted(
                 suffix, cars.trainingSize(), cars.fittedThrough(),
                 cars.residualSigma(), revenue.residualSigma());
