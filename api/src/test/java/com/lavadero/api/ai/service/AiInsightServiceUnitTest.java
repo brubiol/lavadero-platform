@@ -21,6 +21,7 @@ import com.lavadero.api.inventory.service.InventoryService;
 import com.lavadero.api.reports.service.DailySummaryService;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -124,6 +125,40 @@ class AiInsightServiceUnitTest {
         assertThat(r.confidence()).isEqualTo("LOW");
         assertThat(r.steps()).containsExactly("Sin acceso al LLM; se devolvio respuesta plantilla.");
         assertThat(r.evidence()).isEmpty();
+    }
+
+    @Test
+    void parses_numbered_explanations_from_model_text() {
+        AiInsightService service = buildService(new StubAiProvider());
+        String text = "#1: Bajaron por feriado\n#2: Sin patron raro\n#3: Revisar a Juan, hizo 4 cortesias";
+
+        Map<Integer, String> parsed = service.parseNumberedExplanations(text, 3);
+
+        assertThat(parsed).hasSize(3);
+        assertThat(parsed.get(1)).isEqualTo("Bajaron por feriado");
+        assertThat(parsed.get(2)).isEqualTo("Sin patron raro");
+        assertThat(parsed.get(3)).isEqualTo("Revisar a Juan, hizo 4 cortesias");
+    }
+
+    @Test
+    void parser_drops_indices_out_of_range() {
+        AiInsightService service = buildService(new StubAiProvider());
+        String text = "#1: valido\n#2: valido\n#9: spurious";
+
+        Map<Integer, String> parsed = service.parseNumberedExplanations(text, 2);
+
+        assertThat(parsed).containsOnlyKeys(1, 2);
+    }
+
+    @Test
+    void parser_handles_multi_line_explanations() {
+        AiInsightService service = buildService(new StubAiProvider());
+        String text = "#1: linea uno\nlinea dos\n#2: solo una linea";
+
+        Map<Integer, String> parsed = service.parseNumberedExplanations(text, 2);
+
+        assertThat(parsed.get(1)).contains("linea uno").contains("linea dos");
+        assertThat(parsed.get(2)).isEqualTo("solo una linea");
     }
 
     @Test

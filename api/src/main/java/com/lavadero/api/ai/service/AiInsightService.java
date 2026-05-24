@@ -76,6 +76,30 @@ public class AiInsightService {
     /** Investigation is allowed deeper exploration (form hypothesis, fetch, iterate). */
     private static final int INVESTIGATE_TOOL_MAX_ITER = 8;
 
+    /** Daily brief runs on every dashboard open (cache miss); cap iterations tighter to bound latency. */
+    private static final int BRIEF_TOOL_MAX_ITER = 4;
+
+    /** Alerts run as one batched call over all candidates; allow a few rounds to investigate context. */
+    private static final int ALERT_TOOL_MAX_ITER = 6;
+
+    /** Curated tool subset for dailyBrief — summary/performance/inventory/oversight only. */
+    private static final String[] BRIEF_TOOLS = {
+            "get_daily_summary", "get_historical_range", "get_cash_variance",
+            "get_employee_performance", "get_inventory_snapshot", "get_oversight_patterns"
+    };
+
+    /** Curated tool subset for runAlerts — same shape as brief, plus monthly for trend context. */
+    private static final String[] ALERT_TOOLS = {
+            "get_daily_summary", "get_range_summary", "get_monthly_summary",
+            "get_historical_range", "get_cash_variance", "get_employee_performance",
+            "get_oversight_patterns"
+    };
+
+    /** Per-date guard so a refreshing dashboard doesn't re-trigger the alert tool loop. */
+    private final java.util.concurrent.ConcurrentHashMap<LocalDate, Instant> lastAlertRunByDate =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Duration ALERT_RUN_DEDUPE = Duration.ofMinutes(15);
+
     public AiInsightService(AiInsightRepository insights, DailySummaryService reports, InventoryService inventory,
             AiProvider aiProvider, ObjectMapper objectMapper, AuditEventRepository auditEvents,
             AiToolRegistry toolRegistry) {
@@ -141,10 +165,53 @@ public class AiInsightService {
             }
         }
 
+        // Pre-compute the deterministic numbers up front so (a) the structured details
+        // payload is still populated for the UI cards, and (b) the model can use them
+        // as initial context, and (c) we have a fallback brief to ship if the LLM
+        // is unavailable.
         DailySummaryResponse day = reports.get(date);
         HistoricalRangeResponse history = safeHistorical(date.minusDays(30), date.minusDays(1));
         EmployeePerformanceResponse performance = reports.employeePerformance(date, date);
         InventorySnapshotResponse stock = inventory.snapshot(Instant.now());
+        List<String> bullets = briefBullets(day, history, stock);
+
+        String systemPrompt = ""
+                + "Eres el analista del dueno de un lavadero en Reynosa, Mexico. "
+                + "Escribe el brief operativo del dia. Sin emojis. "
+                + "Responde con 3 a 5 lineas en espanol, cada una iniciando con '- '. "
+                + "Numeros concretos. Si un numero parece raro, usa las herramientas para verificar antes de afirmarlo. "
+                + "Hoy es " + date + ".";
+        String userPrompt = "Contexto inicial (verifica con herramientas si algo se ve raro):\n- "
+                + String.join("\n- ", bullets)
+                + "\n\nGenera el brief.";
+
+        AiRequest request = new AiRequest(AiFeatureType.DAILY_BRIEF, systemPrompt, userPrompt);
+        ToolAwareCompletion completion = aiProvider.completeWithTools(
+                request, toolRegistry.subset(BRIEF_TOOLS), BRIEF_TOOL_MAX_ITER);
+
+        String title = "Brief del dueno - " + date;
+        // Fallback path (no API key -> empty trace -> deterministic provider): the
+        // model's text is generic boilerplate. Keep the old bullet-stitched body so
+        // the frontend's aiSummaryLines split-on-newline still renders useful lines.
+        String summary = completion.trace().isEmpty()
+                ? title + "\n- " + String.join("\n- ", bullets)
+                : completion.text();
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("carsWashed", day.carsWashed());
+        payload.put("ticketRevenue", day.ticketRevenue());
+        payload.put("expensesTotal", day.expensesTotal());
+        payload.put("result", day.result());
+        payload.put("cashVariance", day.cashVariance());
+        payload.put("topEmployees", performance.employees().stream().limit(3).toList());
+        payload.put("lowInventory", lowStock(stock).stream().limit(5).toList());
+        payload.put("toolsCalled", completion.trace().stream().map(ToolCallTrace::name).toList());
+        String details = details(payload);
+        return response(save(AiFeatureType.DAILY_BRIEF, AiInsightSeverity.INFO, title, summary, details, date, date));
+    }
+
+    private List<String> briefBullets(DailySummaryResponse day, HistoricalRangeResponse history,
+            InventorySnapshotResponse stock) {
         BigDecimal avgCars = averageCars(history);
         BigDecimal avgRevenue = averageRevenue(history);
         List<String> bullets = new ArrayList<>();
@@ -160,42 +227,108 @@ public class AiInsightService {
         lowStock(stock).stream().limit(3)
                 .forEach(item -> bullets.add("Inventario bajo: %s con %s unidades.".formatted(
                         item.product().name(), number(item.quantityOnHand()))));
-
-        String providerText = aiProvider.complete(new AiRequest(AiFeatureType.DAILY_BRIEF,
-                "Resume la operacion diaria para el dueno de un lavadero.",
-                String.join("\n", bullets)));
-        String title = "Brief del dueno - " + date;
-        String summary = title + "\n" + providerText + "\n- " + String.join("\n- ", bullets);
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("carsWashed", day.carsWashed());
-        payload.put("ticketRevenue", day.ticketRevenue());
-        payload.put("expensesTotal", day.expensesTotal());
-        payload.put("result", day.result());
-        payload.put("cashVariance", day.cashVariance());
-        payload.put("topEmployees", performance.employees().stream().limit(3).toList());
-        payload.put("lowInventory", lowStock(stock).stream().limit(5).toList());
-        String details = details(payload);
-        return response(save(AiFeatureType.DAILY_BRIEF, AiInsightSeverity.INFO, title, summary, details, date, date));
+        return bullets;
     }
 
     @Transactional
     public List<AiInsightResponse> runAlerts(LocalDate from, LocalDate to) {
         validateRange(from, to);
-        List<AlertCandidate> candidates = alertCandidates(from, to);
-        List<AiInsightResponse> created = new ArrayList<>();
-        for (AlertCandidate candidate : candidates) {
-            if (insights.existsByFeatureTypeAndTitleAndSourceFromAndSourceTo(
-                    AiFeatureType.ANOMALY_ALERT, candidate.title, from, to)) {
-                continue;
+
+        // Skip the tool loop entirely if we already ran it for this date recently.
+        // today() calls this on every dashboard open; without the guard a quick
+        // page-refresh storm would burn LLM budget detecting the same anomalies.
+        // Single-date runs only — multi-day audit runs still go through.
+        if (from.equals(to)) {
+            Instant lastRun = lastAlertRunByDate.get(from);
+            if (lastRun != null && Duration.between(lastRun, Instant.now()).compareTo(ALERT_RUN_DEDUPE) < 0) {
+                return List.of();
             }
-            String providerText = aiProvider.complete(new AiRequest(AiFeatureType.ANOMALY_ALERT,
-                    "Explica una alerta operativa para el dueno de un lavadero.",
-                    candidate.summary));
-            String summary = candidate.summary + "\n" + providerText;
-            created.add(response(save(AiFeatureType.ANOMALY_ALERT, candidate.severity, candidate.title,
-                    summary, details(candidate.details), from, to)));
         }
+
+        List<AlertCandidate> candidates = alertCandidates(from, to);
+
+        // Drop candidates that already produced an insight in this same window —
+        // otherwise a dashboard refresh would call the tool loop and duplicate work.
+        List<AlertCandidate> fresh = candidates.stream()
+                .filter(c -> !insights.existsByFeatureTypeAndTitleAndSourceFromAndSourceTo(
+                        AiFeatureType.ANOMALY_ALERT, c.title, from, to))
+                .toList();
+        if (fresh.isEmpty()) {
+            return List.of();
+        }
+
+        // One batched tool-loop call investigates all candidates together. Cuts N
+        // round-trips down to 1; the model can also reuse a tool result across
+        // candidates (e.g. one get_oversight_patterns covers cortesias + retiros).
+        Map<Integer, String> explanations = explainCandidatesBatched(fresh, from, to);
+
+        List<AiInsightResponse> created = new ArrayList<>();
+        for (int i = 0; i < fresh.size(); i++) {
+            AlertCandidate c = fresh.get(i);
+            String explanation = explanations.getOrDefault(i + 1, "");
+            String summary = explanation.isBlank() ? c.summary : c.summary + "\n" + explanation;
+            // Severity stays as the rule-engine's verdict. Fraud-system rule:
+            // never let the model downgrade an alert. Override would need a
+            // separate contract with a required reason.
+            created.add(response(save(AiFeatureType.ANOMALY_ALERT, c.severity, c.title,
+                    summary, details(c.details), from, to)));
+        }
+        lastAlertRunByDate.put(from, Instant.now());
         return created;
+    }
+
+    private Map<Integer, String> explainCandidatesBatched(List<AlertCandidate> candidates,
+            LocalDate from, LocalDate to) {
+        StringBuilder userPrompt = new StringBuilder()
+                .append("Se detectaron las siguientes anomalias entre ")
+                .append(from).append(" y ").append(to).append(". ")
+                .append("Investiga con herramientas si necesitas mas contexto y escribe ")
+                .append("una explicacion breve (2-3 lineas) por cada una.\n\n");
+        for (int i = 0; i < candidates.size(); i++) {
+            AlertCandidate c = candidates.get(i);
+            userPrompt.append("#").append(i + 1).append(" [").append(c.severity).append("] ")
+                    .append(c.title).append(": ").append(c.summary).append("\n");
+        }
+
+        String systemPrompt = ""
+                + "Eres el analista del dueno de un lavadero en Reynosa, Mexico. "
+                + "Responde con una explicacion por anomalia, en espanol, sin emojis. "
+                + "Formato obligatorio: cada explicacion empieza en una linea nueva con '#N:' "
+                + "donde N es el numero de la anomalia. Maximo 3 lineas por anomalia. "
+                + "Si las herramientas confirman que es un evento normal (festivo, clima), dilo.";
+        AiRequest req = new AiRequest(AiFeatureType.ANOMALY_ALERT, systemPrompt, userPrompt.toString());
+        ToolAwareCompletion completion = aiProvider.completeWithTools(
+                req, toolRegistry.subset(ALERT_TOOLS), ALERT_TOOL_MAX_ITER);
+
+        return parseNumberedExplanations(completion.text(), candidates.size());
+    }
+
+    /**
+     * Pull "#N: ..." explanations out of the model's text. Each explanation runs
+     * until the next "#N:" marker (or EOF). Anything that doesn't match a known
+     * index is dropped — callers fall back to the candidate's own summary text.
+     */
+    // Package-private for unit testing.
+    Map<Integer, String> parseNumberedExplanations(String text, int candidateCount) {
+        Map<Integer, String> out = new LinkedHashMap<>();
+        if (text == null || text.isBlank()) {
+            return out;
+        }
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?m)^#(\\d+)[.:)]?\\s*(.+?)(?=^#\\d+[.:)]?\\s|\\z)",
+                java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher m = p.matcher(text);
+        while (m.find()) {
+            try {
+                int idx = Integer.parseInt(m.group(1));
+                if (idx >= 1 && idx <= candidateCount) {
+                    out.put(idx, m.group(2).trim());
+                }
+            } catch (NumberFormatException ignore) {
+                // skip
+            }
+        }
+        return out;
     }
 
     @Transactional
