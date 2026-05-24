@@ -2,7 +2,7 @@
 
 **A full-stack POS + business-intelligence platform for a real car wash.** Built solo, running in production for a family business in Reynosa, Mexico. Replaces a legacy Excel + paper workflow with a role-gated web app that covers daily ticketing, shift cash management, weekly payroll, inventory, reporting, an owner-only AI command center, and an anti-theft oversight dashboard.
 
-→ **Live demo:** [turbolavado.org](https://turbolavado.org) · log in as `dueno` / `cambia-esto-123`
+→ **Live demo:** [turbolavado.org](https://turbolavado.org) · log in as 
 
 ![Java 21](https://img.shields.io/badge/Java-21-007396) ![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F) ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6) ![AWS](https://img.shields.io/badge/AWS-EC2%20%2B%20RDS-FF9900)
 
