@@ -26,7 +26,7 @@ import {
   type Tone as PillTone,
 } from './components/ui'
 
-type Currency = 'MXN' | 'USD'
+type Currency = 'MXN'
 type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER'
 type TicketStatus = 'ACTIVE' | 'VOIDED'
 type AuthRole = 'OPERADOR' | 'GERENTE' | 'DUENO'
@@ -547,12 +547,19 @@ type AiInsight = {
   updatedAt: string
 }
 
+type ToolCallSummary = {
+  name: string
+  arguments: Record<string, unknown> | unknown
+  resultPreview: string
+}
+
 type AnalystChatResponse = {
   answer: string
   supportingNumbers: string[]
   sourceFrom: string
   sourceTo: string
   suggestedFollowUps: string[]
+  toolCalls?: ToolCallSummary[]
   insight: AiInsight
 }
 
@@ -2586,6 +2593,25 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
         {msg.mode === 'quick' ? (
           <>
             <AiMarkdown text={msg.data.answer} />
+            {msg.data.toolCalls && msg.data.toolCalls.length > 0 && (
+              <details className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
+                <summary className="cursor-pointer list-none text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400 hover:text-ink-700">
+                  <span className="mr-1.5 inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700 ring-1 ring-primary-100">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M9.4 16.6L4.8 12l4.6-4.6M14.6 7.4l4.6 4.6-4.6 4.6"/></svg>
+                    {msg.data.toolCalls.length} {msg.data.toolCalls.length === 1 ? 'consulta' : 'consultas'}
+                  </span>
+                  Llamó a {msg.data.toolCalls.map((t) => t.name).join(', ')}
+                </summary>
+                <ul className="mt-2.5 space-y-2 text-[11.5px] leading-5 text-ink-700">
+                  {msg.data.toolCalls.map((t, i) => (
+                    <li key={i} className="rounded-lg bg-ink-50/60 p-2">
+                      <div className="font-mono text-[11px] font-semibold text-primary-700">{t.name}({JSON.stringify(t.arguments)})</div>
+                      <div className="mt-1 font-mono text-[10.5px] text-ink-500 break-all">{t.resultPreview}</div>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {msg.data.supportingNumbers.length > 0 && (
               <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Números usados</p>
@@ -3786,7 +3812,6 @@ function CatalogsScreen() {
   const prices = data.prices.data ?? []
   const sizeById = Object.fromEntries(sizes.map(s => [s.id, s])) as Record<number, VehicleSize | undefined>
   const mxnPrices = prices.filter(p => p.currency === 'MXN')
-  const usdPrices = prices.filter(p => p.currency === 'USD')
   const CAT_LABEL: Record<string, string> = { AUTO: 'Autos y camionetas', MOTO: 'Motos', RAZR: 'RAZR', PERSONAL: 'Cam. de personal' }
   const mxnGroups = (['AUTO', 'MOTO', 'RAZR', 'PERSONAL'] as const).flatMap(cat => {
     const catPrices = mxnPrices.filter(p => (sizeById[p.vehicleSizeId]?.category ?? 'AUTO') === cat)
@@ -4297,31 +4322,6 @@ function CatalogsScreen() {
                 >
                   {pendingAmounts.size > 0 ? `Guardar (${pendingAmounts.size})` : 'Guardar'}
                 </Button>
-              </div>
-            )}
-            {usdPrices.length > 0 && (
-              <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">USD — clientes de frontera</p>
-                <div className="overflow-auto rounded-xl border border-border-soft">
-                  <table className="tl-tbl">
-                    <thead>
-                      <tr>
-                        <th>Servicio</th>
-                        <th>Vehículo</th>
-                        <th className="r">Precio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {usdPrices.map(p => (
-                        <tr key={p.id}>
-                          <td>{p.serviceTypeName}</td>
-                          <td>{p.vehicleSizeName}</td>
-                          <td className="r tabular-nums">{money(p.amount, 'USD')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             )}
           </Panel>

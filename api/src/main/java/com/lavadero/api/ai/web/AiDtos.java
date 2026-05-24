@@ -48,7 +48,16 @@ public final class AiDtos {
     }
 
     public record AnalystChatResponse(String answer, List<String> supportingNumbers,
-            LocalDate sourceFrom, LocalDate sourceTo, List<String> suggestedFollowUps, AiInsightResponse insight) {
+            LocalDate sourceFrom, LocalDate sourceTo, List<String> suggestedFollowUps,
+            List<ToolCallSummary> toolCalls, AiInsightResponse insight) {
+    }
+
+    /**
+     * Surface what the AI did to answer: which domain tools it called and a
+     * short hint of what each returned. Renders in the chat as "Llamé a X, Y"
+     * so the operator can see the reasoning trail without reading raw JSON.
+     */
+    public record ToolCallSummary(String name, JsonNode arguments, String resultPreview) {
     }
 
     public record InvestigationRequest(

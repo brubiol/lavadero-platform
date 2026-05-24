@@ -8,8 +8,11 @@ import com.lavadero.api.ai.domain.AiInsight;
 import com.lavadero.api.ai.domain.AiInsightSeverity;
 import com.lavadero.api.ai.domain.AiInsightStatus;
 import com.lavadero.api.ai.provider.AiProvider;
+import com.lavadero.api.ai.provider.AiProvider.ToolAwareCompletion;
+import com.lavadero.api.ai.provider.AiProvider.ToolCallTrace;
 import com.lavadero.api.ai.provider.AiRequest;
 import com.lavadero.api.ai.repository.AiInsightRepository;
+import com.lavadero.api.ai.tools.AiToolRegistry;
 import com.lavadero.api.ai.web.AiDtos.AiInsightResponse;
 import com.lavadero.api.ai.web.AiDtos.AnalystChatResponse;
 import com.lavadero.api.ai.web.AiDtos.InvestigationResponse;
@@ -17,6 +20,7 @@ import com.lavadero.api.ai.web.AiDtos.PromptCategory;
 import com.lavadero.api.ai.web.AiDtos.QuickPromptsResponse;
 import com.lavadero.api.ai.web.AiDtos.TodayResponse;
 import com.lavadero.api.ai.web.AiDtos.TodaySummary;
+import com.lavadero.api.ai.web.AiDtos.ToolCallSummary;
 import com.lavadero.api.audit.domain.AuditEvent;
 import com.lavadero.api.audit.repository.AuditEventRepository;
 import com.lavadero.api.inventory.service.InventoryService;
@@ -59,20 +63,26 @@ public class AiInsightService {
     private final AiProvider aiProvider;
     private final ObjectMapper objectMapper;
     private final AuditEventRepository auditEvents;
+    private final AiToolRegistry toolRegistry;
 
     // Actor-pattern thresholds for watchdog alerts (per-range)
     private static final int ACTOR_COURTESY_THRESHOLD = 5;
     private static final int ACTOR_WITHDRAWAL_THRESHOLD = 3;
     private static final int LATE_EDIT_MINUTES = 60;
 
+    /** Max round-trips of (model picks tool → we execute → model reads result). 5 is plenty for chat questions. */
+    private static final int CHAT_TOOL_MAX_ITER = 5;
+
     public AiInsightService(AiInsightRepository insights, DailySummaryService reports, InventoryService inventory,
-            AiProvider aiProvider, ObjectMapper objectMapper, AuditEventRepository auditEvents) {
+            AiProvider aiProvider, ObjectMapper objectMapper, AuditEventRepository auditEvents,
+            AiToolRegistry toolRegistry) {
         this.insights = insights;
         this.reports = reports;
         this.inventory = inventory;
         this.aiProvider = aiProvider;
         this.objectMapper = objectMapper;
         this.auditEvents = auditEvents;
+        this.toolRegistry = toolRegistry;
     }
 
     @Transactional(readOnly = true)
@@ -188,22 +198,69 @@ public class AiInsightService {
     @Transactional
     public AnalystChatResponse chat(String message, LocalDate from, LocalDate to) {
         validateRange(from, to);
+
+        // Pre-fetch enough numbers for the deterministic fallback + a templated "answer"
+        // hint (used when no AI key / provider is misconfigured). When the real LLM is
+        // up, it ignores this and calls the tools itself.
         DailySummaryRangeResponse range = reports.getRange(from, to);
         CashVarianceResponse cash = reports.cashVariance(from, to);
         EmployeePerformanceResponse performance = reports.employeePerformance(from, to);
         List<String> numbers = supportNumbers(range, cash, performance);
-        String answer = answerFor(message, range, cash, performance);
-        String providerText = aiProvider.complete(new AiRequest(AiFeatureType.ANALYST_CHAT,
-                "Contesta como analista del negocio usando datos reales.",
-                message + "\n" + String.join("\n", numbers)));
-        String summary = answer + "\n" + providerText;
+        String templateAnswer = answerFor(message, range, cash, performance);
+
+        // System prompt tells the model the active context (today + the user-picked range)
+        // so it can fill in date parameters when calling tools without re-asking.
+        String today = LocalDate.now().toString();
+        String systemPrompt = ""
+                + "Eres analista del negocio de un lavadero en Reynosa, Mexico. "
+                + "Responde en espanol, conciso, con numeros reales. "
+                + "Usa las herramientas para obtener datos antes de afirmar cifras. "
+                + "Hoy es " + today + ". El usuario esta viendo el rango " + from + " a " + to + " por defecto, "
+                + "pero puedes pedir cualquier rango que necesites.";
+
+        AiRequest request = new AiRequest(AiFeatureType.ANALYST_CHAT, systemPrompt, message);
+        ToolAwareCompletion completion = aiProvider.completeWithTools(request, toolRegistry.all(), CHAT_TOOL_MAX_ITER);
+
+        // If the model declined to use tools and fell back to text-only, the fallback
+        // provider's output is already in completion.text(). Prepend the template answer
+        // only if no tools were called AND the model returned something short / templated.
+        String summary = completion.trace().isEmpty()
+                ? (templateAnswer + "\n" + completion.text()).trim()
+                : completion.text();
+
+        List<ToolCallSummary> toolCalls = completion.trace().stream()
+                .map(this::summarize)
+                .toList();
+
         AiInsight insight = save(AiFeatureType.ANALYST_CHAT, AiInsightSeverity.INFO,
                 "Pregunta AI: " + shorten(message, 120), summary,
-                details(Map.of("question", message, "supportingNumbers", numbers)), from, to);
+                details(Map.of(
+                        "question", message,
+                        "supportingNumbers", numbers,
+                        "toolsCalled", toolCalls.stream().map(ToolCallSummary::name).toList())),
+                from, to);
+
         return new AnalystChatResponse(summary, numbers, from, to, List.of(
                 "Comparar contra el mes anterior",
                 "Revisar dias con diferencia de caja",
-                "Ver lavadores con mas carros acreditados"), response(insight));
+                "Ver lavadores con mas carros acreditados"),
+                toolCalls, response(insight));
+    }
+
+    /**
+     * Compact trace entry: keep arguments verbatim (small JSON), shorten the result
+     * to a 200-char preview so the UI can show "Llamé a X: {preview}" without
+     * shipping the full payload to the frontend.
+     */
+    private ToolCallSummary summarize(ToolCallTrace t) {
+        String preview;
+        try {
+            String full = objectMapper.writeValueAsString(t.result());
+            preview = full.length() <= 200 ? full : full.substring(0, 200) + "…";
+        } catch (JsonProcessingException ex) {
+            preview = "(unserializable result)";
+        }
+        return new ToolCallSummary(t.name(), t.arguments(), preview);
     }
 
     @Transactional

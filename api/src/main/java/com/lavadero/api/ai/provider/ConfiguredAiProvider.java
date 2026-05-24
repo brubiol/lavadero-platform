@@ -2,12 +2,17 @@ package com.lavadero.api.ai.provider;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.lavadero.api.ai.tools.AiTool;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -98,6 +103,143 @@ public class ConfiguredAiProvider implements AiProvider {
             recordDegraded(ex.getClass().getSimpleName(), ex.getMessage() == null ? "(no message)" : ex.getMessage());
             return fallback.complete(request);
         }
+    }
+
+    /**
+     * Tool-aware chat. The model decides which tools to call; we execute them
+     * and feed the results back until the model emits a final text answer (or
+     * we hit {@code maxIterations}). Falls back to the deterministic provider
+     * on any upstream failure with the same logging + status semantics as
+     * {@link #complete(AiRequest)}.
+     */
+    @Override
+    public ToolAwareCompletion completeWithTools(AiRequest request, List<AiTool> tools, int maxIterations) {
+        if (!properties.isEnabled() || !isHttpProvider()
+                || properties.getApiKey() == null || properties.getApiKey().isBlank()
+                || tools == null || tools.isEmpty()) {
+            // Delegate to complete() so the disabled / misconfigured / no-key branches all log
+            // and record degraded status through the same code path — no duplication.
+            return new ToolAwareCompletion(complete(request), List.of());
+        }
+
+        Map<String, AiTool> byName = new LinkedHashMap<>();
+        for (AiTool t : tools) byName.put(t.name(), t);
+
+        ArrayNode messages = objectMapper.createArrayNode();
+        messages.add(objectMapper.createObjectNode().put("role", "system").put("content", request.systemPrompt()));
+        messages.add(objectMapper.createObjectNode().put("role", "user").put("content", request.userPrompt()));
+
+        List<ToolCallTrace> trace = new ArrayList<>();
+
+        try {
+            for (int iter = 0; iter < Math.max(1, maxIterations); iter++) {
+                ObjectNode body = objectMapper.createObjectNode()
+                        .put("model", properties.getModel())
+                        .put("temperature", 0.2);
+                body.set("messages", messages);
+                body.set("tools", buildToolsArray(tools));
+                body.put("tool_choice", "auto");
+
+                HttpResponse<String> response = postJson(body);
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    String snippet = truncate(response.body(), 400);
+                    log.warn("AI tool-call HTTP {} (model={}, iter={}): {}",
+                            response.statusCode(), properties.getModel(), iter, snippet);
+                    recordDegraded("http-" + response.statusCode(), snippet);
+                    return new ToolAwareCompletion(fallback.complete(request), trace);
+                }
+
+                JsonNode root = objectMapper.readTree(response.body());
+                JsonNode message = root.path("choices").path(0).path("message");
+                JsonNode toolCalls = message.path("tool_calls");
+
+                if (toolCalls.isArray() && toolCalls.size() > 0) {
+                    // Append the assistant turn verbatim (incl. tool_calls) — required so the
+                    // follow-up tool-result messages link back to it via tool_call_id.
+                    messages.add(message);
+                    for (JsonNode call : toolCalls) {
+                        String callId = call.path("id").asText();
+                        String fnName = call.path("function").path("name").asText();
+                        String argsRaw = call.path("function").path("arguments").asText("{}");
+                        JsonNode argsJson;
+                        try {
+                            argsJson = objectMapper.readTree(argsRaw);
+                        } catch (Exception parseEx) {
+                            argsJson = objectMapper.createObjectNode().put("error", "Invalid JSON args: " + argsRaw);
+                        }
+                        AiTool tool = byName.get(fnName);
+                        JsonNode result = tool == null
+                                ? objectMapper.createObjectNode().put("error", "Unknown tool: " + fnName)
+                                : safeExecute(tool, argsJson);
+                        trace.add(new ToolCallTrace(fnName, argsJson, result));
+                        messages.add(objectMapper.createObjectNode()
+                                .put("role", "tool")
+                                .put("tool_call_id", callId)
+                                .put("name", fnName)
+                                .put("content", result.toString()));
+                    }
+                    // Loop and let the model react to the tool results.
+                    continue;
+                }
+
+                String content = message.path("content").asText("");
+                if (content.isBlank()) {
+                    log.warn("AI tool-call returned empty content after {} iterations (model={})",
+                            iter, properties.getModel());
+                    recordDegraded("empty-response", "Model returned no content after tool calls");
+                    return new ToolAwareCompletion(fallback.complete(request), trace);
+                }
+                recordHealthy();
+                return new ToolAwareCompletion(content, trace);
+            }
+            log.warn("AI tool-call hit maxIterations={} without final text (model={})",
+                    maxIterations, properties.getModel());
+            recordDegraded("max-iterations", "Tool loop exceeded maxIterations=" + maxIterations);
+            return new ToolAwareCompletion(fallback.complete(request), trace);
+        } catch (Exception ex) {
+            log.warn("AI tool-call failed (model={}): {} {}",
+                    properties.getModel(), ex.getClass().getSimpleName(), ex.getMessage());
+            recordDegraded(ex.getClass().getSimpleName(), ex.getMessage() == null ? "(no message)" : ex.getMessage());
+            return new ToolAwareCompletion(fallback.complete(request), trace);
+        }
+    }
+
+    private ArrayNode buildToolsArray(List<AiTool> tools) {
+        ArrayNode arr = objectMapper.createArrayNode();
+        for (AiTool t : tools) {
+            ObjectNode fn = objectMapper.createObjectNode()
+                    .put("name", t.name())
+                    .put("description", t.description());
+            fn.set("parameters", t.parametersSchema());
+            ObjectNode wrapper = objectMapper.createObjectNode().put("type", "function");
+            wrapper.set("function", fn);
+            arr.add(wrapper);
+        }
+        return arr;
+    }
+
+    /** Tool execution is best-effort: any exception becomes a JSON error so the model can react instead of the loop dying. */
+    private JsonNode safeExecute(AiTool tool, JsonNode args) {
+        try {
+            JsonNode out = tool.execute(args);
+            return out == null ? objectMapper.createObjectNode().put("error", "Tool returned null") : out;
+        } catch (Exception ex) {
+            log.warn("AI tool '{}' threw {}: {}", tool.name(), ex.getClass().getSimpleName(), ex.getMessage());
+            return objectMapper.createObjectNode()
+                    .put("error", ex.getClass().getSimpleName() + ": " + ex.getMessage());
+        }
+    }
+
+    private HttpResponse<String> postJson(ObjectNode body) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint())
+                .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + properties.getApiKey())
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)));
+        return HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                .build()
+                .send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Override
