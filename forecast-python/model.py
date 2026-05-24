@@ -98,7 +98,9 @@ def build_feature_spec(training_rows: List[dict]) -> FeatureSpec:
     feature_columns = [
         "lag_1",
         "lag_7",
+        "lag_14",
         "rolling_7_mean",
+        "rolling_14_mean",
         "day_of_year_sin",
         "day_of_year_cos",
         "day_of_week",
@@ -175,10 +177,12 @@ def build_training_frame(
     df["days_since_rain"] = _compute_days_since_rain(df["precip_mm"])
     df["lag_1"] = df["value"].shift(1)
     df["lag_7"] = df["value"].shift(7)
-    # rolling 7-day mean ending at the prior day -> shift the rolling mean by 1
+    df["lag_14"] = df["value"].shift(14)
+    # rolling N-day means end at the prior day -> shift before rolling
     df["rolling_7_mean"] = df["value"].shift(1).rolling(window=7, min_periods=7).mean()
+    df["rolling_14_mean"] = df["value"].shift(1).rolling(window=14, min_periods=14).mean()
 
-    df = df.dropna(subset=["lag_1", "lag_7", "rolling_7_mean"]).reset_index(drop=True)
+    df = df.dropna(subset=["lag_1", "lag_7", "lag_14", "rolling_7_mean", "rolling_14_mean"]).reset_index(drop=True)
 
     X = df[spec.feature_columns].astype(float)
     y = df["value"].astype(float)
@@ -190,7 +194,9 @@ def _row_to_feature_dict(
     spec: FeatureSpec,
     lag_1: float,
     lag_7: float,
+    lag_14: float,
     rolling_7_mean: float,
+    rolling_14_mean: float,
     days_since_rain: int,
 ) -> Dict[str, float]:
     """Convert one horizon dict + computed lags into the model's feature vector."""
@@ -199,7 +205,9 @@ def _row_to_feature_dict(
     feats: Dict[str, float] = {
         "lag_1": float(lag_1),
         "lag_7": float(lag_7),
+        "lag_14": float(lag_14),
         "rolling_7_mean": float(rolling_7_mean),
+        "rolling_14_mean": float(rolling_14_mean),
         "day_of_year_sin": math.sin(2 * math.pi * doy / 365.0),
         "day_of_year_cos": math.cos(2 * math.pi * doy / 365.0),
         "day_of_week": int(d.dayofweek),
@@ -240,7 +248,7 @@ class FitResult:
 
 
 def fit_model(training_rows: List[dict]) -> FitResult:
-    """Fit a LightGBM regressor with an internal validation tail for early stopping."""
+    """Fit a LightGBM regressor. Holds out the last 10% as a residual-sigma tail."""
     spec = build_feature_spec(training_rows)
     X, y = build_training_frame(training_rows, spec)
     if len(X) < 10:
@@ -248,24 +256,18 @@ def fit_model(training_rows: List[dict]) -> FitResult:
             f"Not enough training rows after lag computation ({len(X)} < 10)."
         )
 
-    # Last 20% as validation tail
-    split = max(1, int(len(X) * 0.8))
-    X_train, X_val = X.iloc[:split], X.iloc[split:]
-    y_train, y_val = y.iloc[:split], y.iloc[split:]
+    # Train on full set so the model sees the most recent days. Hold out a thin
+    # 10% tail purely to estimate residual sigma for the prediction interval.
+    split = max(1, int(len(X) * 0.9))
+    X_tail, y_tail = X.iloc[split:], y.iloc[split:]
 
     model = lgb.LGBMRegressor(**LGBM_PARAMS)
-    if len(X_val) >= 2:
-        model.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_val, y_val)],
-            callbacks=[lgb.early_stopping(stopping_rounds=20, verbose=False)],
-        )
-        val_pred = model.predict(X_val)
-        residuals = y_val.to_numpy() - val_pred
-        sigma = float(np.std(residuals)) if len(residuals) >= 2 else 0.0
+    model.fit(X, y)
+    if len(X_tail) >= 2:
+        tail_pred = model.predict(X_tail)
+        residuals = y_tail.to_numpy() - tail_pred
+        sigma = float(np.std(residuals))
     else:
-        model.fit(X_train, y_train)
         sigma = 0.0
 
     # Gain importance, sorted desc
@@ -314,17 +316,24 @@ def recursive_predict(
 
         lag_1 = history_values[-1]
         lag_7 = history_values[-7] if len(history_values) >= 7 else history_values[0]
+        lag_14 = history_values[-14] if len(history_values) >= 14 else history_values[0]
         if len(history_values) >= 7:
             rolling_7_mean = float(np.mean(history_values[-7:]))
         else:
             rolling_7_mean = float(np.mean(history_values))
+        if len(history_values) >= 14:
+            rolling_14_mean = float(np.mean(history_values[-14:]))
+        else:
+            rolling_14_mean = float(np.mean(history_values))
 
         feats = _row_to_feature_dict(
             row=row,
             spec=fit.spec,
             lag_1=lag_1,
             lag_7=lag_7,
+            lag_14=lag_14,
             rolling_7_mean=rolling_7_mean,
+            rolling_14_mean=rolling_14_mean,
             days_since_rain=days_since,
         )
         x = pd.DataFrame([feats])[fit.spec.feature_columns].astype(float)

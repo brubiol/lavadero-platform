@@ -146,26 +146,30 @@ def test_forecast_rejects_too_few_training_rows():
 # ---------------------------------------------------------------------------
 
 def test_lag_features_correctly_computed():
-    training = _synthetic_training(n_days=30)
+    training = _synthetic_training(n_days=40)
     spec = build_feature_spec(training)
     X, y = build_training_frame(training, spec)
 
-    # First 7 rows have no lag_7/rolling_7, so they should be dropped.
-    assert len(X) == len(training) - 7
+    # First 14 rows have no lag_14/rolling_14, so they should be dropped.
+    assert len(X) == len(training) - 14
 
-    # The first surviving row corresponds to training index 7. Its lag_1 must be
-    # the value at training index 6, lag_7 the value at training index 0, and
-    # rolling_7_mean the mean of training[0..6].
-    expected_lag_1 = training[6]["value"]
-    expected_lag_7 = training[0]["value"]
-    expected_rolling = float(np.mean([training[i]["value"] for i in range(7)]))
+    # The first surviving row corresponds to training index 14. Its lag_1 is the
+    # value at index 13, lag_7 at index 7, lag_14 at index 0; rolling_7_mean is
+    # the mean of indices 7..13 and rolling_14_mean the mean of indices 0..13.
+    expected_lag_1 = training[13]["value"]
+    expected_lag_7 = training[7]["value"]
+    expected_lag_14 = training[0]["value"]
+    expected_rolling_7 = float(np.mean([training[i]["value"] for i in range(7, 14)]))
+    expected_rolling_14 = float(np.mean([training[i]["value"] for i in range(0, 14)]))
 
     assert X.iloc[0]["lag_1"] == pytest.approx(expected_lag_1)
     assert X.iloc[0]["lag_7"] == pytest.approx(expected_lag_7)
-    assert X.iloc[0]["rolling_7_mean"] == pytest.approx(expected_rolling)
+    assert X.iloc[0]["lag_14"] == pytest.approx(expected_lag_14)
+    assert X.iloc[0]["rolling_7_mean"] == pytest.approx(expected_rolling_7)
+    assert X.iloc[0]["rolling_14_mean"] == pytest.approx(expected_rolling_14)
 
-    # y must equal the original training value at that row (index 7).
-    assert y.iloc[0] == pytest.approx(training[7]["value"])
+    # y must equal the original training value at that row (index 14).
+    assert y.iloc[0] == pytest.approx(training[14]["value"])
 
 
 # ---------------------------------------------------------------------------
