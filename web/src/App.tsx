@@ -3082,6 +3082,12 @@ function TicketWorkspace({
   const watched = form.watch()
   const livePrice = useMemo(() => {
     if (watched.courtesy) return 0
+    // Price override wins outright — backend uses it as-is, no discount or surcharge applied.
+    const override = watched.priceOverride !== '' && watched.priceOverride != null
+      ? Number(watched.priceOverride) : undefined
+    if (override !== undefined && override > 0) {
+      return Math.round(override * 100) / 100
+    }
     const base = (data.prices.data ?? []).find((price) =>
       price.serviceTypeId === Number(watched.serviceTypeId) &&
       price.vehicleSizeId === Number(watched.vehicleSizeId) &&
@@ -3094,7 +3100,7 @@ function TicketWorkspace({
       ? Number(watched.surchargeAmount) : 0
     return Math.round((afterDiscount + (surcharge > 0 ? surcharge : 0)) * 100) / 100
   }, [data.prices.data, watched.courtesy, watched.serviceTypeId, watched.vehicleSizeId,
-      watched.discountPercent, watched.surchargeAmount])
+      watched.discountPercent, watched.surchargeAmount, watched.priceOverride])
 
   const save = useMutation({
     mutationFn: (values: TicketFormValues) => {
