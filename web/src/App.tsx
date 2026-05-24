@@ -570,6 +570,7 @@ type InvestigationResponse = {
   confidence: InvestigationConfidence
   sourceFrom: string
   sourceTo: string
+  toolCalls?: ToolCallSummary[]
   insight: AiInsight
 }
 
@@ -2553,6 +2554,38 @@ function AiVsYesterday({ today, yesterday }: { today: number; yesterday: number 
   )
 }
 
+// Shared trace card used by both chat answers and investigations. Renders a
+// collapsed badge ("3 consultas — Llamó a Resumen del día, Diferencia de caja")
+// and an expanded per-call breakdown. Uses the friendly tool labels so the
+// owner sees "Inventario" rather than "get_inventory_snapshot".
+function AiToolCallTrace({ toolCalls }: { toolCalls: ToolCallSummary[] }) {
+  if (toolCalls.length === 0) return null
+  const labels = toolCalls.map((t) => toolLabel(t.name))
+  return (
+    <details className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
+      <summary className="cursor-pointer list-none text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400 hover:text-ink-700">
+        <span className="mr-1.5 inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700 ring-1 ring-primary-100">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M9.4 16.6L4.8 12l4.6-4.6M14.6 7.4l4.6 4.6-4.6 4.6"/></svg>
+          {toolCalls.length} {toolCalls.length === 1 ? 'consulta' : 'consultas'}
+        </span>
+        Llamó a {labels.join(', ')}
+      </summary>
+      <ul className="mt-2.5 space-y-2 text-[11.5px] leading-5 text-ink-700">
+        {toolCalls.map((t, i) => (
+          <li key={i} className="rounded-lg bg-ink-50/60 p-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[11.5px] font-semibold text-primary-700">{toolLabel(t.name)}</span>
+              <span className="font-mono text-[10px] text-ink-400">{t.name}</span>
+            </div>
+            <div className="mt-0.5 font-mono text-[10.5px] text-ink-500 break-all">args {JSON.stringify(t.arguments)}</div>
+            <div className="mt-1 font-mono text-[10.5px] text-ink-600 break-all">{t.resultPreview}</div>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: string) => void }) {
   const time = new Date(msg.ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
 
@@ -2593,25 +2626,7 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
         {msg.mode === 'quick' ? (
           <>
             <AiMarkdown text={msg.data.answer} />
-            {msg.data.toolCalls && msg.data.toolCalls.length > 0 && (
-              <details className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
-                <summary className="cursor-pointer list-none text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400 hover:text-ink-700">
-                  <span className="mr-1.5 inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700 ring-1 ring-primary-100">
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M9.4 16.6L4.8 12l4.6-4.6M14.6 7.4l4.6 4.6-4.6 4.6"/></svg>
-                    {msg.data.toolCalls.length} {msg.data.toolCalls.length === 1 ? 'consulta' : 'consultas'}
-                  </span>
-                  Llamó a {msg.data.toolCalls.map((t) => t.name).join(', ')}
-                </summary>
-                <ul className="mt-2.5 space-y-2 text-[11.5px] leading-5 text-ink-700">
-                  {msg.data.toolCalls.map((t, i) => (
-                    <li key={i} className="rounded-lg bg-ink-50/60 p-2">
-                      <div className="font-mono text-[11px] font-semibold text-primary-700">{t.name}({JSON.stringify(t.arguments)})</div>
-                      <div className="mt-1 font-mono text-[10.5px] text-ink-500 break-all">{t.resultPreview}</div>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            {msg.data.toolCalls && <AiToolCallTrace toolCalls={msg.data.toolCalls} />}
             {msg.data.supportingNumbers.length > 0 && (
               <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Números usados</p>
@@ -2650,24 +2665,16 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
                 </Pill>
               </div>
             </div>
-            {msg.data.evidence.length > 0 && (
-              <div className="rounded-xl bg-white p-3 ring-1 ring-border-soft">
-                <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Evidencia</p>
-                <ul className="mt-1.5 space-y-1 text-[12.5px] leading-5 text-ink-700">
-                  {msg.data.evidence.map((n, i) => (
-                    <li key={i} className="flex items-start gap-1.5"><span className="text-violet-400 mt-0.5">·</span>{n}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {msg.data.steps.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">Pasos realizados</p>
-                <ol className="space-y-1 pl-5 list-decimal text-[12px] leading-5 text-ink-600">
-                  {msg.data.steps.map((s) => <li key={s}>{s}</li>)}
-                </ol>
-              </div>
-            )}
+            {msg.data.toolCalls && msg.data.toolCalls.length > 0 ? (
+              <AiToolCallTrace toolCalls={msg.data.toolCalls} />
+            ) : msg.data.steps.length > 0 ? (
+              // Fallback path (no LLM key configured) — toolCalls is empty and the
+              // backend seeds steps[0] with a "Sin acceso al LLM" marker. Show it as a
+              // small note so the user knows why the trace is bare.
+              <p className="rounded-xl bg-ink-50/60 p-3 text-[11.5px] italic text-ink-500 ring-1 ring-border-soft">
+                {msg.data.steps[0]}
+              </p>
+            ) : null}
           </>
         )}
         <p className="text-[10px] text-ink-400">{time}</p>
@@ -8090,6 +8097,26 @@ function confidenceLabel(confidence: InvestigationConfidence) {
     HIGH: 'alta',
   }
   return labels[confidence]
+}
+
+// Human-readable Spanish label for each backend AI tool. The model speaks
+// in tool-id snake_case ("get_daily_summary"); the owner shouldn't have to.
+// Unknown names fall back to the raw id so a new tool isn't invisible if we
+// forget to add a label.
+const TOOL_LABELS: Record<string, string> = {
+  get_daily_summary: 'Resumen del día',
+  get_monthly_summary: 'Resumen del mes',
+  get_range_summary: 'Resumen del rango',
+  get_historical_range: 'Histórico (Excel viejo)',
+  get_cash_variance: 'Diferencia de caja',
+  get_employee_performance: 'Rendimiento de lavadores',
+  get_inventory_snapshot: 'Inventario',
+  get_oversight_patterns: 'Patrones de vigilancia',
+  list_employees: 'Lista de empleados',
+  get_employee_debt_balance: 'Deuda de empleado',
+}
+function toolLabel(name: string): string {
+  return TOOL_LABELS[name] ?? name
 }
 
 function formatAiDetailValue(value: unknown): string {

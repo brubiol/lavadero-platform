@@ -420,13 +420,15 @@ public class AiInsightService {
         String confidence = confidenceFromTrace(trace);
         String summary = completion.text();
 
+        List<ToolCallSummary> toolCalls = trace.stream().map(this::summarize).toList();
         AiInsight insight = save(AiFeatureType.AGENT_INVESTIGATION, AiInsightSeverity.INFO,
                 "Investigacion AI: " + shorten(question, 110), summary,
                 details(Map.of("question", question, "steps", steps, "evidence", evidence,
                         "confidence", confidence,
                         "toolsCalled", trace.stream().map(ToolCallTrace::name).toList())),
                 from, to);
-        return new InvestigationResponse(summary, evidence, steps, confidence, from, to, response(insight));
+        return new InvestigationResponse(summary, evidence, steps, confidence, from, to,
+                toolCalls, response(insight));
     }
 
     private List<String> stepsFromTrace(List<ToolCallTrace> trace) {

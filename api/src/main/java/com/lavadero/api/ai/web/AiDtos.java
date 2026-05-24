@@ -67,7 +67,8 @@ public final class AiDtos {
     }
 
     public record InvestigationResponse(String conclusion, List<String> evidence, List<String> steps,
-            String confidence, LocalDate sourceFrom, LocalDate sourceTo, AiInsightResponse insight) {
+            String confidence, LocalDate sourceFrom, LocalDate sourceTo,
+            List<ToolCallSummary> toolCalls, AiInsightResponse insight) {
     }
 
     public record QuickPromptsResponse(List<PromptCategory> categories) {
