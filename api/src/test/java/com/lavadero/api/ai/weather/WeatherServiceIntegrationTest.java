@@ -22,6 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class WeatherServiceIntegrationTest extends AbstractIntegrationTest {
 
+    // Far-future dates so the test rows never collide with the V46 Reynosa seed
+    // (which covers 2025-01-01 .. 2026-05-23). Using deleteAll() here would wipe
+    // the seed and break WeatherBacktestTest / ForecastServiceIntegrationTest
+    // depending on test ordering — so we scope cleanup to this window only.
+    private static final LocalDate TEST_WINDOW_FROM = LocalDate.of(2030, 6, 1);
+    private static final LocalDate TEST_WINDOW_TO = LocalDate.of(2030, 6, 30);
+
     @Autowired
     WeatherService service;
 
@@ -44,7 +51,7 @@ class WeatherServiceIntegrationTest extends AbstractIntegrationTest {
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         properties.setArchiveBaseUrl(base + "/archive");
         properties.setForecastBaseUrl(base + "/forecast");
-        repository.deleteAll();
+        clearTestWindow();
     }
 
     @AfterEach
@@ -52,20 +59,29 @@ class WeatherServiceIntegrationTest extends AbstractIntegrationTest {
         server.stop(0);
         properties.setArchiveBaseUrl(previousArchive);
         properties.setForecastBaseUrl(previousForecast);
+        clearTestWindow();
+    }
+
+    private void clearTestWindow() {
+        List<DailyWeather> rows = repository.findBySnapshotDateBetweenOrderBySnapshotDateAsc(
+                TEST_WINDOW_FROM, TEST_WINDOW_TO);
+        if (!rows.isEmpty()) {
+            repository.deleteAll(rows);
+        }
     }
 
     @Test
     void should_persist_archive_rows_when_backfill_runs() {
         mockJson("/archive", req -> archiveBody(List.of(
-                row("2025-06-01", 0.0, 32.0, 22.0, 8.0),
-                row("2025-06-02", 5.5, 28.0, 21.0, 12.0),
-                row("2025-06-03", 0.0, 33.0, 23.0, 9.0))));
+                row("2030-06-01", 0.0, 32.0, 22.0, 8.0),
+                row("2030-06-02", 5.5, 28.0, 21.0, 12.0),
+                row("2030-06-03", 0.0, 33.0, 23.0, 9.0))));
 
-        int written = service.backfill(LocalDate.parse("2025-06-01"), LocalDate.parse("2025-06-03"));
+        int written = service.backfill(LocalDate.parse("2030-06-01"), LocalDate.parse("2030-06-03"));
         assertThat(written).isEqualTo(3);
 
         List<DailyWeather> rows = repository.findBySnapshotDateBetweenOrderBySnapshotDateAsc(
-                LocalDate.parse("2025-06-01"), LocalDate.parse("2025-06-03"));
+                LocalDate.parse("2030-06-01"), LocalDate.parse("2030-06-03"));
         assertThat(rows).hasSize(3);
         assertThat(rows.get(1).getPrecipitationMm().doubleValue()).isEqualTo(5.5);
         assertThat(rows.get(0).isObserved()).isTrue();
@@ -75,37 +91,36 @@ class WeatherServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     void should_be_idempotent_when_backfill_runs_twice_for_same_range() {
         mockJson("/archive", req -> archiveBody(List.of(
-                row("2025-06-01", 0.0, 32.0, 22.0, 8.0),
-                row("2025-06-02", 1.0, 30.0, 22.0, 10.0))));
+                row("2030-06-01", 0.0, 32.0, 22.0, 8.0),
+                row("2030-06-02", 1.0, 30.0, 22.0, 10.0))));
 
-        service.backfill(LocalDate.parse("2025-06-01"), LocalDate.parse("2025-06-02"));
-        service.backfill(LocalDate.parse("2025-06-01"), LocalDate.parse("2025-06-02"));
+        service.backfill(LocalDate.parse("2030-06-01"), LocalDate.parse("2030-06-02"));
+        service.backfill(LocalDate.parse("2030-06-01"), LocalDate.parse("2030-06-02"));
 
-        assertThat(repository.count()).isEqualTo(2);
+        long inWindow = repository.countBySnapshotDateBetween(TEST_WINDOW_FROM, TEST_WINDOW_TO);
+        assertThat(inWindow).isEqualTo(2L);
     }
 
     @Test
     void should_overwrite_forecast_row_with_archive_row_when_day_becomes_observed() {
-        // Day 1: server returns a forecast for 2025-06-05 (future-looking).
         AtomicInteger callCount = new AtomicInteger(0);
         mockJson("/forecast", req -> {
             int n = callCount.incrementAndGet();
-            // First call returns 2025-06-05 as a forecast day; second as an observed actual.
             return n == 1
-                    ? archiveBody(List.of(row("2025-06-05", 8.0, 30.0, 22.0, 12.0)))
-                    : archiveBody(List.of(row("2025-06-05", 12.0, 29.0, 21.0, 14.0)));
+                    ? archiveBody(List.of(row("2030-06-05", 8.0, 30.0, 22.0, 12.0)))
+                    : archiveBody(List.of(row("2030-06-05", 12.0, 29.0, 21.0, 14.0)));
         });
 
-        // Call 1: today is 2025-06-04, so 2025-06-05 is in the future → FORECAST.
-        service.refresh(LocalDate.parse("2025-06-04"), 1);
-        DailyWeather first = repository.findBySnapshotDate(LocalDate.parse("2025-06-05")).orElseThrow();
+        // Call 1: today is 2030-06-04, so 2030-06-05 is future → FORECAST.
+        service.refresh(LocalDate.parse("2030-06-04"), 1);
+        DailyWeather first = repository.findBySnapshotDate(LocalDate.parse("2030-06-05")).orElseThrow();
         assertThat(first.isObserved()).isFalse();
         assertThat(first.getSource().name()).isEqualTo("FORECAST");
         assertThat(first.getPrecipitationMm().doubleValue()).isEqualTo(8.0);
 
-        // Call 2: today is 2025-06-06, so 2025-06-05 is in the past → promoted to ARCHIVE.
-        service.refresh(LocalDate.parse("2025-06-06"), 1);
-        DailyWeather second = repository.findBySnapshotDate(LocalDate.parse("2025-06-05")).orElseThrow();
+        // Call 2: today is 2030-06-06, so 2030-06-05 is past → promoted to ARCHIVE.
+        service.refresh(LocalDate.parse("2030-06-06"), 1);
+        DailyWeather second = repository.findBySnapshotDate(LocalDate.parse("2030-06-05")).orElseThrow();
         assertThat(second.isObserved()).isTrue();
         assertThat(second.getSource().name()).isEqualTo("ARCHIVE");
         assertThat(second.getPrecipitationMm().doubleValue()).isEqualTo(12.0);
@@ -113,15 +128,13 @@ class WeatherServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_not_regress_observed_row_back_to_forecast() {
-        mockJson("/archive", req -> archiveBody(List.of(row("2025-06-05", 12.0, 29.0, 21.0, 14.0))));
-        service.backfill(LocalDate.parse("2025-06-05"), LocalDate.parse("2025-06-05"));
+        mockJson("/archive", req -> archiveBody(List.of(row("2030-06-05", 12.0, 29.0, 21.0, 14.0))));
+        service.backfill(LocalDate.parse("2030-06-05"), LocalDate.parse("2030-06-05"));
 
-        // Now hit refresh, where the server tries to overwrite with a forecast for the
-        // same date (simulating a clock skew). We expect the observed row to stand.
-        mockJson("/forecast", req -> archiveBody(List.of(row("2025-06-05", 0.0, 35.0, 25.0, 5.0))));
-        service.refresh(LocalDate.parse("2025-06-04"), 1);
+        mockJson("/forecast", req -> archiveBody(List.of(row("2030-06-05", 0.0, 35.0, 25.0, 5.0))));
+        service.refresh(LocalDate.parse("2030-06-04"), 1);
 
-        DailyWeather row = repository.findBySnapshotDate(LocalDate.parse("2025-06-05")).orElseThrow();
+        DailyWeather row = repository.findBySnapshotDate(LocalDate.parse("2030-06-05")).orElseThrow();
         assertThat(row.isObserved()).isTrue();
         assertThat(row.getPrecipitationMm().doubleValue()).isEqualTo(12.0);
     }
