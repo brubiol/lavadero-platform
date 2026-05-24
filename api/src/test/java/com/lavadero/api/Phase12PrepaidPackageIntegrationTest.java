@@ -87,7 +87,7 @@ class Phase12PrepaidPackageIntegrationTest extends AbstractIntegrationTest {
 
         mvc.perform(post("/api/v1/prepaid-packages")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(packageJson(businessDayId, shiftId, 20, "1000.00", "USD", "CARD", "Paquete anual")))
+                        .content(packageJson(businessDayId, shiftId, 20, "1000.00", "MXN", "CARD", "Paquete anual")))
                 .andExpect(status().isCreated());
 
         mvc.perform(get("/api/v1/prepaid-packages?business_day_id=" + businessDayId))
@@ -96,7 +96,7 @@ class Phase12PrepaidPackageIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$[0].amount").value(600.00))
                 .andExpect(jsonPath("$[0].currency").value("MXN"))
                 .andExpect(jsonPath("$[1].amount").value(1000.00))
-                .andExpect(jsonPath("$[1].currency").value("USD"))
+                .andExpect(jsonPath("$[1].currency").value("MXN"))
                 .andExpect(jsonPath("$[1].notes").value("Paquete anual"));
     }
 

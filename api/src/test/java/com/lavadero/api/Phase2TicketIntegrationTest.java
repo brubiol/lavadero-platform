@@ -57,14 +57,14 @@ class Phase2TicketIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_create_courtesy_ticket_with_zero_price() throws Exception {
-        Fixture fixture = fixture("T2C", LocalDate.of(2026, 7, 3), "USD", "20.00");
+        Fixture fixture = fixture("T2C", LocalDate.of(2026, 7, 3), "MXN", "20.00");
 
         mvc.perform(post("/api/v1/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ticketJson(fixture, true, "Cliente dueno", fixture.employeeOneId())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.priceAmount").value(0))
-                .andExpect(jsonPath("$.currency").value("USD"))
+                .andExpect(jsonPath("$.currency").value("MXN"))
                 .andExpect(jsonPath("$.courtesy").value(true))
                 .andExpect(jsonPath("$.courtesyReason").value("Cliente dueno"));
     }
