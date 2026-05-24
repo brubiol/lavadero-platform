@@ -965,7 +965,7 @@ const ROUTE_META: Record<string, { title: string; section: string }> = {
   '/catalogos':     { title: 'Catálogos',     section: 'Gestión'   },
   '/asistencia':    { title: 'Asistencia',    section: 'Gestión'   },
   '/reportes':      { title: 'Reportes',      section: 'Dueño'     },
-  '/ai':            { title: 'AI',            section: 'Dueño'     },
+  '/ai':            { title: 'Análisis IA',  section: 'Dueño'     },
   '/auditoria':     { title: 'Auditoría',     section: 'Dueño'     },
   '/vigilancia':    { title: 'Vigilancia',    section: 'Dueño'     },
 }
@@ -3379,7 +3379,7 @@ function TicketWorkspace({
 
         {/* ── Sidebar: precio + submit ──────────────────────────── */}
         <aside>
-          <div className="sticky top-[72px] overflow-hidden rounded-2xl border border-border-soft bg-white shadow-md">
+          <div className="overflow-hidden rounded-2xl border border-border-soft bg-white shadow-md xl:sticky xl:top-4">
             {/* Price hero */}
             <div
               className="relative px-6 py-6 text-center"
@@ -3515,12 +3515,6 @@ function TicketWorkspace({
               )}
             </div>
 
-            {/* Perforated bottom edge — receipt-stub vibe */}
-            <div className="relative -mb-2 h-3 overflow-hidden">
-              <svg width="100%" height="12" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 text-white">
-                <path d="M0,0 L0,12 L4,8 L8,12 L12,8 L16,12 L20,8 L24,12 L28,8 L32,12 L36,8 L40,12 L44,8 L48,12 L52,8 L56,12 L60,8 L64,12 L68,8 L72,12 L76,8 L80,12 L84,8 L88,12 L92,8 L96,12 L100%,12 L100%,0 Z" fill="currentColor" />
-              </svg>
-            </div>
           </div>
         </aside>
       </form>
@@ -3549,6 +3543,9 @@ function CatalogsScreen() {
   const [toast, setToast] = useState<string | null>(null)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [showInactiveEmployees, setShowInactiveEmployees] = useState(false)
+  const [showAddService, setShowAddService] = useState(false)
+  const [showAddSize, setShowAddSize] = useState(false)
+  const [showAddPrice, setShowAddPrice] = useState(false)
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
 
@@ -3589,6 +3586,23 @@ function CatalogsScreen() {
   const services = data.services.data ?? []
   const sizes = data.sizes.data ?? []
   const prices = data.prices.data ?? []
+  const sizeById = Object.fromEntries(sizes.map(s => [s.id, s])) as Record<number, VehicleSize | undefined>
+  const mxnPrices = prices.filter(p => p.currency === 'MXN')
+  const usdPrices = prices.filter(p => p.currency === 'USD')
+  const CAT_LABEL: Record<string, string> = { AUTO: 'Autos y camionetas', MOTO: 'Motos', RAZR: 'RAZR', PERSONAL: 'Cam. de personal' }
+  const mxnGroups = (['AUTO', 'MOTO', 'RAZR', 'PERSONAL'] as const).flatMap(cat => {
+    const catPrices = mxnPrices.filter(p => (sizeById[p.vehicleSizeId]?.category ?? 'AUTO') === cat)
+    if (catPrices.length === 0) return []
+    const svcIds: number[] = []
+    const svcName: Record<number, string> = {}
+    catPrices.forEach(p => { if (!svcIds.includes(p.serviceTypeId)) { svcIds.push(p.serviceTypeId); svcName[p.serviceTypeId] = p.serviceTypeName } })
+    const szIds = [...new Set(catPrices.map(p => p.vehicleSizeId))].sort((a, b) => (sizeById[a]?.sortOrder ?? 0) - (sizeById[b]?.sortOrder ?? 0))
+    const szName: Record<number, string> = {}
+    szIds.forEach(id => { szName[id] = catPrices.find(p => p.vehicleSizeId === id)!.vehicleSizeName })
+    const priceMap: Record<string, number> = {}
+    catPrices.forEach(p => { priceMap[`${p.serviceTypeId}-${p.vehicleSizeId}`] = p.amount })
+    return [{ cat, label: CAT_LABEL[cat] ?? cat, svcIds, svcName, szIds, szName, priceMap }]
+  })
 
   const createEmployee = useMutation({
     mutationFn: (values: EmployeeFormValues) => api<Employee>('/api/v1/employees', {
@@ -3655,6 +3669,7 @@ function CatalogsScreen() {
       serviceForm.reset({ code: '', name: '', description: '' })
       await queryClient.invalidateQueries({ queryKey: ['service-types'] })
       showToast('Servicio guardado')
+      setShowAddService(false)
     },
   })
 
@@ -3671,6 +3686,7 @@ function CatalogsScreen() {
       sizeForm.reset({ code: '', name: '', sortOrder: 0, category: 'AUTO' })
       await queryClient.invalidateQueries({ queryKey: ['vehicle-sizes'] })
       showToast('Tamaño guardado')
+      setShowAddSize(false)
     },
   })
 
@@ -3689,6 +3705,7 @@ function CatalogsScreen() {
       priceForm.reset({ serviceTypeId: 0, vehicleSizeId: 0, amount: 0, effectiveFrom: today })
       await queryClient.invalidateQueries({ queryKey: ['service-prices'] })
       showToast('Precio guardado')
+      setShowAddPrice(false)
     },
   })
 
@@ -3743,23 +3760,7 @@ function CatalogsScreen() {
                   <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Opcional" {...employeeForm.register('phone')} />
                 </TextField>
               </div>
-              <div className="grid gap-3 sm:grid-cols-4">
-                <SelectField label="Regla" error={employeeForm.formState.errors.payrollType?.message}>
-                  <select {...employeeForm.register('payrollType')}>
-                    <option value="COMMISSION">Comision</option>
-                    <option value="SALARY">Sueldo</option>
-                  </select>
-                </SelectField>
-                <TextField label="Sueldo base/sem" error={employeeForm.formState.errors.baseWeeklySalary?.message}>
-                  <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('baseWeeklySalary')} />
-                </TextField>
-                <TextField label="$ por carro" error={employeeForm.formState.errors.commissionRate?.message}>
-                  <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('commissionRate')} />
-                </TextField>
-                <TextField label="Bono/carro" error={employeeForm.formState.errors.productivityBonusRate?.message}>
-                  <input type="number" inputMode="decimal" min={0} step="0.01" {...employeeForm.register('productivityBonusRate')} />
-                </TextField>
-              </div>
+              <p className="text-[12px] text-ink-400">Los ajustes de nómina (comisión, sueldo, bonos) se configuran en el botón <span className="font-medium text-ink-600">Editar</span> de cada lavador.</p>
               {createEmployee.error && <ErrorMessage message={createEmployee.error.message} />}
               <div className="flex justify-end">
                 <Button kind="go" type="submit" disabled={createEmployee.isPending}>
@@ -3815,21 +3816,26 @@ function CatalogsScreen() {
           </Panel>
 
           <Panel title="Servicios">
-            <form className="grid gap-3 md:grid-cols-[140px_1fr_auto]" onSubmit={serviceForm.handleSubmit((values) => createService.mutate(values))}>
-              <TextField label="Código" error={serviceForm.formState.errors.code?.message}>
-                <input placeholder="LAVADO" {...serviceForm.register('code')} />
-              </TextField>
-              <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
-                <input placeholder="Lavado exterior" {...serviceForm.register('name')} />
-              </TextField>
-              <FormButton label="Agregar" loading={createService.isPending} />
-              <div className="md:col-span-3">
-                <TextField label="Descripción" error={serviceForm.formState.errors.description?.message}>
-                  <textarea rows={2} placeholder="Opcional" {...serviceForm.register('description')} />
-                </TextField>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[12.5px] text-ink-500">Tipos de lavado disponibles al crear un ticket.</p>
+              <Button kind="ghost" size="sm" onClick={() => setShowAddService(!showAddService)}>
+                {showAddService ? 'Cancelar' : '+ Agregar'}
+              </Button>
+            </div>
+            {showAddService && (
+              <div className="mb-4">
+                <form className="grid gap-3 md:grid-cols-[140px_1fr_auto]" onSubmit={serviceForm.handleSubmit((values) => createService.mutate(values))}>
+                  <TextField label="Código" error={serviceForm.formState.errors.code?.message}>
+                    <input placeholder="LAV_MOTOR" {...serviceForm.register('code')} />
+                  </TextField>
+                  <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
+                    <input placeholder="Lavado de motor" {...serviceForm.register('name')} />
+                  </TextField>
+                  <FormButton label="Guardar" loading={createService.isPending} />
+                </form>
+                {createService.error && <ErrorMessage message={createService.error.message} />}
               </div>
-            </form>
-            {createService.error && <ErrorMessage message={createService.error.message} />}
+            )}
             <SimpleList
               empty="No hay servicios."
               rows={services.map((service) => ({
@@ -3841,27 +3847,37 @@ function CatalogsScreen() {
           </Panel>
 
           <Panel title="Tamaños de vehículo">
-            <form className="grid gap-3 md:grid-cols-[120px_1fr_160px_90px_auto]" onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}>
-              <TextField label="Código" error={sizeForm.formState.errors.code?.message}>
-                <input placeholder="CHICO" {...sizeForm.register('code')} />
-              </TextField>
-              <TextField label="Nombre" error={sizeForm.formState.errors.name?.message}>
-                <input placeholder="Chico" {...sizeForm.register('name')} />
-              </TextField>
-              <SelectField label="Categoría" error={sizeForm.formState.errors.category?.message}>
-                <select {...sizeForm.register('category')}>
-                  <option value="AUTO">Autos y camionetas</option>
-                  <option value="MOTO">Motos</option>
-                  <option value="RAZR">RAZR</option>
-                  <option value="PERSONAL">Cam. de personal</option>
-                </select>
-              </SelectField>
-              <TextField label="Orden" error={sizeForm.formState.errors.sortOrder?.message}>
-                <input type="number" inputMode="decimal" min={0} {...sizeForm.register('sortOrder')} />
-              </TextField>
-              <FormButton label="Agregar" loading={createSize.isPending} />
-            </form>
-            {createSize.error && <ErrorMessage message={createSize.error.message} />}
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[12.5px] text-ink-500">Categorías de vehículo que determinan el precio del ticket.</p>
+              <Button kind="ghost" size="sm" onClick={() => setShowAddSize(!showAddSize)}>
+                {showAddSize ? 'Cancelar' : '+ Agregar'}
+              </Button>
+            </div>
+            {showAddSize && (
+              <div className="mb-4">
+                <form className="grid gap-3 md:grid-cols-[120px_1fr_160px_90px_auto]" onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}>
+                  <TextField label="Código" error={sizeForm.formState.errors.code?.message}>
+                    <input placeholder="CHICO" {...sizeForm.register('code')} />
+                  </TextField>
+                  <TextField label="Nombre" error={sizeForm.formState.errors.name?.message}>
+                    <input placeholder="Carro" {...sizeForm.register('name')} />
+                  </TextField>
+                  <SelectField label="Categoría" error={sizeForm.formState.errors.category?.message}>
+                    <select {...sizeForm.register('category')}>
+                      <option value="AUTO">Autos y camionetas</option>
+                      <option value="MOTO">Motos</option>
+                      <option value="RAZR">RAZR</option>
+                      <option value="PERSONAL">Cam. de personal</option>
+                    </select>
+                  </SelectField>
+                  <TextField label="Orden" error={sizeForm.formState.errors.sortOrder?.message}>
+                    <input type="number" inputMode="decimal" min={0} {...sizeForm.register('sortOrder')} />
+                  </TextField>
+                  <FormButton label="Guardar" loading={createSize.isPending} />
+                </form>
+                {createSize.error && <ErrorMessage message={createSize.error.message} />}
+              </div>
+            )}
             <SimpleList
               empty="No hay tamaños."
               rows={sizes.map((size) => {
@@ -3869,80 +3885,117 @@ function CatalogsScreen() {
                 return {
                   id: size.id,
                   title: size.name,
-                  detail: `${size.code} · ${catLabel} · orden ${size.sortOrder}`,
+                  detail: catLabel,
                 }
               })}
             />
           </Panel>
 
           <Panel title="Precios">
-            <form className="grid gap-3 md:grid-cols-5" onSubmit={priceForm.handleSubmit((values) => createPrice.mutate(values))}>
-              <SelectField label="Servicio" error={priceForm.formState.errors.serviceTypeId?.message}>
-                <select {...priceForm.register('serviceTypeId')}>
-                  <option value={0}>Servicio</option>
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>{service.name}</option>
-                  ))}
-                </select>
-              </SelectField>
-              <SelectField label="Tamaño" error={priceForm.formState.errors.vehicleSizeId?.message}>
-                <select {...priceForm.register('vehicleSizeId')}>
-                  <option value={0}>Tamaño</option>
-                  {sizes.map((size) => (
-                    <option key={size.id} value={size.id}>{size.name}</option>
-                  ))}
-                </select>
-              </SelectField>
-              <TextField label="Precio" error={priceForm.formState.errors.amount?.message}>
-                <input type="number" inputMode="decimal" min={0} step="0.01" {...priceForm.register('amount')} />
-              </TextField>
-              <TextField label="Desde" error={priceForm.formState.errors.effectiveFrom?.message}>
-                <input type="date" {...priceForm.register('effectiveFrom')} />
-              </TextField>
-              <div className="md:col-span-5">
-                <FormButton label="Guardar precio" loading={createPrice.isPending} />
-              </div>
-            </form>
-            {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
-            <div className="overflow-hidden rounded-xl border border-border-soft">
-              <table className="tl-tbl zebra">
-                <thead className="">
-                  <tr>
-                    <th>Servicio</th>
-                    <th>Tamaño</th>
-                    <th className="r">Precio</th>
-                    <th>Desde</th>
-                  </tr>
-                </thead>
-                <tbody className="">
-                  {prices.map((price) => (
-                    <tr key={price.id}>
-                      <td>{price.serviceTypeName}</td>
-                      <td>{price.vehicleSizeName}</td>
-                      <td className="r">{money(price.amount, price.currency)}</td>
-                      <td>{price.effectiveFrom}</td>
-                    </tr>
-                  ))}
-                  {prices.length === 0 && (
-                    <tr>
-                      <td colSpan={4}>
-                        <EmptyState
-                          icon={<IMoney size={20} />}
-                          title="No hay precios vigentes para hoy"
-                          description="Captura un precio con la fecha 'Desde' de hoy o anterior."
-                          tone="info"
-                        />
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-[12.5px] text-ink-500">Precios vigentes hoy, agrupados por tipo de vehículo.</p>
+              <Button kind="ghost" size="sm" onClick={() => setShowAddPrice(!showAddPrice)}>
+                {showAddPrice ? 'Cancelar' : '+ Agregar precio'}
+              </Button>
             </div>
+            {showAddPrice && (
+              <div className="mb-5">
+                <form className="grid gap-3 sm:grid-cols-[1fr_1fr_110px_140px_auto]" onSubmit={priceForm.handleSubmit((values) => createPrice.mutate(values))}>
+                  <SelectField label="Servicio" error={priceForm.formState.errors.serviceTypeId?.message}>
+                    <select {...priceForm.register('serviceTypeId')}>
+                      <option value={0}>Seleccionar</option>
+                      {services.map((service) => (
+                        <option key={service.id} value={service.id}>{service.name}</option>
+                      ))}
+                    </select>
+                  </SelectField>
+                  <SelectField label="Tamaño de vehículo" error={priceForm.formState.errors.vehicleSizeId?.message}>
+                    <select {...priceForm.register('vehicleSizeId')}>
+                      <option value={0}>Seleccionar</option>
+                      {sizes.map((size) => (
+                        <option key={size.id} value={size.id}>{size.name}</option>
+                      ))}
+                    </select>
+                  </SelectField>
+                  <TextField label="Precio $" error={priceForm.formState.errors.amount?.message}>
+                    <input type="number" inputMode="decimal" min={0} step="0.01" {...priceForm.register('amount')} />
+                  </TextField>
+                  <TextField label="Válido desde" error={priceForm.formState.errors.effectiveFrom?.message}>
+                    <input type="date" {...priceForm.register('effectiveFrom')} />
+                  </TextField>
+                  <FormButton label="Guardar" loading={createPrice.isPending} />
+                </form>
+                {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
+              </div>
+            )}
+            {prices.length === 0 && (
+              <EmptyState
+                icon={<IMoney size={20} />}
+                title="No hay precios vigentes para hoy"
+                description="Agrega un precio con la fecha de hoy o anterior."
+                tone="info"
+              />
+            )}
+            {mxnGroups.map(group => (
+              <div key={group.cat} className="mb-5">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">{group.label}</p>
+                <div className="overflow-auto rounded-xl border border-border-soft">
+                  <table className="tl-tbl min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Vehículo</th>
+                        {group.svcIds.map(id => <th key={id} className="r whitespace-nowrap">{group.svcName[id]}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.szIds.map(szId => (
+                        <tr key={szId}>
+                          <td className="font-medium">{group.szName[szId]}</td>
+                          {group.svcIds.map(svcId => (
+                            <td key={svcId} className="r tabular-nums">
+                              {group.priceMap[`${svcId}-${szId}`] !== undefined
+                                ? money(group.priceMap[`${svcId}-${szId}`], 'MXN')
+                                : <span className="text-ink-300">—</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+            {usdPrices.length > 0 && (
+              <div>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">USD — clientes de frontera</p>
+                <div className="overflow-auto rounded-xl border border-border-soft">
+                  <table className="tl-tbl">
+                    <thead>
+                      <tr>
+                        <th>Servicio</th>
+                        <th>Vehículo</th>
+                        <th className="r">Precio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usdPrices.map(p => (
+                        <tr key={p.id}>
+                          <td>{p.serviceTypeName}</td>
+                          <td>{p.vehicleSizeName}</td>
+                          <td className="r tabular-nums">{money(p.amount, 'USD')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </Panel>
         </div>
 
         <aside className="space-y-5">
-          <Panel title="Operación de hoy">
+          <Panel title="Abrir día / turno">
+            <p className="mb-3 text-[12.5px] text-ink-500">Abre el día de operación y los turnos antes de registrar tickets.</p>
             <form className="space-y-4" onSubmit={operationsForm.handleSubmit((values) => openBusinessDay.mutate(values))}>
               <TextField label="Fecha" error={operationsForm.formState.errors.businessDate?.message}>
                 <input type="date" {...operationsForm.register('businessDate')} />
@@ -7639,12 +7692,14 @@ function SelectField({ label, error, children }: { label: string; error?: string
   )
 }
 
-function TextField({ label, error, children }: { label: string; error?: string; children: React.ReactElement }) {
+function TextField({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactElement }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">{label}</span>
       {children}
-      {error && <span className="mt-1 block text-[11.5px] text-bad-700">{error}</span>}
+      {error
+        ? <span className="mt-1 block text-[11.5px] text-bad-700">{error}</span>
+        : hint ? <span className="mt-1 block text-[11px] text-ink-400">{hint}</span> : null}
     </label>
   )
 }

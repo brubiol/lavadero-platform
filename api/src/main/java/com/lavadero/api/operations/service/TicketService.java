@@ -205,12 +205,16 @@ public class TicketService {
             throw new IllegalArgumentException("Voided tickets cannot be edited");
         }
 
-        // Edit grace window — only DUENO can edit older tickets
+        // Edit grace window — after EDIT_GRACE_MINUTES, only the dueño can change
+        // financially-relevant fields (price, courtesy, discount, payment method, service,
+        // size, surcharge, price override). Description / notes / employee assignments /
+        // hora can be corrected any time — they're not theft vectors.
         long minutesSinceCreation = Duration.between(ticket.getCreatedAt(), Instant.now()).toMinutes();
-        if (minutesSinceCreation > EDIT_GRACE_MINUTES && !isDueno()) {
+        if (minutesSinceCreation > EDIT_GRACE_MINUTES && !isDueno() && wouldChangeFinancialFields(request, ticket)) {
             throw new IllegalArgumentException(
-                    "Este ticket ya pasó el límite de edición (" + EDIT_GRACE_MINUTES
-                            + " min). Solo el dueño puede editarlo. Cancélalo y crea uno nuevo.");
+                    "El precio, descuento, cortesía o forma de pago de este ticket ya no se pueden modificar ("
+                            + EDIT_GRACE_MINUTES + " min). Sí puedes corregir descripción, notas y lavadores. "
+                            + "Para cambios de precio, pide al dueño o cancela y crea uno nuevo.");
         }
 
         // Capture before-snapshot for audit trail
@@ -292,6 +296,22 @@ public class TicketService {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;
         return auth.getAuthorities().stream().anyMatch(a -> "ROLE_DUENO".equals(a.getAuthority()));
+    }
+
+    /** Returns true if the update would change any field that has fraud implications. */
+    private static boolean wouldChangeFinancialFields(UpdateTicketRequest req, Ticket current) {
+        if (req.serviceTypeId() != null && !req.serviceTypeId().equals(current.getServiceType().getId())) return true;
+        if (req.vehicleSizeId() != null && !req.vehicleSizeId().equals(current.getVehicleSize().getId())) return true;
+        if (req.courtesy() != null && req.courtesy() != current.isCourtesy()) return true;
+        if (req.paymentMethod() != null && req.paymentMethod() != current.getPaymentMethod()) return true;
+        BigDecimal currentDiscount = current.getDiscountPercent() == null ? ZERO : current.getDiscountPercent();
+        if (req.discountPercent() != null && req.discountPercent().compareTo(currentDiscount) != 0) return true;
+        BigDecimal currentOverride = current.getPriceOverride() == null ? null : current.getPriceOverride();
+        if (req.priceOverride() != null && (currentOverride == null || req.priceOverride().compareTo(currentOverride) != 0)) return true;
+        BigDecimal currentSurcharge = current.getSurchargeAmount() == null ? ZERO : current.getSurchargeAmount();
+        if (req.surchargeAmount() != null && req.surchargeAmount().compareTo(currentSurcharge) != 0) return true;
+        if (req.currency() != null && req.currency() != current.getCurrency()) return true;
+        return false;
     }
 
     private static String currentActor() {
