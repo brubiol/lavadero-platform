@@ -15,11 +15,14 @@ import com.lavadero.api.ai.weather.domain.DailyWeather;
 import com.lavadero.api.ai.weather.repository.DailyWeatherRepository;
 import com.lavadero.api.reports.domain.HistoricalDailySnapshot;
 import com.lavadero.api.reports.repository.HistoricalDailySnapshotRepository;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToDoubleFunction;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -75,10 +78,28 @@ class PythonForecastBacktestProbeTest extends AbstractIntegrationTest {
             Map<LocalDate, DailyWeather> weatherByDate = loadWeather();
             Map<LocalDate, List<HolidayCalendar>> holidaysByDate = loadHolidays();
 
-            double carsAbsPct = 0.0;
-            int carsN = 0;
-            double revAbsPct = 0.0;
-            int revN = 0;
+            // Three accumulators: cars, revenue (direct), revenue (decomposed = cars × avg_ticket).
+            Accumulator cars = new Accumulator();
+            Accumulator revDirect = new Accumulator();
+            Accumulator revDecomp = new Accumulator();
+
+            // dow buckets per axis — keys are DayOfWeek enums for stable ordering.
+            Map<DayOfWeek, Accumulator> carsByDow = new EnumMap<>(DayOfWeek.class);
+            Map<DayOfWeek, Accumulator> revDirectByDow = new EnumMap<>(DayOfWeek.class);
+            Map<DayOfWeek, Accumulator> revDecompByDow = new EnumMap<>(DayOfWeek.class);
+            for (DayOfWeek dw : DayOfWeek.values()) {
+                carsByDow.put(dw, new Accumulator());
+                revDirectByDow.put(dw, new Accumulator());
+                revDecompByDow.put(dw, new Accumulator());
+            }
+            Accumulator carsHoliday = new Accumulator();
+            Accumulator carsNonHoliday = new Accumulator();
+            Accumulator revDirectHoliday = new Accumulator();
+            Accumulator revDirectNonHoliday = new Accumulator();
+            Accumulator revDecompHoliday = new Accumulator();
+            Accumulator revDecompNonHoliday = new Accumulator();
+
+            log.info("Per-day probe rows (date,dow,hol,actC,predC,errC,actR,predRdir,errRdir,predRdec,errRdec):");
 
             for (LocalDate d = probeStart; !d.isAfter(lastDate); d = d.plusDays(1)) {
                 LocalDate snapshotDate = d.minusDays(1);
@@ -88,41 +109,93 @@ class PythonForecastBacktestProbeTest extends AbstractIntegrationTest {
                 List<HistoricalDailySnapshot> training = upTo(all, snapshotDate);
                 if (training.size() < 30) continue;
 
-                Prediction carsPred = predictOne(snapshotDate, d, training, true,
-                        weatherByDate, holidaysByDate);
-                Prediction revPred = predictOne(snapshotDate, d, training, false,
-                        weatherByDate, holidaysByDate);
+                ToDoubleFunction<HistoricalDailySnapshot> carsExtractor =
+                        s -> s.getTotalCars() == null ? 0.0 : s.getTotalCars().doubleValue();
+                ToDoubleFunction<HistoricalDailySnapshot> revExtractor =
+                        s -> s.getRevenueMxn() == null ? 0.0 : s.getRevenueMxn().doubleValue();
+                ToDoubleFunction<HistoricalDailySnapshot> avgTicketExtractor = s -> {
+                    double c = s.getTotalCars() == null ? 0.0 : s.getTotalCars().doubleValue();
+                    double r = s.getRevenueMxn() == null ? 0.0 : s.getRevenueMxn().doubleValue();
+                    return c <= 0.0 ? 0.0 : r / c;
+                };
 
-                if (carsPred != null && actual.getTotalCars() != null && actual.getTotalCars() > 0) {
-                    carsAbsPct += Math.abs(carsPred.predicted() - actual.getTotalCars())
-                            / actual.getTotalCars();
-                    carsN++;
+                Prediction carsPred = predictOne(snapshotDate, d, training, "cars",
+                        carsExtractor, weatherByDate, holidaysByDate);
+                Prediction revPred = predictOne(snapshotDate, d, training, "revenue",
+                        revExtractor, weatherByDate, holidaysByDate);
+                Prediction avgPred = predictOne(snapshotDate, d, training, "avg_ticket",
+                        avgTicketExtractor, weatherByDate, holidaysByDate);
+
+                boolean hol = !holidaysByDate.getOrDefault(d, List.of()).isEmpty();
+                DayOfWeek dow = d.getDayOfWeek();
+
+                Double carsActual = actual.getTotalCars() == null ? null : actual.getTotalCars().doubleValue();
+                Double revActual = actual.getRevenueMxn() == null ? null : actual.getRevenueMxn().doubleValue();
+
+                Double carsErr = null;
+                if (carsPred != null && carsActual != null && carsActual > 0) {
+                    carsErr = Math.abs(carsPred.predicted() - carsActual) / carsActual;
+                    cars.add(carsErr);
+                    carsByDow.get(dow).add(carsErr);
+                    (hol ? carsHoliday : carsNonHoliday).add(carsErr);
                 }
-                if (revPred != null && actual.getRevenueMxn() != null
-                        && actual.getRevenueMxn().doubleValue() > 0.0) {
-                    double act = actual.getRevenueMxn().doubleValue();
-                    revAbsPct += Math.abs(revPred.predicted() - act) / act;
-                    revN++;
+
+                Double revDirectErr = null;
+                if (revPred != null && revActual != null && revActual > 0.0) {
+                    revDirectErr = Math.abs(revPred.predicted() - revActual) / revActual;
+                    revDirect.add(revDirectErr);
+                    revDirectByDow.get(dow).add(revDirectErr);
+                    (hol ? revDirectHoliday : revDirectNonHoliday).add(revDirectErr);
                 }
+
+                Double revDecompPred = null;
+                Double revDecompErr = null;
+                if (carsPred != null && avgPred != null && revActual != null && revActual > 0.0) {
+                    revDecompPred = carsPred.predicted() * avgPred.predicted();
+                    revDecompErr = Math.abs(revDecompPred - revActual) / revActual;
+                    revDecomp.add(revDecompErr);
+                    revDecompByDow.get(dow).add(revDecompErr);
+                    (hol ? revDecompHoliday : revDecompNonHoliday).add(revDecompErr);
+                }
+
+                log.info("{},{},{},{},{},{},{},{},{},{},{}",
+                        d, dow, hol ? "Y" : "N",
+                        fmt0(carsActual), fmt0(carsPred == null ? null : carsPred.predicted()), fmtPct(carsErr),
+                        fmt0(revActual), fmt0(revPred == null ? null : revPred.predicted()), fmtPct(revDirectErr),
+                        fmt0(revDecompPred), fmtPct(revDecompErr));
             }
 
-            log.info("Python forecast walk-forward probe: cars n={}, cars MAPE={}; revenue n={}, revenue MAPE={}",
-                    carsN, carsN == 0 ? "n/a" : String.format("%.4f", carsAbsPct / carsN),
-                    revN, revN == 0 ? "n/a" : String.format("%.4f", revAbsPct / revN));
+            log.info("=== TOTAL MAPE ===");
+            log.info("cars:          n={} MAPE={}", cars.n, cars.mape());
+            log.info("revenue dir:   n={} MAPE={}", revDirect.n, revDirect.mape());
+            log.info("revenue decmp: n={} MAPE={}", revDecomp.n, revDecomp.mape());
+
+            log.info("=== MAPE BY DAY OF WEEK ===");
+            log.info("dow         cars   rev-direct   rev-decomp");
+            for (DayOfWeek dw : DayOfWeek.values()) {
+                log.info("{}  {}  {}  {}", String.format("%-9s", dw),
+                        carsByDow.get(dw).mape(), revDirectByDow.get(dw).mape(), revDecompByDow.get(dw).mape());
+            }
+
+            log.info("=== MAPE BY HOLIDAY ===");
+            log.info("holiday      cars   rev-direct   rev-decomp");
+            log.info("Y (n={})    {}  {}  {}", carsHoliday.n,
+                    carsHoliday.mape(), revDirectHoliday.mape(), revDecompHoliday.mape());
+            log.info("N (n={})    {}  {}  {}", carsNonHoliday.n,
+                    carsNonHoliday.mape(), revDirectNonHoliday.mape(), revDecompNonHoliday.mape());
         } finally {
             properties.setPythonBaseUrl(previousBaseUrl);
         }
     }
 
     private Prediction predictOne(LocalDate snapshotDate, LocalDate target,
-            List<HistoricalDailySnapshot> training, boolean cars,
+            List<HistoricalDailySnapshot> training, String axis,
+            ToDoubleFunction<HistoricalDailySnapshot> extractor,
             Map<LocalDate, DailyWeather> weatherByDate,
             Map<LocalDate, List<HolidayCalendar>> holidaysByDate) {
         List<TrainingRow> rows = new ArrayList<>(training.size());
         for (HistoricalDailySnapshot s : training) {
-            double v = cars
-                    ? (s.getTotalCars() == null ? 0.0 : s.getTotalCars().doubleValue())
-                    : (s.getRevenueMxn() == null ? 0.0 : s.getRevenueMxn().doubleValue());
+            double v = extractor.applyAsDouble(s);
             if (v <= 0.0) continue;
             DailyWeather w = weatherByDate.get(s.getSnapshotDate());
             CalendarFeatures cal = calendarFor(s.getSnapshotDate(), holidaysByDate);
@@ -146,15 +219,36 @@ class PythonForecastBacktestProbeTest extends AbstractIntegrationTest {
                 cal.isHoliday(), cal.dayBeforeHoliday(), cal.dayAfterHoliday(),
                 cal.isQuincenaPost(), cal.isBorderTrafficHoliday(),
                 nameFor(target, holidaysByDate));
-        PythonForecastRequest req = new PythonForecastRequest(snapshotDate, 1,
-                cars ? "cars" : "revenue", rows, List.of(horizonRow));
+        PythonForecastRequest req = new PythonForecastRequest(snapshotDate, 1, axis, rows, List.of(horizonRow));
         try {
             PythonForecastResponse resp = client.forecast(req);
             return resp.predictions().isEmpty() ? null : resp.predictions().get(0);
         } catch (Exception ex) {
-            log.warn("Python forecast probe call failed for {} ({}): {}",
-                    target, cars ? "cars" : "revenue", ex.getMessage());
+            log.warn("Python forecast probe call failed for {} ({}): {}", target, axis, ex.getMessage());
             return null;
+        }
+    }
+
+    private static String fmt0(Double v) {
+        return v == null ? "-" : String.format("%.0f", v);
+    }
+
+    private static String fmtPct(Double v) {
+        return v == null ? "-" : String.format("%.3f", v);
+    }
+
+    /** Running MAPE accumulator. */
+    private static final class Accumulator {
+        double sumAbsPct = 0.0;
+        int n = 0;
+
+        void add(double absPct) {
+            sumAbsPct += absPct;
+            n++;
+        }
+
+        String mape() {
+            return n == 0 ? "n/a" : String.format("%.4f", sumAbsPct / n);
         }
     }
 

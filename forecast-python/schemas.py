@@ -43,7 +43,7 @@ class HorizonRow(BaseModel):
 class ForecastRequest(BaseModel):
     snapshot_date: date
     horizon_days: int = Field(ge=1, le=14)
-    axis: Literal["cars", "revenue"]
+    axis: Literal["cars", "revenue", "avg_ticket"]
     training: List[TrainingRow]
     horizon: List[HorizonRow]
 
