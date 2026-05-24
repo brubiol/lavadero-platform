@@ -73,6 +73,9 @@ public class AiInsightService {
     /** Max round-trips of (model picks tool → we execute → model reads result). 5 is plenty for chat questions. */
     private static final int CHAT_TOOL_MAX_ITER = 5;
 
+    /** Investigation is allowed deeper exploration (form hypothesis, fetch, iterate). */
+    private static final int INVESTIGATE_TOOL_MAX_ITER = 8;
+
     public AiInsightService(AiInsightRepository insights, DailySummaryService reports, InventoryService inventory,
             AiProvider aiProvider, ObjectMapper objectMapper, AuditEventRepository auditEvents,
             AiToolRegistry toolRegistry) {
@@ -266,36 +269,72 @@ public class AiInsightService {
     @Transactional
     public InvestigationResponse investigate(String question, LocalDate from, LocalDate to) {
         validateRange(from, to);
-        DailySummaryRangeResponse range = reports.getRange(from, to);
-        HistoricalRangeResponse historical = reports.getHistorical(from, to);
-        CashVarianceResponse cash = reports.cashVariance(from, to);
-        EmployeePerformanceResponse performance = reports.employeePerformance(from, to);
-        InventorySnapshotResponse stock = inventory.snapshot(Instant.now());
 
-        List<String> steps = List.of(
-                "Consulte resumen diario del rango",
-                "Compare contra historico disponible",
-                "Revise diferencias de caja",
-                "Revise rendimiento de lavadores",
-                "Revise inventario actual");
-        List<String> evidence = new ArrayList<>(supportNumbers(range, cash, performance));
-        evidence.add("Historico del rango: %d dias, %d carros, %s ingresos.".formatted(
-                historical.totalDays(), historical.totalCars(), money(historical.totalRevenue())));
-        lowStock(stock).stream().limit(5)
-                .forEach(item -> evidence.add("Inventario bajo: %s (%s).".formatted(
-                        item.product().name(), number(item.quantityOnHand()))));
-        String confidence = range.days().isEmpty() ? "LOW" : historical.totalDays() > 0 ? "HIGH" : "MEDIUM";
-        String conclusion = "Investigacion: %s. Resultado del rango: %s con %d carros. Diferencia de caja: %s.".formatted(
-                question, money(range.result()), range.carsWashed(), money(cash.variance()));
-        String providerText = aiProvider.complete(new AiRequest(AiFeatureType.AGENT_INVESTIGATION,
-                "Investiga una pregunta de negocio usando herramientas internas.",
-                question + "\n" + String.join("\n", evidence)));
-        String summary = conclusion + "\n" + providerText;
+        String today = LocalDate.now().toString();
+        String systemPrompt = ""
+                + "Eres analista senior del negocio de un lavadero en Reynosa, Mexico. "
+                + "Investiga la pregunta usando las herramientas disponibles: forma una hipotesis, "
+                + "consulta datos, refina. Sin emojis. Responde en espanol en tres secciones: "
+                + "'Conclusion:' (1-2 lineas), 'Evidencia:' (numeros concretos), 'Pasos:' (orden de tu razonamiento). "
+                + "Hoy es " + today + ". El rango bajo investigacion es " + from + " a " + to + ".";
+        AiRequest request = new AiRequest(AiFeatureType.AGENT_INVESTIGATION, systemPrompt, question);
+        ToolAwareCompletion completion = aiProvider.completeWithTools(
+                request, toolRegistry.all(), INVESTIGATE_TOOL_MAX_ITER);
+
+        List<ToolCallTrace> trace = completion.trace();
+        List<String> steps = stepsFromTrace(trace);
+        List<String> evidence = evidenceFromTrace(trace);
+        String confidence = confidenceFromTrace(trace);
+        String summary = completion.text();
+
         AiInsight insight = save(AiFeatureType.AGENT_INVESTIGATION, AiInsightSeverity.INFO,
                 "Investigacion AI: " + shorten(question, 110), summary,
-                details(Map.of("question", question, "steps", steps, "evidence", evidence, "confidence", confidence)),
+                details(Map.of("question", question, "steps", steps, "evidence", evidence,
+                        "confidence", confidence,
+                        "toolsCalled", trace.stream().map(ToolCallTrace::name).toList())),
                 from, to);
         return new InvestigationResponse(summary, evidence, steps, confidence, from, to, response(insight));
+    }
+
+    private List<String> stepsFromTrace(List<ToolCallTrace> trace) {
+        if (trace.isEmpty()) {
+            // Fallback path (no API key / provider misconfigured): the deterministic
+            // text still ships in `summary`, but the UI's "Pasos" card would be empty.
+            // Tell the user why instead of pretending the model investigated.
+            return List.of("Sin acceso al LLM; se devolvio respuesta plantilla.");
+        }
+        List<String> steps = new ArrayList<>(trace.size());
+        for (ToolCallTrace t : trace) {
+            String argsCompact = t.arguments() == null ? "{}" : t.arguments().toString();
+            steps.add("Consulte " + t.name() + " con " + argsCompact);
+        }
+        return steps;
+    }
+
+    private List<String> evidenceFromTrace(List<ToolCallTrace> trace) {
+        if (trace.isEmpty()) {
+            return List.of();
+        }
+        return trace.stream()
+                .map(t -> t.name() + ": " + summarize(t).resultPreview())
+                .toList();
+    }
+
+    /**
+     * HIGH = the model meaningfully investigated (called 3+ distinct tools without
+     * any returning an error). MEDIUM = some signal. LOW = no real tool work, either
+     * fallback or every call errored. Distinct names matter more than call count so
+     * three lookups against the same tool don't inflate confidence.
+     */
+    private String confidenceFromTrace(List<ToolCallTrace> trace) {
+        long distinctOk = trace.stream()
+                .filter(t -> t.result() != null && !t.result().has("error"))
+                .map(ToolCallTrace::name)
+                .distinct()
+                .count();
+        if (distinctOk >= 3) return "HIGH";
+        if (distinctOk >= 1) return "MEDIUM";
+        return "LOW";
     }
 
     @Transactional
