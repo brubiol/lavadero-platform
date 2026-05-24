@@ -2526,7 +2526,7 @@ function AiTodayCard({
         {loading && !today && (
           <>
             <div className="grid grid-cols-2 gap-2">
-              {[0, 1].map((i) => (
+              {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="rounded-lg bg-ink-50/60 px-3 py-2">
                   <span className="tl-metric-skeleton narrow" />
                   <div className="mt-1.5"><span className="tl-metric-skeleton wide" /></div>
@@ -2560,6 +2560,24 @@ function AiTodayCard({
                 <p className={`font-display text-[18px] font-bold leading-none tabular-nums mt-0.5 ${today.summary.result >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                   {money(today.summary.result, 'MXN')}
                 </p>
+              </div>
+              <div className="rounded-lg bg-ink-50/60 px-3 py-2">
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Ingresos</p>
+                  <AiVsYesterday today={today.summary.ticketRevenue} yesterday={today.previousDay?.ticketRevenue} isMoney />
+                </div>
+                <p className="font-display text-[18px] font-bold leading-none tabular-nums text-ink-900 mt-0.5">
+                  {money(today.summary.ticketRevenue, 'MXN')}
+                </p>
+              </div>
+              <div className="rounded-lg bg-ink-50/60 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Dif. Caja</p>
+                {today.summary.cashVariance == null
+                  ? <p className="font-display text-[15px] font-bold leading-none tabular-nums text-ink-400 mt-0.5">Pendiente</p>
+                  : <p className={`font-display text-[18px] font-bold leading-none tabular-nums mt-0.5 ${today.summary.cashVariance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {money(today.summary.cashVariance, 'MXN')}
+                    </p>
+                }
               </div>
             </div>
             {summaryLines.length > 0 && (
@@ -2907,31 +2925,32 @@ function TicketWorkspace({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openShifts.length, shiftLocked, now.getHours()])
 
-  // SectionHeader helper — numbered chip + color rail + title + optional aside
+  // SectionHeader helper — numbered chip + color rail + title + optional aside.
+  // Compact padding so the operator's whole form fits in the viewport.
   const SectionHeader = ({ num, color, title, aside }: { num: number; color: string; title: string; aside?: React.ReactNode }) => (
-    <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-      <div className="flex items-center gap-3">
-        <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm ${color}`}>
+    <div className="flex items-center justify-between border-b border-border-soft bg-ink-50/60 px-4 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <span className={`flex h-5 w-5 items-center justify-center rounded text-[10.5px] font-bold text-white shadow-sm ${color}`}>
           {num}
         </span>
-        <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{title}</h3>
+        <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-ink-900">{title}</h3>
       </div>
       {aside}
     </div>
   )
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-3">
       {toast && <Toast message={toast} />}
 
       {/* ─── Editorial header ─────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-400">
             {mode === 'edit' ? 'Edición' : 'Captura'} · {data.currentBusinessDay?.businessDate ?? 'Sin día abierto'}
           </p>
-          <div className="mt-1 flex items-baseline gap-3">
-            <h2 className="font-display text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
+          <div className="mt-0.5 flex items-baseline gap-3">
+            <h2 className="font-display text-[22px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
               {mode === 'edit' ? 'Editar ticket' : 'Nuevo ticket'}
             </h2>
             {mode === 'create' && ticketsTodayCount.data && (
@@ -2941,7 +2960,7 @@ function TicketWorkspace({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-border-soft bg-white px-4 py-2.5 shadow-xs">
+        <div className="flex items-center gap-3 rounded-xl border border-border-soft bg-white px-3 py-2 shadow-xs">
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
@@ -2959,8 +2978,8 @@ function TicketWorkspace({
         <Banner tone="warn" title={disabledReason} text="Abre el dia y el turno desde Catalogos antes de capturar tickets." />
       )}
 
-      <form className="grid gap-5 xl:grid-cols-[1fr_340px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
-        <div className="space-y-4">
+      <form className="grid gap-4 xl:grid-cols-[1fr_340px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
+        <div className="space-y-3">
 
           {/* ── 1. Datos del servicio ──────────────────────────────── */}
           <div className="tl-panel overflow-hidden">
@@ -2981,11 +3000,11 @@ function TicketWorkspace({
               }
             />
 
-            <div className="space-y-5 p-5">
+            <div className="space-y-3.5 p-4">
               {/* Servicio subgroup — these drive the price */}
               <div>
-                <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Servicio · determina el precio</p>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Servicio · determina el precio</p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <div className="mb-1 flex items-center justify-between">
                       <label className="block text-[12px] font-semibold text-ink-700">Turno</label>
@@ -3083,9 +3102,9 @@ function TicketWorkspace({
               </div>
 
               {/* Detalle subgroup — context fields */}
-              <div className="border-t border-border-soft pt-5">
-                <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Detalle del lavado</p>
-                <div className={`grid gap-4 sm:grid-cols-2 ${watched.courtesy ? 'xl:grid-cols-2' : 'xl:grid-cols-3'}`}>
+              <div className="border-t border-border-soft pt-3">
+                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Detalle del lavado</p>
+                <div className={`grid gap-3 sm:grid-cols-2 ${watched.courtesy ? 'xl:grid-cols-2' : 'xl:grid-cols-3'}`}>
                   {!watched.courtesy && (
                     <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
                       <input placeholder="Ej. 41703" {...form.register('internalRef')} />
@@ -3138,7 +3157,7 @@ function TicketWorkspace({
                     )
                   }
                 />
-                <div className="space-y-3 p-5">
+                <div className="space-y-2.5 p-4">
                   {selectedEmployees.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {selectedEmployees.map((e) => (
@@ -3207,10 +3226,10 @@ function TicketWorkspace({
                 </button>
               }
             />
-            <div className="p-5">
+            <div className="p-4">
               {showFullNotes ? (
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Ej. cliente frecuente, pago con billete grande, lavar con cuidado..."
                   {...form.register('notes')}
                   className="tl-input resize-none"
@@ -3231,14 +3250,14 @@ function TicketWorkspace({
             type="button"
             onClick={() => setShowAdvanced((v) => !v)}
             data-testid="ticket-advanced-toggle"
-            className={`flex w-full items-center justify-between rounded-xl border px-5 py-3.5 text-[13.5px] font-semibold transition-all duration-150 ${
+            className={`flex w-full items-center justify-between rounded-xl border px-4 py-2.5 text-[13px] font-semibold transition-all duration-150 ${
               effectiveShowAdvanced
                 ? 'border-amber-200 bg-amber-50 text-amber-800'
                 : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/70 hover:text-amber-700'
             }`}
           >
-            <div className="flex items-center gap-3">
-              <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold text-white shadow-sm bg-gradient-to-b from-amber-400 to-amber-600`}>
+            <div className="flex items-center gap-2.5">
+              <span className={`flex h-5 w-5 items-center justify-center rounded text-[10.5px] font-bold text-white shadow-sm bg-gradient-to-b from-amber-400 to-amber-600`}>
                 4
               </span>
               <span>{effectiveShowAdvanced ? 'Ocultar opciones avanzadas' : 'Más opciones — precio especial, descuento, extras'}</span>
@@ -3259,8 +3278,8 @@ function TicketWorkspace({
                 color="bg-gradient-to-b from-amber-400 to-amber-600"
                 title="Opciones avanzadas"
               />
-              <div className="space-y-5 p-5">
-                <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-3.5 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
                     <input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
                   </TextField>
@@ -3491,6 +3510,9 @@ function CatalogsScreen() {
   const [showAddSize, setShowAddSize] = useState(false)
   const [showAddPrice, setShowAddPrice] = useState(false)
   const [editingPrices, setEditingPrices] = useState(false)
+  const [pendingAmounts, setPendingAmounts] = useState<Map<string, number>>(new Map())
+  const [quickAdjustInput, setQuickAdjustInput] = useState('')
+  const [savingAll, setSavingAll] = useState(false)
   const { hasRole } = useAuth()
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
@@ -3663,9 +3685,7 @@ function CatalogsScreen() {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['service-prices'] })
-      showToast('Precio actualizado')
     },
-    onError: () => showToast('Error al guardar precio'),
   })
 
   const openBusinessDay = useMutation({
@@ -3692,6 +3712,54 @@ function CatalogsScreen() {
       showToast('Turno abierto')
     },
   })
+
+  function exitEditMode() {
+    setEditingPrices(false)
+    setPendingAmounts(new Map())
+    setQuickAdjustInput('')
+  }
+
+  function applyQuickAdjust(direction: 1 | -1) {
+    const delta = Number(quickAdjustInput)
+    if (!delta || isNaN(delta)) return
+    const next = new Map(pendingAmounts)
+    mxnGroups.forEach(group => {
+      group.szIds.forEach(szId => {
+        group.svcIds.forEach(svcId => {
+          const key = `${svcId}-${szId}`
+          const base = next.get(key) ?? group.priceMap[key]
+          if (base !== undefined) next.set(key, Math.max(1, base + direction * delta))
+        })
+      })
+    })
+    setPendingAmounts(next)
+  }
+
+  async function saveAllPending() {
+    const dirty: Array<{ serviceTypeId: number; vehicleSizeId: number; amount: number }> = []
+    mxnGroups.forEach(group => {
+      group.szIds.forEach(szId => {
+        group.svcIds.forEach(svcId => {
+          const key = `${svcId}-${szId}`
+          const pending = pendingAmounts.get(key)
+          if (pending !== undefined && pending > 0) {
+            dirty.push({ serviceTypeId: svcId, vehicleSizeId: szId, amount: pending })
+          }
+        })
+      })
+    })
+    if (dirty.length === 0) { exitEditMode(); return }
+    setSavingAll(true)
+    try {
+      await Promise.all(dirty.map(e => quickUpdatePrice.mutateAsync(e)))
+      showToast(`${dirty.length} precio${dirty.length !== 1 ? 's' : ''} guardado${dirty.length !== 1 ? 's' : ''}`)
+      exitEditMode()
+    } catch {
+      showToast('Error al guardar algunos precios')
+    } finally {
+      setSavingAll(false)
+    }
+  }
 
   return (
     <section className="space-y-5">
@@ -3856,11 +3924,11 @@ function CatalogsScreen() {
               <div className="flex items-center gap-2">
                 {hasRole('DUENO') && (
                   <Button
-                    kind={editingPrices ? 'go' : 'ghost'}
+                    kind={editingPrices ? 'danger' : 'ghost'}
                     size="sm"
-                    onClick={() => setEditingPrices(!editingPrices)}
+                    onClick={() => editingPrices ? exitEditMode() : setEditingPrices(true)}
                   >
-                    {editingPrices ? 'Listo' : 'Editar precios'}
+                    {editingPrices ? 'Cancelar edición' : 'Editar precios'}
                   </Button>
                 )}
                 <Button kind="ghost" size="sm" onClick={() => setShowAddPrice(!showAddPrice)}>
@@ -3906,6 +3974,28 @@ function CatalogsScreen() {
                 tone="info"
               />
             )}
+            {editingPrices && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <span className="text-[12px] font-semibold text-amber-800">Ajuste rápido</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="1"
+                  step="1"
+                  placeholder="$10"
+                  value={quickAdjustInput}
+                  onChange={(e) => setQuickAdjustInput(e.target.value)}
+                  className="w-20 rounded border border-amber-300 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none"
+                />
+                <Button kind="ghost" size="sm" onClick={() => applyQuickAdjust(1)}>+ Subir a todos</Button>
+                <Button kind="ghost" size="sm" onClick={() => applyQuickAdjust(-1)}>− Bajar a todos</Button>
+                <span className="ml-auto text-[11px] text-amber-600">
+                  {pendingAmounts.size > 0
+                    ? `${pendingAmounts.size} cambio${pendingAmounts.size !== 1 ? 's' : ''} pendiente${pendingAmounts.size !== 1 ? 's' : ''}`
+                    : 'Sin cambios'}
+                </span>
+              </div>
+            )}
             {mxnGroups.map(group => (
               <div key={group.cat} className="mb-5">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">{group.label}</p>
@@ -3923,23 +4013,32 @@ function CatalogsScreen() {
                           <td className="font-medium">{group.szName[szId]}</td>
                           {group.svcIds.map(svcId => {
                             const currentAmount = group.priceMap[`${svcId}-${szId}`]
+                            const key = `${svcId}-${szId}`
+                            const pendingVal = pendingAmounts.get(key)
+                            const isDirty = pendingVal !== undefined && pendingVal !== currentAmount
                             return (
-                              <td key={svcId} className="r tabular-nums p-1">
+                              <td key={svcId} className="r p-1">
                                 {editingPrices && currentAmount !== undefined ? (
                                   <input
-                                    key={`${svcId}-${szId}-${currentAmount}`}
                                     type="number"
                                     inputMode="decimal"
                                     min="0.01"
                                     step="1"
-                                    defaultValue={currentAmount}
-                                    onBlur={(e) => {
+                                    value={pendingVal ?? currentAmount}
+                                    onChange={(e) => {
                                       const val = Number(e.target.value)
-                                      if (val > 0 && val !== currentAmount) {
-                                        quickUpdatePrice.mutate({ serviceTypeId: svcId, vehicleSizeId: szId, amount: val })
-                                      }
+                                      setPendingAmounts(prev => {
+                                        const next = new Map(prev)
+                                        next.set(key, val)
+                                        return next
+                                      })
                                     }}
-                                    className="w-20 rounded border border-border-soft bg-white px-1.5 py-0.5 text-right text-sm tabular-nums focus:border-blue-400 focus:outline-none"
+                                    className={[
+                                      'w-24 rounded border px-1.5 py-1 text-right text-sm tabular-nums focus:outline-none',
+                                      isDirty
+                                        ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900'
+                                        : 'border-border-soft bg-white focus:border-blue-400',
+                                    ].join(' ')}
                                   />
                                 ) : currentAmount !== undefined
                                   ? money(currentAmount, 'MXN')
@@ -3954,6 +4053,22 @@ function CatalogsScreen() {
                 </div>
               </div>
             ))}
+            {editingPrices && (
+              <div className="mt-2 flex items-center justify-end gap-3 border-t border-border-soft pt-4">
+                <Button kind="ghost" size="sm" onClick={exitEditMode} disabled={savingAll}>
+                  Cancelar
+                </Button>
+                <Button
+                  kind="go"
+                  size="sm"
+                  onClick={saveAllPending}
+                  loading={savingAll}
+                  disabled={pendingAmounts.size === 0}
+                >
+                  {pendingAmounts.size > 0 ? `Guardar (${pendingAmounts.size})` : 'Guardar'}
+                </Button>
+              </div>
+            )}
             {usdPrices.length > 0 && (
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">USD — clientes de frontera</p>
@@ -7697,6 +7812,7 @@ async function invalidateAi(queryClient: ReturnType<typeof useQueryClient>) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['ai-insights'] }),
     queryClient.invalidateQueries({ queryKey: ['ai-daily-brief'] }),
+    queryClient.invalidateQueries({ queryKey: ['ai-today'] }),
   ])
 }
 
