@@ -1,5 +1,6 @@
 package com.lavadero.api.ai.tools;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,5 +40,23 @@ public class AiToolRegistry {
 
     public boolean isEmpty() {
         return byName.isEmpty();
+    }
+
+    /**
+     * Curated view of the registry for surfaces that should not expose every
+     * tool to the model (e.g. dailyBrief stays focused on summary tools, not
+     * employee lookups). Preserves the requested order so the model sees them
+     * in the priority the caller intends. Unknown names fail fast.
+     */
+    public List<AiTool> subset(String... names) {
+        List<AiTool> out = new ArrayList<>(names.length);
+        for (String name : names) {
+            AiTool tool = byName.get(name);
+            if (tool == null) {
+                throw new IllegalArgumentException("Unknown AI tool: " + name);
+            }
+            out.add(tool);
+        }
+        return List.copyOf(out);
     }
 }
