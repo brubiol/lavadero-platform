@@ -37,6 +37,10 @@ lavadero:
     timeout-seconds: ${LAVADERO_AI_TIMEOUT_SECONDS:20}
     scheduler:
       enabled: ${LAVADERO_AI_SCHEDULER_ENABLED:false}
+  forecast:
+    provider: ${LAVADERO_FORECAST_PROVIDER:java}
+    python-base-url: ${LAVADERO_FORECAST_PYTHON_URL:http://lavadero-forecast:8081}
+    python-timeout-seconds: ${LAVADERO_FORECAST_PYTHON_TIMEOUT:30}
   weather:
     enabled: ${LAVADERO_WEATHER_ENABLED:false}
     lat: ${LAVADERO_WEATHER_LAT:26.05}

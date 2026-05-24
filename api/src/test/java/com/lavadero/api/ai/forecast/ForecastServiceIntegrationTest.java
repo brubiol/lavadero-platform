@@ -3,6 +3,7 @@ package com.lavadero.api.ai.forecast;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavadero.api.AbstractIntegrationTest;
 import com.lavadero.api.ai.domain.AiFeatureType;
+import com.lavadero.api.ai.forecast.config.ForecastProperties;
 import com.lavadero.api.ai.forecast.repository.DailyForecastRepository;
 import com.lavadero.api.ai.repository.AiInsightRepository;
 import com.lavadero.api.ai.weather.config.WeatherProperties;
@@ -36,10 +37,24 @@ class ForecastServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     WeatherProperties weatherProperties;
 
+    @Autowired
+    ForecastProperties forecastProperties;
+
+    private String previousProvider;
+    private String previousPythonBaseUrl;
+
+    @org.junit.jupiter.api.BeforeEach
+    void snapshotForecastProperties() {
+        previousProvider = forecastProperties.getProvider();
+        previousPythonBaseUrl = forecastProperties.getPythonBaseUrl();
+    }
+
     @AfterEach
     void resetWeatherFlag() {
         // Tests that toggle weather must leave the global properties bean clean.
         weatherProperties.setEnabled(false);
+        forecastProperties.setProvider(previousProvider == null ? "java" : previousProvider);
+        forecastProperties.setPythonBaseUrl(previousPythonBaseUrl);
     }
 
     @Test
@@ -117,5 +132,19 @@ class ForecastServiceIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.modelVersion").value(Matchers.not(Matchers.containsString("+w"))))
                 .andExpect(jsonPath("$.points[0].expectedPrecipitationMm").doesNotExist());
+    }
+
+    @Test
+    void should_fall_back_to_java_when_python_is_unreachable() throws Exception {
+        weatherProperties.setEnabled(true);
+        forecastProperties.setProvider("python");
+        // Port 1 is reserved (tcpmux) — connect should fail immediately on most hosts,
+        // and even if it doesn't, the client times out in 30s. Either way: fallback.
+        forecastProperties.setPythonBaseUrl("http://127.0.0.1:1");
+
+        mvc.perform(post("/api/v1/ai/forecast/run?snapshotDate=2026-05-20&days=7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.modelVersion").value(Matchers.not(Matchers.containsString("+lgbm"))))
+                .andExpect(jsonPath("$.points", Matchers.hasSize(7)));
     }
 }

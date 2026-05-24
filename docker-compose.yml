@@ -46,5 +46,16 @@ services:
     depends_on:
       - api
 
+  # Optional Python forecast sidecar. The API does NOT depends_on this service
+  # because the Java path is the default and the Python path falls back to Java
+  # on any client error. Bring it up explicitly with `docker compose up forecast`
+  # and set LAVADERO_FORECAST_PROVIDER=python on the api to route to it.
+  forecast:
+    build:
+      context: ./forecast-python
+    container_name: lavadero-forecast
+    expose:
+      - "8081"
+
 volumes:
   postgres_data:

@@ -2,20 +2,29 @@ package com.lavadero.api.ai.forecast.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lavadero.api.ai.calendar.domain.HolidayCalendar;
+import com.lavadero.api.ai.calendar.repository.HolidayCalendarRepository;
+import com.lavadero.api.ai.calendar.service.HolidayCalendarService;
 import com.lavadero.api.ai.domain.AiFeatureType;
 import com.lavadero.api.ai.domain.AiInsight;
 import com.lavadero.api.ai.domain.AiInsightSeverity;
+import com.lavadero.api.ai.forecast.config.ForecastProperties;
+import com.lavadero.api.ai.forecast.domain.CalendarFeatures;
 import com.lavadero.api.ai.forecast.domain.DailyForecast;
 import com.lavadero.api.ai.forecast.domain.ForecastModel;
 import com.lavadero.api.ai.forecast.domain.ForecastPoint;
 import com.lavadero.api.ai.forecast.domain.HistoricalPoint;
 import com.lavadero.api.ai.forecast.domain.WeatherAugmentedModel;
-import com.lavadero.api.ai.calendar.service.HolidayCalendarService;
-import com.lavadero.api.ai.forecast.domain.CalendarFeatures;
 import com.lavadero.api.ai.forecast.domain.WeatherFeatures;
 import com.lavadero.api.ai.forecast.repository.DailyForecastRepository;
+import com.lavadero.api.ai.forecast.service.PythonForecastClient.PythonForecastException;
 import com.lavadero.api.ai.forecast.web.ForecastDtos.ForecastPointResponse;
 import com.lavadero.api.ai.forecast.web.ForecastDtos.ForecastResponse;
+import com.lavadero.api.ai.forecast.web.PythonForecastDtos.HorizonRow;
+import com.lavadero.api.ai.forecast.web.PythonForecastDtos.Prediction;
+import com.lavadero.api.ai.forecast.web.PythonForecastDtos.PythonForecastRequest;
+import com.lavadero.api.ai.forecast.web.PythonForecastDtos.PythonForecastResponse;
+import com.lavadero.api.ai.forecast.web.PythonForecastDtos.TrainingRow;
 import com.lavadero.api.ai.repository.AiInsightRepository;
 import com.lavadero.api.ai.weather.config.WeatherProperties;
 import com.lavadero.api.ai.weather.domain.DailyWeather;
@@ -34,6 +43,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +61,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ForecastService {
 
+    private static final Logger log = LoggerFactory.getLogger(ForecastService.class);
+
     public static final int DEFAULT_HORIZON_DAYS = 7;
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final int MIN_TRAINING_DAYS = 14;
@@ -64,13 +77,19 @@ public class ForecastService {
     private final DailyWeatherRepository weather;
     private final WeatherProperties weatherProperties;
     private final HolidayCalendarService holidayCalendar;
+    private final HolidayCalendarRepository holidayCalendarRepository;
     private final ObjectMapper objectMapper;
+    private final ForecastProperties forecastProperties;
+    private final PythonForecastClient pythonClient;
 
     public ForecastService(HistoricalDailySnapshotRepository historical, DailySummaryService dailySummary,
             DailyForecastRepository forecasts, AiInsightRepository insights,
             DailyWeatherRepository weather, WeatherProperties weatherProperties,
             HolidayCalendarService holidayCalendar,
-            ObjectMapper objectMapper) {
+            HolidayCalendarRepository holidayCalendarRepository,
+            ObjectMapper objectMapper,
+            ForecastProperties forecastProperties,
+            PythonForecastClient pythonClient) {
         this.historical = historical;
         this.dailySummary = dailySummary;
         this.forecasts = forecasts;
@@ -78,7 +97,10 @@ public class ForecastService {
         this.weather = weather;
         this.weatherProperties = weatherProperties;
         this.holidayCalendar = holidayCalendar;
+        this.holidayCalendarRepository = holidayCalendarRepository;
         this.objectMapper = objectMapper;
+        this.forecastProperties = forecastProperties;
+        this.pythonClient = pythonClient;
     }
 
     @Transactional
@@ -94,9 +116,20 @@ public class ForecastService {
                             .formatted(cars.size(), revenue.size(), MIN_TRAINING_DAYS));
         }
 
-        Generated generated = useWeather()
-                ? generateWithWeather(snapshotDate, horizonDays, cars, revenue)
-                : generateSeasonal(snapshotDate, horizonDays, cars, revenue);
+        Generated generated;
+        if (usePython() && useWeather()) {
+            try {
+                generated = generatePython(snapshotDate, horizonDays, cars, revenue);
+            } catch (PythonForecastException ex) {
+                log.warn("Python forecast unreachable, falling back to weather-adjusted Java path: {}",
+                        ex.getMessage());
+                generated = generateWithWeather(snapshotDate, horizonDays, cars, revenue);
+            }
+        } else if (useWeather()) {
+            generated = generateWithWeather(snapshotDate, horizonDays, cars, revenue);
+        } else {
+            generated = generateSeasonal(snapshotDate, horizonDays, cars, revenue);
+        }
 
         forecasts.deleteBySnapshotDate(snapshotDate);
         // Force the delete to flush before re-inserting; otherwise the unique
@@ -208,12 +241,152 @@ public class ForecastService {
         return weatherProperties.isEnabled() && weather.count() >= MIN_WEATHER_ROWS_FOR_AUGMENT;
     }
 
+    private boolean usePython() {
+        return forecastProperties.getProvider() != null
+                && forecastProperties.getProvider().equalsIgnoreCase("python");
+    }
+
     private String compactVersion(ForecastModel cars, ForecastModel revenue, boolean weatherActive) {
         // +wc = weather + calendar features both active in the OLS residual model.
         String suffix = weatherActive ? "+wc" : "";
         return "snf-1.0%s/n=%d/through=%s/sc=%.1f/sr=%.0f".formatted(
                 suffix, cars.trainingSize(), cars.fittedThrough(),
                 cars.residualSigma(), revenue.residualSigma());
+    }
+
+    // ── Python sidecar generation path ───────────────────────────────
+
+    private Generated generatePython(LocalDate snapshotDate, int horizonDays,
+            List<HistoricalPoint> cars, List<HistoricalPoint> revenue) {
+        // Two HTTP calls (one per axis) keep the contract simple and let the
+        // Python service train a dedicated model per target.
+        LocalDate horizonStart = snapshotDate.plusDays(1);
+        LocalDate horizonEnd = snapshotDate.plusDays(horizonDays);
+
+        java.util.Set<LocalDate> trainingDates = carsAndRevenueDates(cars, revenue);
+        Map<LocalDate, DailyWeather> trainWeatherByDate = trainingDates.isEmpty()
+                ? Map.of()
+                : loadWeatherMap(trainingDates.stream().min(LocalDate::compareTo).get().minusDays(1),
+                        trainingDates.stream().max(LocalDate::compareTo).get());
+        Map<LocalDate, DailyWeather> horizonWeatherByDate = loadWeatherMap(horizonStart.minusDays(1), horizonEnd);
+        Map<LocalDate, List<HolidayCalendar>> holidaysByDate = loadHolidaysByDate(
+                minDate(trainingDates).minusDays(1), horizonEnd.plusDays(1));
+
+        List<TrainingRow> carsTraining = buildTraining(cars, trainWeatherByDate, holidaysByDate);
+        List<TrainingRow> revenueTraining = buildTraining(revenue, trainWeatherByDate, holidaysByDate);
+        List<HorizonRow> horizonRows = buildHorizon(horizonStart, horizonEnd, horizonWeatherByDate, holidaysByDate);
+
+        PythonForecastResponse carsResp = pythonClient.forecast(new PythonForecastRequest(
+                snapshotDate, horizonDays, "cars", carsTraining, horizonRows));
+        PythonForecastResponse revResp = pythonClient.forecast(new PythonForecastRequest(
+                snapshotDate, horizonDays, "revenue", revenueTraining, horizonRows));
+
+        List<ForecastPoint> carPoints = toForecastPoints(carsResp.predictions());
+        List<ForecastPoint> revPoints = toForecastPoints(revResp.predictions());
+        List<WeatherFeatures> horizonWeather = featuresOver(datesIn(horizonStart, horizonEnd), horizonWeatherByDate);
+
+        // For insight/audit continuity we still need ForecastModel-shaped seasonal
+        // factors. Fit the seasonal model on the same training set so the insight
+        // payload's dowFactors/monthFactors remain interpretable.
+        ForecastModel carsSeasonal = SeasonalNaiveForecaster.fit(cars);
+        ForecastModel revenueSeasonal = SeasonalNaiveForecaster.fit(revenue);
+        String version = pythonVersion(carsResp, revResp, carsSeasonal);
+
+        return new Generated(carPoints, revPoints, horizonWeather,
+                carsSeasonal, revenueSeasonal, version, true);
+    }
+
+    private String pythonVersion(PythonForecastResponse cars, PythonForecastResponse revenue, ForecastModel carsSeasonal) {
+        // +lgbm marks the python path so existing "+w" containment assertions
+        // still match (lgbm contains no 'w') without confusing the seasonal suffix.
+        String upstream = cars.modelVersion() == null ? "?" : cars.modelVersion();
+        return "py-1.0+lgbm/n=%d/through=%s/up=%s".formatted(
+                carsSeasonal.trainingSize(), carsSeasonal.fittedThrough(), upstream);
+    }
+
+    private List<TrainingRow> buildTraining(List<HistoricalPoint> series,
+            Map<LocalDate, DailyWeather> weatherByDate,
+            Map<LocalDate, List<HolidayCalendar>> holidaysByDate) {
+        List<TrainingRow> rows = new ArrayList<>(series.size());
+        for (HistoricalPoint p : series) {
+            DailyWeather w = weatherByDate.get(p.date());
+            CalendarFeatures cal = calendarFeaturesFor(p.date(), holidaysByDate);
+            rows.add(new TrainingRow(
+                    p.date(), p.value(),
+                    w == null ? 0.0 : w.getPrecipitationMm().doubleValue(),
+                    w == null ? 0.0 : w.getTempMaxC().doubleValue(),
+                    w == null ? 0.0 : w.getTempMinC().doubleValue(),
+                    w == null || w.getWindMaxKph() == null ? 0.0 : w.getWindMaxKph().doubleValue(),
+                    cal.isHoliday(), cal.dayBeforeHoliday(), cal.dayAfterHoliday(),
+                    cal.isQuincenaPost(), cal.isBorderTrafficHoliday(),
+                    holidayNameFor(p.date(), holidaysByDate)));
+        }
+        return rows;
+    }
+
+    private List<HorizonRow> buildHorizon(LocalDate from, LocalDate to,
+            Map<LocalDate, DailyWeather> weatherByDate,
+            Map<LocalDate, List<HolidayCalendar>> holidaysByDate) {
+        List<HorizonRow> rows = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            DailyWeather w = weatherByDate.get(d);
+            CalendarFeatures cal = calendarFeaturesFor(d, holidaysByDate);
+            rows.add(new HorizonRow(
+                    d,
+                    w == null ? 0.0 : w.getPrecipitationMm().doubleValue(),
+                    w == null ? 0.0 : w.getTempMaxC().doubleValue(),
+                    w == null ? 0.0 : w.getTempMinC().doubleValue(),
+                    w == null || w.getWindMaxKph() == null ? 0.0 : w.getWindMaxKph().doubleValue(),
+                    cal.isHoliday(), cal.dayBeforeHoliday(), cal.dayAfterHoliday(),
+                    cal.isQuincenaPost(), cal.isBorderTrafficHoliday(),
+                    holidayNameFor(d, holidaysByDate)));
+        }
+        return rows;
+    }
+
+    private CalendarFeatures calendarFeaturesFor(LocalDate date, Map<LocalDate, List<HolidayCalendar>> byDate) {
+        List<HolidayCalendar> today = byDate.getOrDefault(date, List.of());
+        List<HolidayCalendar> tomorrow = byDate.getOrDefault(date.plusDays(1), List.of());
+        List<HolidayCalendar> yesterday = byDate.getOrDefault(date.minusDays(1), List.of());
+        boolean isHoliday = !today.isEmpty();
+        boolean dayBefore = !tomorrow.isEmpty();
+        boolean dayAfter = !yesterday.isEmpty();
+        boolean borderTraffic = today.stream().anyMatch(HolidayCalendar::isDrivesBorderTraffic);
+        boolean quincenaPost = CalendarFeatures.isQuincenaPostWindow(date);
+        return new CalendarFeatures(date, isHoliday, dayBefore, dayAfter, quincenaPost, borderTraffic);
+    }
+
+    private String holidayNameFor(LocalDate date, Map<LocalDate, List<HolidayCalendar>> byDate) {
+        List<HolidayCalendar> today = byDate.getOrDefault(date, List.of());
+        return today.isEmpty() ? null : today.get(0).getName();
+    }
+
+    private Map<LocalDate, List<HolidayCalendar>> loadHolidaysByDate(LocalDate from, LocalDate to) {
+        Map<LocalDate, List<HolidayCalendar>> map = new HashMap<>();
+        for (HolidayCalendar h : holidayCalendarRepository.findByHolidayDateBetweenOrderByHolidayDateAsc(from, to)) {
+            map.computeIfAbsent(h.getHolidayDate(), k -> new ArrayList<>()).add(h);
+        }
+        return map;
+    }
+
+    private static LocalDate minDate(java.util.Set<LocalDate> dates) {
+        return dates.isEmpty() ? LocalDate.now() : dates.stream().min(LocalDate::compareTo).get();
+    }
+
+    private static List<LocalDate> datesIn(LocalDate from, LocalDate to) {
+        List<LocalDate> out = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            out.add(d);
+        }
+        return out;
+    }
+
+    private static List<ForecastPoint> toForecastPoints(List<Prediction> predictions) {
+        List<ForecastPoint> out = new ArrayList<>(predictions.size());
+        for (Prediction p : predictions) {
+            out.add(new ForecastPoint(p.date(), p.predicted(), p.low(), p.high()));
+        }
+        return out;
     }
 
     // ── Weather feature loading ──────────────────────────────────────
