@@ -2737,7 +2737,6 @@ function TicketWorkspace({
 }) {
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
-  const [selectedExtras, setSelectedExtras] = useState<string[]>([])
   const [lavadorQuery, setLavadorQuery] = useState('')
   const [lavadorFocused, setLavadorFocused] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(() =>
@@ -2749,10 +2748,6 @@ function TicketWorkspace({
       ),
     ),
   )
-  const products = useQuery({
-    queryKey: ['products', 'active'],
-    queryFn: () => api<Product[]>('/api/v1/products?active=true'),
-  })
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
   const defaultShift = openShifts[0]
@@ -2846,10 +2841,7 @@ function TicketWorkspace({
         surchargeAmount: surcharge > 0 ? surcharge : 0,
         surchargeReason: !values.courtesy && surcharge > 0
           ? (values.surchargeReason?.trim() || undefined) : undefined,
-        notes: [
-          values.notes?.trim(),
-          selectedExtras.length > 0 ? `Extras: ${selectedExtras.join(', ')}` : '',
-        ].filter(Boolean).join(' | ') || undefined,
+        notes: values.notes?.trim() || undefined,
       }
       if (mode === 'edit' && ticket) {
         return api<Ticket>(`/api/v1/tickets/${ticket.id}`, {
@@ -2865,7 +2857,6 @@ function TicketWorkspace({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tickets'] })
       setToast(mode === 'edit' ? 'Ticket actualizado' : 'Ticket guardado')
-      setSelectedExtras([])
       setLavadorQuery('')
       setTimeout(onSaved, 500)
     },
@@ -3325,53 +3316,6 @@ function TicketWorkspace({
                   </p>
                 )}
 
-                {/* Extras */}
-                <div>
-                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Extras del inventario</p>
-                  {(() => {
-                    const all = (products.data ?? []).filter((p) => p.active)
-                    const toggle = (label: string) =>
-                      setSelectedExtras((prev) =>
-                        prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]
-                      )
-                    if (products.isLoading) return <p className="text-xs text-ink-400">Cargando productos...</p>
-                    if (all.length === 0) return <p className="text-xs text-ink-400">No hay productos activos en el inventario.</p>
-                    return (
-                      <>
-                        <div className="flex flex-wrap gap-2">
-                          {all.map((p) => {
-                            const active = selectedExtras.includes(p.name)
-                            return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => toggle(p.name)}
-                                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all duration-150 ${
-                                  active
-                                    ? 'border-violet-400 bg-violet-600 text-white shadow-[0_2px_10px_rgba(124,58,237,0.30)]'
-                                    : 'border-border-soft bg-white text-ink-700 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'
-                                }`}
-                              >
-                                {active && (
-                                  <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                )}
-                                {p.name}
-                                {p.currentUnitPrice > 0 && (
-                                  <span className={`text-[10px] font-normal ${active ? 'text-white/60' : 'text-ink-400'}`}>{money(p.currentUnitPrice, 'MXN')}</span>
-                                )}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {selectedExtras.length > 0 && (
-                          <p className="mt-2.5 text-xs text-ink-400">Se agregaran a las notas: <span className="font-medium text-ink-600">{selectedExtras.join(', ')}</span></p>
-                        )}
-                      </>
-                    )
-                  })()}
-                </div>
               </div>
             </div>
           )}
@@ -3546,6 +3490,8 @@ function CatalogsScreen() {
   const [showAddService, setShowAddService] = useState(false)
   const [showAddSize, setShowAddSize] = useState(false)
   const [showAddPrice, setShowAddPrice] = useState(false)
+  const [editingPrices, setEditingPrices] = useState(false)
+  const { hasRole } = useAuth()
   const data = usePhaseData()
   const openShifts = (data.shifts.data ?? []).filter((shift) => shift.status === 'OPEN')
 
@@ -3707,6 +3653,19 @@ function CatalogsScreen() {
       showToast('Precio guardado')
       setShowAddPrice(false)
     },
+  })
+
+  const quickUpdatePrice = useMutation({
+    mutationFn: (values: { serviceTypeId: number; vehicleSizeId: number; amount: number }) =>
+      api<ServicePrice>('/api/v1/service-prices/quick-update', {
+        method: 'POST',
+        body: JSON.stringify({ serviceTypeId: values.serviceTypeId, vehicleSizeId: values.vehicleSizeId, amount: values.amount, currency: 'MXN' }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-prices'] })
+      showToast('Precio actualizado')
+    },
+    onError: () => showToast('Error al guardar precio'),
   })
 
   const openBusinessDay = useMutation({
@@ -3894,9 +3853,20 @@ function CatalogsScreen() {
           <Panel title="Precios">
             <div className="mb-4 flex items-center justify-between">
               <p className="text-[12.5px] text-ink-500">Precios vigentes hoy, agrupados por tipo de vehículo.</p>
-              <Button kind="ghost" size="sm" onClick={() => setShowAddPrice(!showAddPrice)}>
-                {showAddPrice ? 'Cancelar' : '+ Agregar precio'}
-              </Button>
+              <div className="flex items-center gap-2">
+                {hasRole('DUENO') && (
+                  <Button
+                    kind={editingPrices ? 'go' : 'ghost'}
+                    size="sm"
+                    onClick={() => setEditingPrices(!editingPrices)}
+                  >
+                    {editingPrices ? 'Listo' : 'Editar precios'}
+                  </Button>
+                )}
+                <Button kind="ghost" size="sm" onClick={() => setShowAddPrice(!showAddPrice)}>
+                  {showAddPrice ? 'Cancelar' : '+ Agregar precio'}
+                </Button>
+              </div>
             </div>
             {showAddPrice && (
               <div className="mb-5">
@@ -3951,13 +3921,32 @@ function CatalogsScreen() {
                       {group.szIds.map(szId => (
                         <tr key={szId}>
                           <td className="font-medium">{group.szName[szId]}</td>
-                          {group.svcIds.map(svcId => (
-                            <td key={svcId} className="r tabular-nums">
-                              {group.priceMap[`${svcId}-${szId}`] !== undefined
-                                ? money(group.priceMap[`${svcId}-${szId}`], 'MXN')
-                                : <span className="text-ink-300">—</span>}
-                            </td>
-                          ))}
+                          {group.svcIds.map(svcId => {
+                            const currentAmount = group.priceMap[`${svcId}-${szId}`]
+                            return (
+                              <td key={svcId} className="r tabular-nums p-1">
+                                {editingPrices && currentAmount !== undefined ? (
+                                  <input
+                                    key={`${svcId}-${szId}-${currentAmount}`}
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0.01"
+                                    step="1"
+                                    defaultValue={currentAmount}
+                                    onBlur={(e) => {
+                                      const val = Number(e.target.value)
+                                      if (val > 0 && val !== currentAmount) {
+                                        quickUpdatePrice.mutate({ serviceTypeId: svcId, vehicleSizeId: szId, amount: val })
+                                      }
+                                    }}
+                                    className="w-20 rounded border border-border-soft bg-white px-1.5 py-0.5 text-right text-sm tabular-nums focus:border-blue-400 focus:outline-none"
+                                  />
+                                ) : currentAmount !== undefined
+                                  ? money(currentAmount, 'MXN')
+                                  : <span className="text-ink-300">—</span>}
+                              </td>
+                            )
+                          })}
                         </tr>
                       ))}
                     </tbody>
