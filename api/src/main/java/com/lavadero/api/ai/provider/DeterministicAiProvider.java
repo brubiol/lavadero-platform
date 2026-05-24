@@ -12,6 +12,7 @@ public class DeterministicAiProvider implements AiProvider {
             case MONTHLY_ADVISOR -> "Revision mensual generada con datos historicos y operativos. Prioriza caja, gastos e inventario.";
             case ANALYST_CHAT -> "Respuesta basada en los reportes disponibles. Usa los numeros de soporte para tomar la decision.";
             case AGENT_INVESTIGATION -> "Investigacion completada usando resumen diario, historico, caja, lavadores e inventario.";
+            case DEMAND_FORECAST -> "Pronostico de demanda generado con datos historicos y operacionales. Usa los rangos para planear personal y caja.";
         };
     }
 
