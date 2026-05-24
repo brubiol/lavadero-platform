@@ -16,6 +16,20 @@ public final class AiDtos {
     private AiDtos() {
     }
 
+    /**
+     * Health snapshot of the AI provider. Exposed via GET /api/v1/ai/status so
+     * the UI can surface a degraded banner instead of silently serving template
+     * responses when the upstream LLM is failing.
+     */
+    public record AiStatusResponse(
+            boolean degraded,
+            String providerLabel,
+            Instant lastCheckAt,
+            Instant lastHealthyAt,
+            String reasonCode,
+            String detail) {
+    }
+
     public record AiInsightResponse(Long id, AiFeatureType featureType, AiInsightSeverity severity,
             String title, String summary, JsonNode details, LocalDate sourceFrom, LocalDate sourceTo,
             AiInsightStatus status, String generatedBy, Instant generatedAt, Instant createdAt, Instant updatedAt) {

@@ -504,7 +504,29 @@ type HistoricalRangeResponse = {
   days: HistoricalSnapshotRow[]
 }
 
-type AiFeatureType = 'DAILY_BRIEF' | 'ANOMALY_ALERT' | 'MONTHLY_ADVISOR' | 'ANALYST_CHAT' | 'AGENT_INVESTIGATION'
+type AiFeatureType = 'DAILY_BRIEF' | 'ANOMALY_ALERT' | 'MONTHLY_ADVISOR' | 'ANALYST_CHAT' | 'AGENT_INVESTIGATION' | 'DEMAND_FORECAST'
+
+type ForecastPointResponse = {
+  date: string
+  predictedCars: number
+  predictedCarsLow: number
+  predictedCarsHigh: number
+  predictedRevenueMxn: number
+  predictedRevenueMxnLow: number
+  predictedRevenueMxnHigh: number
+  expectedPrecipitationMm?: number | null
+  expectedTempMaxC?: number | null
+}
+
+type ForecastResponse = {
+  snapshotDate: string
+  generatedAt: string
+  modelVersion: string
+  horizonDays: number
+  carsBacktestMape: number | null
+  revenueBacktestMape: number | null
+  points: ForecastPointResponse[]
+}
 type AiSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
 type AiInsightStatus = 'NEW' | 'ACKNOWLEDGED' | 'DISMISSED'
 type InvestigationConfidence = 'LOW' | 'MEDIUM' | 'HIGH'
@@ -571,6 +593,15 @@ type TodayResponse = {
   warningCount: number
   summary: TodaySummary
   previousDay: TodaySummary | null
+}
+
+type AiStatusResponse = {
+  degraded: boolean
+  providerLabel: string | null
+  lastCheckAt: string | null
+  lastHealthyAt: string | null
+  reasonCode: string | null
+  detail: string | null
 }
 
 type ChatMessage =
@@ -1875,6 +1906,30 @@ function AiScreen() {
     queryFn: () => api<QuickPromptsResponse>('/api/v1/ai/quick-prompts'),
   })
 
+  // Provider health — drives the "AI degraded" banner so we never silently
+  // serve fallback responses without telling the operator.
+  const aiStatus = useQuery<AiStatusResponse>({
+    queryKey: ['ai-status'],
+    queryFn: () => api<AiStatusResponse>('/api/v1/ai/status'),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  })
+
+  // 7-day demand forecast — DUENO-only; surfaced above the chat panel.
+  const forecast = useQuery<ForecastResponse>({
+    queryKey: ['ai-forecast', 'upcoming'],
+    queryFn: () => api<ForecastResponse>('/api/v1/ai/forecast/upcoming?days=7'),
+    retry: false,
+  })
+
+  const recomputeForecast = useMutation({
+    mutationFn: () => api<ForecastResponse>('/api/v1/ai/forecast/run?days=7', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['ai-forecast'] })
+      await invalidateAi(queryClient)
+    },
+  })
+
   const deepPromptCategories: PromptCategory[] = [
     {
       key: 'caja',
@@ -2019,6 +2074,16 @@ function AiScreen() {
           </label>
         </div>
       </div>
+
+      <ForecastPanel
+        data={forecast.data}
+        isLoading={forecast.isLoading}
+        error={forecast.error as Error | null}
+        onRecompute={() => recomputeForecast.mutate()}
+        isRecomputing={recomputeForecast.isPending}
+      />
+
+      {aiStatus.data?.degraded && <AiDegradedBanner status={aiStatus.data} />}
 
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         {/* ─── Main chat panel ─────────────────────────────────── */}
@@ -2236,6 +2301,129 @@ function AiScreen() {
       </div>
     </section>
   )
+}
+
+// ── Demand forecast panel ──────────────────────────────────────
+// Renders 7 day-cards with predicted cars and revenue plus a low/high band.
+// Backtest MAPE is shown when at least 5 prior days of forecasts exist to compare.
+const FORECAST_DOW_LABELS = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom']
+
+function ForecastPanel({
+  data,
+  isLoading,
+  error,
+  onRecompute,
+  isRecomputing,
+}: {
+  data: ForecastResponse | undefined
+  isLoading: boolean
+  error: Error | null
+  onRecompute: () => void
+  isRecomputing: boolean
+}) {
+  const empty = !isLoading && !data && error
+  return (
+    <div className="tl-panel overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 via-sky-600 to-indigo-700 text-white shadow-[0_2px_8px_rgba(2,132,199,0.30)]">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 17l6-6 4 4 8-8" />
+              <path d="M14 7h7v7" />
+            </svg>
+          </span>
+          <div>
+            <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">Pronóstico de demanda</h3>
+            <p className="text-[10.5px] text-ink-500">
+              {data
+                ? `7 días desde ${data.snapshotDate} · ${formatForecastAccuracy(data)}`
+                : 'Aún no se ha generado un pronóstico'}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRecompute}
+          disabled={isRecomputing}
+          className="inline-flex items-center gap-1.5 rounded-full bg-ink-900 px-3.5 py-1.5 text-[11.5px] font-semibold text-white shadow-sm transition-colors hover:bg-ink-800 disabled:opacity-50"
+        >
+          {isRecomputing ? 'Recalculando…' : 'Recalcular'}
+        </button>
+      </div>
+
+      <div className="px-5 py-4">
+        {isLoading ? (
+          <p className="text-[12px] text-ink-500">Cargando pronóstico…</p>
+        ) : empty ? (
+          <p className="text-[12px] text-ink-500">
+            No hay datos suficientes todavía. Presiona <span className="font-semibold">Recalcular</span> para generar el primer pronóstico.
+          </p>
+        ) : data ? (
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {data.points.map((p) => (
+              <ForecastDayCard key={p.date} point={p} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function ForecastDayCard({ point }: { point: ForecastPointResponse }) {
+  const d = new Date(point.date + 'T00:00:00')
+  const dow = FORECAST_DOW_LABELS[(d.getDay() + 6) % 7]
+  const day = d.getDate()
+  const precip = point.expectedPrecipitationMm ?? null
+  const tempMax = point.expectedTempMaxC ?? null
+  const hasRain = precip != null && precip >= 1
+  return (
+    <div className="min-w-[120px] flex-1 rounded-xl border border-border-soft bg-white px-3 py-3 shadow-sm">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">{dow}</span>
+        <span className="text-[11px] font-semibold text-ink-500">{day}</span>
+      </div>
+      <div className="mt-2 text-[24px] font-bold leading-none tracking-[-0.02em] text-ink-900">
+        {point.predictedCars}
+      </div>
+      <div className="text-[10.5px] text-ink-400">carros estimados</div>
+      <div className="mt-2 text-[12px] font-semibold text-ink-700">
+        ${formatPesos(point.predictedRevenueMxn)}
+      </div>
+      <div className="mt-1 text-[10px] text-ink-400">
+        {point.predictedCarsLow}–{point.predictedCarsHigh} · ${formatPesosShort(point.predictedRevenueMxnLow)}–${formatPesosShort(point.predictedRevenueMxnHigh)}
+      </div>
+      {(hasRain || tempMax != null) && (
+        <div className="mt-2 flex items-center gap-1.5 border-t border-border-soft pt-1.5 text-[10px] text-ink-500">
+          {hasRain && (
+            <span className="inline-flex items-center gap-0.5 font-semibold text-sky-600">
+              <span aria-hidden>🌧</span> {precip!.toFixed(1)}mm
+            </span>
+          )}
+          {tempMax != null && (
+            <span className="inline-flex items-center text-ink-400">
+              {hasRain ? '·' : ''} {Math.round(tempMax)}°C
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatPesos(value: number): string {
+  return Math.round(value).toLocaleString('es-MX')
+}
+
+function formatPesosShort(value: number): string {
+  if (value >= 1000) return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  return Math.round(value).toString()
+}
+
+function formatForecastAccuracy(data: ForecastResponse): string {
+  const carsMape = data.carsBacktestMape
+  if (carsMape == null) return 'precisión: aún sin historial'
+  return `precisión últimos 30 días: ±${Math.round(carsMape * 100)}%`
 }
 
 // ── Single chat message ────────────────────────────────────────
@@ -2465,6 +2653,48 @@ function AiChatMessage({ msg, onAskAgain }: { msg: ChatMessage; onAskAgain: (q: 
 // Shared right-rail card chrome. The three AI rail cards (Today, Alerts,
 // History) all share the same border-bottom header with a colored rail,
 // title, and optional right-side slot.
+// Banner shown when the upstream AI provider is degraded. Polled every 30s
+// from /api/v1/ai/status. Without this, the deterministic local fallback
+// served generic template responses silently and the operator had no way to
+// know the real LLM was down.
+function AiDegradedBanner({ status }: { status: AiStatusResponse }) {
+  const reason = (() => {
+    switch (status.reasonCode) {
+      case 'disabled':       return 'AI deshabilitada en la configuración.'
+      case 'no-api-key':     return 'Falta la API key del proveedor.'
+      case 'misconfigured':  return 'Proveedor mal configurado.'
+      case 'empty-response': return 'El proveedor respondió vacío.'
+      default: {
+        if (!status.reasonCode) return 'Usando respuestas locales.'
+        if (status.reasonCode.startsWith('http-')) {
+          const code = status.reasonCode.slice(5)
+          if (code === '401' || code === '403') return 'Clave de API inválida o sin permisos.'
+          if (code === '404') return 'El modelo configurado no existe o no tienes acceso.'
+          if (code === '429') return 'Sin crédito o límite de uso alcanzado en el proveedor.'
+          if (code.startsWith('5')) return 'El proveedor está caído (error ' + code + ').'
+          return 'El proveedor respondió con error ' + code + '.'
+        }
+        return 'Falla del proveedor (' + status.reasonCode + ').'
+      }
+    }
+  })()
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-[12.5px] text-amber-900">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-900 font-bold">!</span>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold">AI fuera de línea — usando respuestas locales.</p>
+        <p className="mt-0.5 text-amber-800">
+          {reason}
+          {status.providerLabel && <span className="ml-1.5 text-[11px] text-amber-700">· {status.providerLabel}</span>}
+        </p>
+        {status.detail && (
+          <p className="mt-1 text-[11px] font-mono text-amber-700 break-all opacity-80">{status.detail}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AiRailCard({
   title,
   rail,
@@ -7830,6 +8060,7 @@ function featureLabel(feature: AiFeatureType) {
     MONTHLY_ADVISOR: 'Consejo mensual',
     ANALYST_CHAT: 'Chat',
     AGENT_INVESTIGATION: 'Investigacion',
+    DEMAND_FORECAST: 'Pronóstico',
   }
   return labels[feature]
 }

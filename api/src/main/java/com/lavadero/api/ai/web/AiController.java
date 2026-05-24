@@ -2,8 +2,10 @@ package com.lavadero.api.ai.web;
 
 import com.lavadero.api.ai.domain.AiFeatureType;
 import com.lavadero.api.ai.domain.AiInsightStatus;
+import com.lavadero.api.ai.provider.ConfiguredAiProvider;
 import com.lavadero.api.ai.service.AiInsightService;
 import com.lavadero.api.ai.web.AiDtos.AiInsightResponse;
+import com.lavadero.api.ai.web.AiDtos.AiStatusResponse;
 import com.lavadero.api.ai.web.AiDtos.AnalystChatRequest;
 import com.lavadero.api.ai.web.AiDtos.AnalystChatResponse;
 import com.lavadero.api.ai.web.AiDtos.InvestigationRequest;
@@ -26,9 +28,29 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/ai")
 public class AiController {
     private final AiInsightService ai;
+    private final ConfiguredAiProvider provider;
 
-    public AiController(AiInsightService ai) {
+    public AiController(AiInsightService ai, ConfiguredAiProvider provider) {
         this.ai = ai;
+        this.provider = provider;
+    }
+
+    /**
+     * Health of the upstream AI provider. Returns {@code degraded=true} when
+     * the last call fell back to the deterministic provider for any reason
+     * (HTTP error, missing key, timeout, empty response). UI uses this to
+     * show a "AI offline, using local fallback" banner.
+     */
+    @GetMapping("/status")
+    public AiStatusResponse status() {
+        ConfiguredAiProvider.ProviderStatus s = provider.status();
+        return new AiStatusResponse(
+                s.degraded(),
+                s.providerLabel(),
+                s.lastCheckAt(),
+                s.lastHealthyAt(),
+                s.reasonCode(),
+                s.detail());
     }
 
     @GetMapping("/insights")
