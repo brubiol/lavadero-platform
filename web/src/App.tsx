@@ -1732,32 +1732,36 @@ function Dashboard() {
               {(data?.recentTickets ?? []).map((ticket) => {
                 const occurred = ticket.occurredAt ?? ticket.createdAt
                 const timeStr = new Date(occurred).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+                const lavadorNames = ticket.assignments.map((a) => a.employeeName)
                 return (
                   <tr key={ticket.id}>
-                    <td className="font-mono text-[12px] text-ink-500">{timeStr}</td>
+                    <td className="font-mono text-[12px] text-ink-500 tabular-nums">{timeStr}</td>
                     <td className="font-semibold">
                       {ticket.internalRef || ticket.notaNumber}
-                      <p className="mt-0.5 text-[11px] font-normal text-ink-400">{ticket.notaNumber}</p>
+                      <p className="mt-0.5 font-mono text-[11px] font-normal text-ink-400">{ticket.notaNumber}</p>
                     </td>
                     <td>
                       <span>{ticket.vehicleDescription || '-'}</span>
-                      {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
+                      {ticket.notes && <p className="mt-0.5 max-w-[24ch] truncate text-[11px] text-ink-400">{ticket.notes}</p>}
                     </td>
                     <td>{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
                     <td>
-                      <div className="flex flex-wrap gap-1">
-                        {ticket.assignments.map((a) => (
-                          <span key={a.employeeId} className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-                            {a.employeeName.split(' ')[0]}
-                          </span>
-                        ))}
+                      <div className="inline-flex items-center gap-2">
+                        <Avatars names={lavadorNames} max={3} />
+                        <span className="text-[11.5px] text-ink-600">
+                          {lavadorNames.length === 0
+                            ? <em className="italic text-ink-400">—</em>
+                            : lavadorNames.length === 1
+                              ? lavadorNames[0].split(' ')[0]
+                              : `${lavadorNames.length} lavadores`}
+                        </span>
                       </div>
                     </td>
-                    <td className="r">{money(ticket.priceAmount, ticket.currency)}</td>
-                    <td><PaymentPill ticket={ticket} /></td>
-                    <td>
-                      <TicketStatusPill ticket={ticket} />
+                    <td className="r font-semibold tabular-nums">
+                      {ticket.courtesy ? <span className="italic text-amber-600">GRATIS</span> : money(ticket.priceAmount, ticket.currency)}
                     </td>
+                    <td><PaymentPill ticket={ticket} /></td>
+                    <td><TicketStatusPill ticket={ticket} /></td>
                   </tr>
                 )
               })}
@@ -3019,10 +3023,11 @@ function paymentLabel(method: PaymentMethod): string {
 }
 
 /**
- * Read-only summary of a saved ticket. Replaces the old "open the edit form
- * to see what was captured" UX with a glanceable card that shows every
- * persisted reason and amount in one place. Managers get an "Editar" button
- * that flips the parent modal into edit mode.
+ * Read-only summary of a saved ticket. Hero + Panel-wrapped detail sections.
+ * The Desglose section uses the same `tl-receipt` markup as the create form's
+ * live preview so the saved ticket feels like the printed version of what was
+ * captured. Managers get an "Editar" button that flips the parent modal into
+ * edit mode.
  */
 function TicketDetail({
   ticket,
@@ -3044,180 +3049,239 @@ function TicketDetail({
   const discountPct = Number(ticket.discountPercent ?? 0)
   const finalAmount = Number(ticket.priceAmount)
   const isVoid = ticket.status === 'VOIDED'
+  const hasMotivos = ticket.courtesy
+    || (ticket.courtesyReason && ticket.courtesyReason.trim().length > 0)
+    || (ticket.discountReason && ticket.discountReason.trim().length > 0 && discountPct > 0)
+    || (ticket.surchargeReason && ticket.surchargeReason.trim().length > 0 && surcharge > 0)
 
-  const Row = ({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: string; tone?: 'good' | 'warn' | 'bad' }) => {
-    const valueClass =
-      tone === 'good' ? 'text-emerald-700'
-      : tone === 'warn' ? 'text-amber-700'
-      : tone === 'bad' ? 'text-red-700'
-      : 'text-ink-900'
-    return (
-      <div className="flex items-start justify-between gap-4 py-1.5">
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-400">{label}</p>
-          {hint && <p className="text-[11.5px] text-ink-400">{hint}</p>}
-        </div>
-        <p className={`text-right text-[13.5px] font-semibold tabular-nums ${valueClass}`}>{value}</p>
-      </div>
-    )
-  }
+  const heroGradient = isVoid
+    ? 'radial-gradient(circle at 100% 0%, rgba(248,113,113,0.12), transparent 55%), linear-gradient(140deg, #1f2937 0%, #374151 60%, #4b5563 130%)'
+    : ticket.courtesy
+      ? 'radial-gradient(circle at 100% 0%, rgba(251,191,36,0.18), transparent 55%), linear-gradient(140deg, #5a3210 0%, #8a4d10 60%, #b8731c 130%)'
+      : 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.16), transparent 55%), linear-gradient(140deg, #15091f 0%, #2f164a 55%, #1a6f2f 130%)'
 
   return (
-    <section className="space-y-4">
-      {/* ─── Hero: nota + status + service ─── */}
-      <header className="overflow-hidden rounded-2xl border border-border-soft bg-white shadow-sm">
+    <section className="space-y-3" data-testid="ticket-detail">
+      <header
+        className="relative overflow-hidden rounded-2xl px-6 py-5 text-white shadow-md"
+        style={{ background: heroGradient }}
+      >
         <div
-          className="relative px-5 py-5 text-white"
-          style={{ background: ticket.courtesy
-            ? 'linear-gradient(140deg, #78350f 0%, #b45309 100%)'
-            : isVoid
-              ? 'linear-gradient(140deg, #4b5563 0%, #1f2937 100%)'
-              : 'linear-gradient(140deg, #1a0f2e 0%, #3b1d5c 60%, #1f8a3d 130%)'
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.95) 1px, transparent 1px)',
+            backgroundSize: '18px 18px',
           }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/60">
-                Ticket {ticket.internalRef ? `· Nº ${ticket.internalRef}` : `· #${ticket.notaNumber}`}
-              </p>
-              <p className="mt-1 truncate font-display text-[20px] font-bold leading-tight tracking-[-0.02em]">
-                {ticket.serviceTypeName} <span className="text-white/60">·</span> {ticket.vehicleSizeName}
-              </p>
-              <p className="mt-1 text-[12.5px] font-medium text-white/70">
-                {formatDateTime(ticket.occurredAt ?? ticket.createdAt)}
-              </p>
-            </div>
-            <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
-              isVoid ? 'bg-red-500/20 text-red-100 ring-1 ring-red-300/40'
-              : ticket.courtesy ? 'bg-amber-200/30 text-amber-100 ring-1 ring-amber-200/40'
-              : 'bg-emerald-400/20 text-emerald-100 ring-1 ring-emerald-300/40'
-            }`}>
-              {isVoid ? 'Cancelado' : ticket.courtesy ? 'Cortesía' : 'Activo'}
-            </span>
+        />
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/55">
+              Ticket {ticket.internalRef ? `· Nº ${ticket.internalRef}` : `· ${ticket.notaNumber}`}
+            </p>
+            <h2 className="mt-1.5 truncate font-display text-[22px] font-bold leading-[1.15] tracking-[-0.025em]">
+              {ticket.serviceTypeName} <span className="text-white/50">·</span> {ticket.vehicleSizeName}
+            </h2>
+            <p className="mt-1.5 text-[12.5px] font-medium text-white/65">
+              {formatDateTime(ticket.occurredAt ?? ticket.createdAt)}
+            </p>
           </div>
+          <span className={`shrink-0 rounded-full px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.1em] backdrop-blur-sm ${
+            isVoid ? 'bg-red-500/25 text-red-100 ring-1 ring-red-300/40'
+            : ticket.courtesy ? 'bg-amber-200/25 text-amber-50 ring-1 ring-amber-200/40'
+            : 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-300/40'
+          }`}>
+            {isVoid ? 'Cancelado' : ticket.courtesy ? 'Cortesía' : 'Activo'}
+          </span>
+        </div>
 
-          <div className="mt-4 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">
-                {ticket.courtesy ? 'Sin cobro' : 'Total cobrado'}
-              </p>
-              <p className="font-display text-[36px] font-black leading-none tracking-[-0.03em] tabular-nums">
-                {ticket.courtesy ? 'GRATIS' : money(finalAmount, ticket.currency)}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">Pago</p>
-              <p className="text-[13.5px] font-semibold">
-                {ticket.courtesy ? 'N/A' : paymentLabel(ticket.paymentMethod)}
-              </p>
-            </div>
+        <div className="relative my-4">
+          <div className="absolute -left-7 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
+          <div className="absolute -right-7 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
+          <div className="border-t border-dashed border-white/25" />
+        </div>
+
+        <div className="relative flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white/55">
+              {ticket.courtesy ? 'Sin cobro' : 'Total cobrado'}
+            </p>
+            <p
+              className="font-display text-[40px] font-black leading-none tracking-[-0.035em]"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {ticket.courtesy ? 'GRATIS' : money(finalAmount, ticket.currency)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white/55">Pago</p>
+            <p className="mt-0.5 text-[14px] font-semibold">
+              {ticket.courtesy ? 'N/A' : paymentLabel(ticket.paymentMethod)}
+            </p>
           </div>
         </div>
       </header>
 
-      {/* ─── Captura ─── */}
-      <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
-        <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Captura</h4>
-        <div className="divide-y divide-dashed divide-border-soft">
-          <Row label="Lavadores" value={lavadores.length ? lavadores.join(', ') : <span className="italic text-ink-400">Ninguno</span>} />
-          <Row label="Descripción del vehículo" value={ticket.vehicleDescription || <span className="italic text-ink-400">—</span>} />
-          {ticket.internalRef && <Row label="No. de nota" value={ticket.internalRef} />}
-        </div>
-      </div>
-
-      {/* ─── Desglose del precio ─── */}
-      {!ticket.courtesy && (
-        <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
-          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Desglose del precio</h4>
-          <div className="divide-y divide-dashed divide-border-soft">
-            {override != null ? (
-              <Row label="Precio especial" hint="Override manual — sin descuento/cargo aplicado" value={money(override, ticket.currency)} />
-            ) : (
-              <>
-                <Row label="Precio base" value={money(basePrice, ticket.currency)} />
-                {discountPct > 0 && (
-                  <Row
-                    label={`Descuento ${discountPct}%`}
-                    hint={ticket.discountReason || undefined}
-                    value={`−${money(basePrice * discountPct / 100, ticket.currency)}`}
-                    tone="good"
-                  />
-                )}
-                {surcharge > 0 && (
-                  <Row
-                    label="Cargo extra"
-                    hint={ticket.surchargeReason || undefined}
-                    value={`+${money(surcharge, ticket.currency)}`}
-                    tone="warn"
-                  />
-                )}
-              </>
-            )}
-            <div className="mt-1 flex items-baseline justify-between border-t-2 border-ink-200 pt-2.5">
-              <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-700">Total</span>
-              <span className="font-display text-[18px] font-black tabular-nums text-ink-900">
-                {money(finalAmount, ticket.currency)}
+      <Panel title="Detalles del servicio">
+        <div className="tl-srow">
+          <span className="k">Lavadores</span>
+          <span className="v">
+            {lavadores.length > 0 ? (
+              <span className="inline-flex items-center gap-2">
+                <Avatars names={lavadores} max={5} />
+                <span className="text-[12.5px] font-medium text-ink-700">
+                  {lavadores.join(', ')}
+                </span>
               </span>
-            </div>
+            ) : (
+              <span className="italic text-ink-400">Ninguno</span>
+            )}
+          </span>
+        </div>
+        <div className="tl-srow">
+          <span className="k">Descripción del vehículo</span>
+          <span className="v">{ticket.vehicleDescription || <span className="italic text-ink-400">—</span>}</span>
+        </div>
+        {ticket.internalRef && (
+          <div className="tl-srow">
+            <span className="k">No. de nota</span>
+            <span className="v font-mono">{ticket.internalRef}</span>
+          </div>
+        )}
+      </Panel>
+
+      {/* Desglose — same tl-receipt as create-form sidebar for visual continuity */}
+      {!ticket.courtesy && (
+        <div className="tl-receipt">
+          <div className="head">
+            <h4>Desglose del precio</h4>
+            <span>{ticket.currency}</span>
+          </div>
+          <hr />
+          {override != null ? (
+            <>
+              <div className="ln">
+                <span>Precio especial</span>
+                <b>{money(override, ticket.currency)}</b>
+              </div>
+              <p className="text-[10.5px] italic text-ink-400">
+                Override manual — sin descuento/cargo aplicado
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="ln">
+                <span>Precio base</span>
+                <b>{money(basePrice, ticket.currency)}</b>
+              </div>
+              {discountPct > 0 && (
+                <>
+                  <div className="ln">
+                    <span>Descuento {discountPct}%</span>
+                    <b style={{ color: 'var(--good-700)' }}>−{money(basePrice * discountPct / 100, ticket.currency)}</b>
+                  </div>
+                  {ticket.discountReason && (
+                    <p className="-mt-1 pl-1 text-[10.5px] italic text-ink-400">↳ {ticket.discountReason}</p>
+                  )}
+                </>
+              )}
+              {surcharge > 0 && (
+                <>
+                  <div className="ln">
+                    <span>Cargo extra</span>
+                    <b style={{ color: 'var(--warn-700)' }}>+{money(surcharge, ticket.currency)}</b>
+                  </div>
+                  {ticket.surchargeReason && (
+                    <p className="-mt-1 pl-1 text-[10.5px] italic text-ink-400">↳ {ticket.surchargeReason}</p>
+                  )}
+                </>
+              )}
+            </>
+          )}
+          <hr />
+          <div className="ln tot">
+            <span>Total</span>
+            <b>{money(finalAmount, ticket.currency)}</b>
           </div>
         </div>
       )}
 
-      {/* ─── Motivos ─── */}
-      {(ticket.courtesy || ticket.courtesyReason || ticket.discountReason || ticket.surchargeReason) && (
-        <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
-          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Motivos</h4>
-          <div className="space-y-2">
+      {hasMotivos && (
+        <Panel title="Motivos registrados">
+          <div className="space-y-2.5">
             {ticket.courtesy && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-700">Cortesía</p>
-                <p className="text-[13px] text-amber-900">{ticket.courtesyReason || <span className="italic text-amber-600">Sin motivo registrado</span>}</p>
+              <div className="flex gap-3 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3.5 py-2.5">
+                <div className="w-0.5 self-stretch rounded-full bg-amber-400" />
+                <div className="min-w-0">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-amber-700">Cortesía</p>
+                  <p className="mt-0.5 text-[13px] leading-snug text-amber-900">
+                    {ticket.courtesyReason || <span className="italic text-amber-600">Sin motivo registrado</span>}
+                  </p>
+                </div>
               </div>
             )}
             {ticket.discountReason && discountPct > 0 && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">Motivo del descuento ({discountPct}%)</p>
-                <p className="text-[13px] text-emerald-900">{ticket.discountReason}</p>
+              <div className="flex gap-3 rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3.5 py-2.5">
+                <div className="w-0.5 self-stretch rounded-full bg-emerald-500" />
+                <div className="min-w-0">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-emerald-700">
+                    Motivo del descuento · {discountPct}%
+                  </p>
+                  <p className="mt-0.5 text-[13px] leading-snug text-emerald-900">{ticket.discountReason}</p>
+                </div>
               </div>
             )}
             {ticket.surchargeReason && surcharge > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-700">Motivo del cargo ({money(surcharge, ticket.currency)})</p>
-                <p className="text-[13px] text-amber-900">{ticket.surchargeReason}</p>
+              <div className="flex gap-3 rounded-xl border border-amber-200/70 bg-amber-50/50 px-3.5 py-2.5">
+                <div className="w-0.5 self-stretch rounded-full bg-amber-500" />
+                <div className="min-w-0">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-amber-700">
+                    Motivo del cargo · {money(surcharge, ticket.currency)}
+                  </p>
+                  <p className="mt-0.5 text-[13px] leading-snug text-amber-900">{ticket.surchargeReason}</p>
+                </div>
               </div>
+            )}
+          </div>
+        </Panel>
+      )}
+
+      {ticket.notes && (
+        <Panel title="Notas internas">
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-800">{ticket.notes}</p>
+        </Panel>
+      )}
+
+      {isVoid && (
+        <div className="flex gap-3 rounded-2xl border border-red-200 bg-red-50/60 px-4 py-3">
+          <div className="w-0.5 self-stretch rounded-full bg-red-500" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-red-700">Ticket cancelado</p>
+            <p className="mt-0.5 text-[13px] leading-snug text-red-900">
+              {ticket.voidReason || <span className="italic text-red-500">Sin motivo registrado</span>}
+            </p>
+            {ticket.voidedAt && (
+              <p className="mt-1 text-[11px] text-red-600">Cancelado el {formatDateTime(ticket.voidedAt)}</p>
             )}
           </div>
         </div>
       )}
 
-      {/* ─── Notas ─── */}
-      {ticket.notes && (
-        <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
-          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Notas internas</h4>
-          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-800">{ticket.notes}</p>
-        </div>
-      )}
-
-      {/* ─── Cancelación ─── */}
-      {isVoid && (
-        <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4">
-          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-red-700">Ticket cancelado</h4>
-          <p className="text-[13px] text-red-800">{ticket.voidReason || <span className="italic">Sin motivo registrado</span>}</p>
-          {ticket.voidedAt && <p className="mt-1 text-[11.5px] text-red-600">Cancelado el {formatDateTime(ticket.voidedAt)}</p>}
-        </div>
-      )}
-
-      {/* ─── Auditoría ─── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-border-soft bg-ink-50/40 px-4 py-2.5 text-[11.5px] text-ink-500">
-        <span>Capturado · {formatDateTime(ticket.createdAt)}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-border-soft bg-ink-50/40 px-4 py-2.5 text-[11px] text-ink-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-1 w-1 rounded-full bg-ink-400" />
+          Capturado · {formatDateTime(ticket.createdAt)}
+        </span>
         {ticket.updatedAt && ticket.updatedAt !== ticket.createdAt && (
-          <span>Última edición · {formatDateTime(ticket.updatedAt)}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-1 w-1 rounded-full bg-ink-400" />
+            Última edición · {formatDateTime(ticket.updatedAt)}
+          </span>
         )}
       </div>
 
-      {/* ─── Acciones ─── */}
       {canEdit && (onEdit || onVoid) && !isVoid && (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border-soft pt-3">
           {onVoid && <Button kind="ghost" onClick={onVoid}>Cancelar ticket</Button>}
           {onEdit && <Button kind="primary" onClick={onEdit}>Editar ticket</Button>}
         </div>
@@ -3524,8 +3588,15 @@ function TicketWorkspace({
           {/* ── DATOS DEL SERVICIO (flat layout per cashier wireframe) ── */}
           <div className="tl-panel overflow-hidden">
             {/* Header with title + Cortesía + Prepago checkboxes */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-ink-50/40 px-4 py-2.5">
-              <h3 className="text-[13.5px] font-bold uppercase tracking-[0.04em] text-ink-800">DATOS DEL SERVICIO</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-gradient-to-r from-ink-50/70 via-ink-50/30 to-transparent px-5 py-3">
+              <div>
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-ink-400">
+                  Captura del servicio
+                </p>
+                <h3 className="font-display text-[15px] font-bold leading-tight tracking-[-0.01em] text-ink-900">
+                  Datos del ticket
+                </h3>
+              </div>
               <div className="flex items-center gap-2">
                 <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-semibold transition-all duration-150 ${
                   watched.courtesy
@@ -3599,7 +3670,7 @@ function TicketWorkspace({
               </div>
             </div>
 
-            <div className="space-y-3.5 p-4">
+            <div className="space-y-5 p-5">
               {/* Row 1: Turno · Servicio · Vehículo · Forma de pago — Precio especial gets its own row below for breathing room. */}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {/* Turno (auto-locked, click to override) */}
@@ -3918,8 +3989,11 @@ function TicketWorkspace({
                   />
                 </div>
 
-                <fieldset className="rounded-xl border-2 border-border-soft p-3">
-                  <legend className="px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">EXTRAS</legend>
+                <fieldset className="rounded-xl border border-border-soft bg-ink-50/30 p-4">
+                  <legend className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500 shadow-xs">
+                    <span className="h-1 w-1 rounded-full bg-ink-300" />
+                    Ajustes
+                  </legend>
                   <div className="space-y-3">
                     {/* Cargo + Motivo del cargo */}
                     <div className="grid gap-2 grid-cols-[100px_1fr]">
@@ -3976,40 +4050,41 @@ function TicketWorkspace({
 
         </div>
 
-        {/* ── Sidebar: precio + submit ──────────────────────────── */}
+        {/* ── Sidebar: live receipt preview + submit ────────────── */}
         <aside>
           <div className="overflow-hidden rounded-2xl border border-border-soft bg-white shadow-md xl:sticky xl:top-4">
-            {/* Price hero */}
+            {/* ── Hero ─────────────────────────────────────────── */}
             <div
               className="relative px-6 py-6 text-center"
-              style={{ background: 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(140deg, #1a0f2e 0%, #3b1d5c 50%, #1f8a3d 130%)' }}
+              style={{ background: watched.courtesy
+                ? 'radial-gradient(circle at 100% 0%, rgba(251,191,36,0.22), transparent 55%), linear-gradient(140deg, #2a1808 0%, #5a3210 55%, #8a4d10 130%)'
+                : 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(140deg, #15091f 0%, #2f164a 55%, #1a6f2f 130%)'
+              }}
             >
-              {/* dot grid texture */}
               <div
+                aria-hidden
                 className="pointer-events-none absolute inset-0 opacity-[0.07]"
                 style={{
                   backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
                   backgroundSize: '18px 18px',
                 }}
               />
-              {/* Nota stamp */}
               {watched.internalRef && (
-                <div className="absolute right-3 top-3 rotate-[8deg]">
-                  <span className="inline-block rounded border-2 border-emerald-300/60 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                <div className="absolute right-3 top-3 rotate-[6deg]">
+                  <span className="inline-block rounded border-2 border-emerald-300/55 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-200">
                     Nº {watched.internalRef}
                   </span>
                 </div>
               )}
-              <p className="relative mb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">
+              <p className="relative mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/55">
                 {watched.courtesy ? 'Cortesía' : 'Total a cobrar'}
               </p>
               {livePrice === undefined ? (
-                <p className="font-display text-[24px] font-bold leading-none tracking-tight text-white/40">
-                  Selecciona servicio y vehículo…
+                <p className="relative font-display text-[22px] font-bold leading-tight tracking-tight text-white/40">
+                  Selecciona servicio<br />y vehículo…
                 </p>
               ) : watched.discountPercent > 0 && !watched.courtesy ? (
                 <div className="relative">
-                  {/* Original price strikethrough */}
                   {(() => {
                     const base = (data.prices.data ?? []).find((p) =>
                       p.serviceTypeId === Number(watched.serviceTypeId) &&
@@ -4017,24 +4092,31 @@ function TicketWorkspace({
                       p.currency === 'MXN'
                     )?.amount
                     return base ? (
-                      <p className="font-mono text-[14px] font-medium text-white/40 line-through">
+                      <p className="font-mono text-[13px] font-medium text-white/40 line-through">
                         {money(base, 'MXN')}
                       </p>
                     ) : null
                   })()}
-                  <p className="font-display text-[48px] font-black leading-none tracking-[-0.03em] text-emerald-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <p
+                    key={livePrice}
+                    className="font-display text-[44px] font-black leading-none tracking-[-0.035em] text-emerald-300 tl-fade-in"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  >
                     {money(livePrice, 'MXN')}
                   </p>
                   <span className="mt-2.5 inline-block rounded-full border border-amber-400/30 bg-amber-400/20 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
-                    -{watched.discountPercent}% descuento
+                    −{watched.discountPercent}% descuento
                   </span>
                 </div>
               ) : (
-                <p className="relative font-display text-[48px] font-black leading-none tracking-[-0.03em] text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <p
+                  key={watched.courtesy ? 'cortesia' : livePrice}
+                  className="relative font-display text-[44px] font-black leading-none tracking-[-0.035em] text-white tl-fade-in"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
                   {watched.courtesy ? 'GRATIS' : money(livePrice, 'MXN')}
                 </p>
               )}
-              {/* Hidden element preserving the legacy testid + text format for E2E assertions */}
               <span data-testid="summary-precio-preview-value" className="sr-only">
                 {livePrice === undefined
                   ? 'Sin precio'
@@ -4046,55 +4128,103 @@ function TicketWorkspace({
               </span>
             </div>
 
-            {/* Perforated divider */}
+            {/* ── Perforated divider ─────────────────────────── */}
             <div className="relative">
               <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
               <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
               <div className="border-t border-dashed border-border-soft" />
             </div>
 
-            {/* Receipt details */}
-            <div className="divide-y divide-dashed divide-border-soft px-5 py-1 font-mono text-[12.5px]">
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-ink-400">Lavadores</span>
-                <span className="font-semibold text-ink-800">
-                  {(watched.employeeIds ?? []).length > 0
-                    ? (data.employees.data ?? [])
-                        .filter((e) => (watched.employeeIds ?? []).map(Number).includes(e.id))
-                        .map((e) => e.fullName.split(' ')[0])
-                        .join(', ')
-                    : <em className="font-normal not-italic text-ink-300">Ninguno</em>}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-ink-400">Tipo</span>
-                <span className={`font-semibold ${watched.courtesy ? 'text-amber-600' : 'text-ink-800'}`}>
-                  {watched.courtesy ? 'Cortesía' : 'Venta'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-ink-400">Pago</span>
-                <span className="font-semibold text-ink-800">
-                  {watched.courtesy ? 'N/A' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Depósito' : 'Efectivo'}
-                </span>
-              </div>
-              {!watched.courtesy && Number(watched.surchargeAmount) > 0 && (
-                <div className="flex items-start justify-between gap-3 py-2.5">
-                  <span className="min-w-0 text-ink-400">
-                    Cargo extra
-                    {watched.surchargeReason?.trim() && (
-                      <span className="block text-[11px] text-ink-300">· {watched.surchargeReason.trim()}</span>
+            {/* ── Live receipt preview ──────────────────────────
+                Each line item fades in as the cashier fills the form,
+                so the receipt grows organically toward what gets saved. */}
+            {(() => {
+              const selectedSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
+              const selectedSize = (data.sizes.data ?? []).find((s) => s.id === Number(watched.vehicleSizeId))
+              const lavadorNames = (data.employees.data ?? [])
+                .filter((e) => (watched.employeeIds ?? []).map(Number).includes(e.id))
+                .map((e) => e.fullName.split(' ')[0])
+              const surchargeNum = Number(watched.surchargeAmount) || 0
+              const discountNum = Number(watched.discountPercent) || 0
+              const overrideNum = Number(watched.priceOverride) || 0
+              const ReceiptLn = ({ k, v, hint, tone }: { k: string; v: React.ReactNode; hint?: string; tone?: 'good' | 'warn' | 'bad' }) => {
+                const valueStyle = tone === 'good' ? { color: 'var(--good-700)' } : tone === 'warn' ? { color: 'var(--warn-700)' } : tone === 'bad' ? { color: 'var(--bad-700)' } : undefined
+                return (
+                  <div className="tl-fade-in">
+                    <div className="ln">
+                      <span>{k}</span>
+                      <b style={valueStyle}>{v}</b>
+                    </div>
+                    {hint && (
+                      <p className="-mt-1 truncate pl-1 text-[10.5px] italic text-ink-400" title={hint}>↳ {hint}</p>
                     )}
-                  </span>
-                  <span className="shrink-0 font-semibold text-amber-600">
-                    +{money(Number(watched.surchargeAmount), 'MXN')}
-                  </span>
+                  </div>
+                )
+              }
+              return (
+                <div className="tl-receipt" style={{ border: 0, borderRadius: 0, margin: 0, padding: '14px 20px' }}>
+                  <div className="head">
+                    <h4>Detalle</h4>
+                    <span>{data.currentBusinessDay?.businessDate ?? ''}</span>
+                  </div>
+                  <hr />
+                  {selectedSvc && <ReceiptLn k="Servicio" v={selectedSvc.name} />}
+                  {selectedSize && <ReceiptLn k="Vehículo" v={selectedSize.name} />}
+                  {lavadorNames.length > 0 && <ReceiptLn k="Lavadores" v={lavadorNames.join(', ')} />}
+                  <ReceiptLn
+                    k="Pago"
+                    v={watched.courtesy ? 'N/A (cortesía)' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Depósito' : 'Efectivo'}
+                  />
+                  {!watched.courtesy && overrideNum > 0 && (
+                    <ReceiptLn k="Precio especial" v={money(overrideNum, 'MXN')} />
+                  )}
+                  {!watched.courtesy && overrideNum === 0 && discountNum > 0 && (
+                    <ReceiptLn
+                      k={`Descuento ${discountNum}%`}
+                      v={(() => {
+                        const base = (data.prices.data ?? []).find((p) =>
+                          p.serviceTypeId === Number(watched.serviceTypeId)
+                          && p.vehicleSizeId === Number(watched.vehicleSizeId)
+                          && p.currency === 'MXN'
+                        )?.amount ?? 0
+                        return `−${money(base * discountNum / 100, 'MXN')}`
+                      })()}
+                      hint={watched.discountReason?.trim() || undefined}
+                      tone="good"
+                    />
+                  )}
+                  {!watched.courtesy && overrideNum === 0 && surchargeNum > 0 && (
+                    <ReceiptLn
+                      k="Cargo extra"
+                      v={`+${money(surchargeNum, 'MXN')}`}
+                      hint={watched.surchargeReason?.trim() || undefined}
+                      tone="warn"
+                    />
+                  )}
+                  {watched.courtesy && watched.courtesyReason?.trim() && (
+                    <ReceiptLn k="Motivo cortesía" v={watched.courtesyReason.trim()} tone="warn" />
+                  )}
+                  {watched.vehicleDescription?.trim() && (
+                    <ReceiptLn k="Descripción" v={watched.vehicleDescription.trim()} />
+                  )}
+                  {watched.notes?.trim() && (
+                    <ReceiptLn k="Notas" v={watched.notes.trim().length > 40 ? `${watched.notes.trim().slice(0, 40)}…` : watched.notes.trim()} />
+                  )}
+                  {livePrice !== undefined && !watched.courtesy && (
+                    <>
+                      <hr />
+                      <div className="ln tot tl-fade-in">
+                        <span>Total</span>
+                        <b>{money(livePrice, 'MXN')}</b>
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
+              )
+            })()}
 
-            {/* Submit */}
-            <div className="px-5 pb-5 pt-3">
+            {/* ── Submit ─────────────────────────────────────── */}
+            <div className="px-5 pb-5 pt-2">
               {save.error && (
                 <p className="mb-3 rounded-lg bg-bad-50 p-3 text-[12.5px] text-bad-700 ring-1 ring-bad-100">{save.error.message}</p>
               )}
@@ -4109,11 +4239,18 @@ function TicketWorkspace({
                   disabled={save.isPending || Boolean(disabledReason)}
                   testId="ticket-submit"
                 >
-                  {save.isPending ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Guardar ticket'}
+                  {save.isPending
+                    ? 'Guardando…'
+                    : mode === 'edit'
+                      ? 'Guardar cambios'
+                      : watched.courtesy
+                        ? 'Guardar cortesía'
+                        : livePrice && livePrice > 0
+                          ? `Cobrar ${money(livePrice, 'MXN')} y guardar`
+                          : 'Guardar ticket'}
                 </Button>
               )}
             </div>
-
           </div>
         </aside>
       </form>
@@ -7682,9 +7819,14 @@ function TicketsBrowser() {
   const activeList = activeCount.data ?? []
   const voidedList = voidedCount.data ?? []
   const totalCobrado = activeList.reduce((sum, t) => sum + t.priceAmount, 0)
+  // Average ticket: only count non-courtesy tickets so a comp wash doesn't
+  // distort the cashier's read on the day. Falls back to 0 with no tickets.
+  const billableList = activeList.filter((t) => !t.courtesy)
+  const importePromedio = billableList.length > 0 ? totalCobrado / billableList.length : 0
   const animActiveCount = useCountUp(activeList.length)
   const animVoidedCount = useCountUp(voidedList.length)
   const animTotalCobrado = useCountUp(totalCobrado)
+  const animImportePromedio = useCountUp(importePromedio)
 
   return (
     <section className="space-y-5">
@@ -7715,20 +7857,17 @@ function TicketsBrowser() {
         </div>
       </div>
 
-      {/* ─── Snapshot strip ───────────────────────────────────────── */}
-      <div className="tl-stagger grid grid-cols-3 gap-3">
-        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Activos</p>
-          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{Math.round(animActiveCount)}</p>
-        </div>
-        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-rose-50/60 to-white px-4 py-3.5">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Cancelados</p>
-          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{Math.round(animVoidedCount)}</p>
-        </div>
-        <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Total cobrado</p>
-          <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(animTotalCobrado, 'MXN')}</p>
-        </div>
+      {/* ─── Snapshot strip — Metric primitives for consistency with the rest of the app ─── */}
+      <div className="tl-stagger grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric tone="good" label="Activos" value={Math.round(animActiveCount)} />
+        <Metric tone="bad" label="Cancelados" value={Math.round(animVoidedCount)} />
+        <Metric tone="feature" label="Total cobrado" value={money(animTotalCobrado, 'MXN')} />
+        <Metric
+          tone="info"
+          label="Importe promedio"
+          value={billableList.length > 0 ? money(animImportePromedio, 'MXN') : '—'}
+          sub={billableList.length > 0 ? `${billableList.length} con cobro` : 'sin tickets cobrados'}
+        />
       </div>
 
       {/* ─── Filters: status tabs + search inputs ─────────────────── */}
@@ -7812,8 +7951,13 @@ function TicketsBrowser() {
               {filtered.map((ticket) => {
                 const occurred = ticket.occurredAt ?? ticket.createdAt
                 const timeStr = new Date(occurred).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+                const lavadorNames = ticket.assignments.map((a) => a.employeeName)
                 return (
-                  <tr key={ticket.id}>
+                  <tr
+                    key={ticket.id}
+                    onClick={() => setSelected(ticket)}
+                    className="cursor-pointer"
+                  >
                     <td className="font-mono text-[12px] text-ink-500 tabular-nums">{timeStr}</td>
                     <td className="font-semibold">
                       {ticket.internalRef || ticket.notaNumber}
@@ -7823,22 +7967,27 @@ function TicketsBrowser() {
                     </td>
                     <td>
                       <span>{ticket.vehicleDescription || '-'}</span>
-                      {ticket.notes && <p className="mt-0.5 text-[11px] text-ink-400">{ticket.notes}</p>}
+                      {ticket.notes && <p className="mt-0.5 max-w-[28ch] truncate text-[11px] text-ink-400">{ticket.notes}</p>}
                     </td>
                     <td className="text-[12.5px]">{ticket.serviceTypeName} / {ticket.vehicleSizeName}</td>
                     <td>
-                      <div className="flex flex-wrap gap-1">
-                        {ticket.assignments.map((a) => (
-                          <span key={a.employeeId} className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-                            {a.employeeName.split(' ')[0]}
-                          </span>
-                        ))}
+                      <div className="inline-flex items-center gap-2">
+                        <Avatars names={lavadorNames} max={3} />
+                        <span className="text-[11.5px] text-ink-600">
+                          {lavadorNames.length === 0
+                            ? <em className="italic text-ink-400">—</em>
+                            : lavadorNames.length === 1
+                              ? lavadorNames[0].split(' ')[0]
+                              : `${lavadorNames.length} lavadores`}
+                        </span>
                       </div>
                     </td>
-                    <td className="r font-semibold tabular-nums">{money(ticket.priceAmount, ticket.currency)}</td>
+                    <td className="r font-semibold tabular-nums">
+                      {ticket.courtesy ? <span className="italic text-amber-600">GRATIS</span> : money(ticket.priceAmount, ticket.currency)}
+                    </td>
                     <td><PaymentPill ticket={ticket} /></td>
                     <td><TicketStatusPill ticket={ticket} /></td>
-                    <td className="r">
+                    <td className="r" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1">
                         <button
                           type="button"
@@ -7871,23 +8020,23 @@ function TicketsBrowser() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9}>
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-50">
-                        <svg className="h-5 w-5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                  <td colSpan={9} className="!p-0">
+                    <EmptyState
+                      icon={(
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
                           <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      </div>
-                      <p className="text-[14px] font-semibold text-ink-700">No hay tickets para estos filtros.</p>
-                      <p className="mt-1 text-[12.5px] text-ink-400">
-                        {notaLookup.trim() ? 'Revisa el número de nota e intenta de nuevo.' : query ? 'Ajusta la búsqueda o cambia el estado.' : 'Captura el primer ticket del turno.'}
-                      </p>
-                      {!notaLookup.trim() && !query && (
-                        <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary tl-btn-sm mt-4">
-                          + Nuevo ticket
-                        </NavLink>
                       )}
-                    </div>
+                      title="No hay tickets para estos filtros"
+                      description={notaLookup.trim()
+                        ? 'Revisa el número de nota e intenta de nuevo.'
+                        : query
+                          ? 'Ajusta la búsqueda o cambia el estado.'
+                          : 'Captura el primer ticket del turno.'}
+                      cta={!notaLookup.trim() && !query
+                        ? <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary tl-btn-sm">+ Nuevo ticket</NavLink>
+                        : undefined}
+                    />
                   </td>
                 </tr>
               )}
@@ -8585,9 +8734,9 @@ function TicketStatusPill({ ticket }: { ticket: Ticket }) {
 }
 
 function PaymentPill({ ticket }: { ticket: Ticket }) {
-  if (ticket.courtesy) return null
+  if (ticket.courtesy) return <Pill tone="warn" dot={false}>Cortesía</Pill>
   if (ticket.paymentMethod === 'CARD') return <Pill tone="info" dot={false}>Tarjeta</Pill>
-  if (ticket.paymentMethod === 'TRANSFER') return <Pill tone="warn" dot={false}>Windows</Pill>
+  if (ticket.paymentMethod === 'TRANSFER') return <Pill tone="purple" dot={false}>Depósito</Pill>
   return <Pill tone="gray" dot={false}>Efectivo</Pill>
 }
 
