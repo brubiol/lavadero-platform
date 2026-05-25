@@ -175,10 +175,6 @@ html, body, #root { height: 100%; }
   min-height: 100vh;
 }
 .tl-frame.compact { grid-template-columns: 64px 1fr; }
-@media (max-width: 880px) {
-  .tl-frame { grid-template-columns: 1fr; }
-  .tl-sidebar { display: none; }
-}
 
 /* Sidebar: purple→green brand split */
 .tl-sidebar {
@@ -195,6 +191,15 @@ html, body, #root { height: 100%; }
   border-right: 1px solid var(--sidebar-border);
   position: relative;
   min-height: 100vh;
+}
+
+/* Below Tailwind's lg breakpoint (1024px), hide the sidebar and let the
+   Frame collapse to a single column — MobileTopbar + MobileNav take over.
+   Must come AFTER the base .tl-sidebar rule or display:flex will win the
+   cascade. */
+@media (max-width: 1023.98px) {
+  .tl-frame { grid-template-columns: 1fr; }
+  .tl-sidebar { display: none; }
 }
 .tl-sidebar::after {
   content: "";
@@ -310,6 +315,14 @@ html, body, #root { height: 100%; }
 }
 .tl-icon-btn { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--ink-600); cursor: pointer; }
 .tl-icon-btn:hover { background: var(--ink-100); }
+
+/* Same cascade pattern as .tl-sidebar: base class sets display:flex, so
+   Tailwind's `hidden` utility (paired with `lg:flex` in the component) can't
+   win on its own. Defensive media-query override keeps Topbar hidden below
+   the lg breakpoint, matching the MobileTopbar/sidebar visibility cutover. */
+@media (max-width: 1023.98px) {
+  .tl-topbar { display: none; }
+}
 
 /* Page */
 .tl-page { padding: 24px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
@@ -1014,6 +1027,6 @@ html, body, #root { height: 100%; }
   cursor: pointer;
   border: none;
 }
-@media (min-width: 881px) {
+@media (min-width: 1024px) {
   .tl-mob-tabbar { display: none; }
 }
