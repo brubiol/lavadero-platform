@@ -69,6 +69,7 @@ type ServiceType = {
   name: string
   description?: string
   active: boolean
+  category?: 'STANDARD' | 'EXTRA' | string
 }
 
 type VehicleSizeCategory = 'AUTO' | 'MOTO' | 'RAZR' | 'PERSONAL'
@@ -3325,9 +3326,25 @@ function TicketWorkspace({
                   <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
                     <select {...form.register('serviceTypeId')}>
                       <option value={0}>Selecciona servicio</option>
-                      {(data.services.data ?? []).map((service) => (
-                        <option key={service.id} value={service.id}>{service.name}</option>
-                      ))}
+                      {(() => {
+                        const all = (data.services.data ?? []).filter((s) => s.active !== false)
+                        const standard = all.filter((s) => s.category !== 'EXTRA')
+                        const extras = all.filter((s) => s.category === 'EXTRA')
+                        return (
+                          <>
+                            {standard.length > 0 && (
+                              <optgroup label="Lavados">
+                                {standard.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </optgroup>
+                            )}
+                            {extras.length > 0 && (
+                              <optgroup label="Extras (precio aparte)">
+                                {extras.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </optgroup>
+                            )}
+                          </>
+                        )
+                      })()}
                     </select>
                   </SelectField>
                   <SelectField label="Vehículo" error={form.formState.errors.vehicleSizeId?.message}>
@@ -3548,6 +3565,67 @@ function TicketWorkspace({
                 title="Opciones avanzadas"
               />
               <div className="space-y-3.5 p-4">
+                {/* Extras presets — one-click chips that pre-fill "Precio especial" with
+                    base + extra and tag the notes. Only shown when (a) a vehicle size is
+                    picked, (b) the primary service is a standard wash (no chips on a
+                    standalone Encerado), and (c) at least one extra has a price for the
+                    picked vehicle size. MOTO / RAZR / PERSONAL hide naturally via sparse
+                    pricing. */}
+                {(() => {
+                  const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
+                  const sizeId = Number(watched.vehicleSizeId)
+                  if (!currentSvc || sizeId === 0) return null
+                  if (currentSvc.category === 'EXTRA') return null
+                  const prices = data.prices.data ?? []
+                  const baseAmount = prices.find((pr) =>
+                    pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                  )?.amount ?? 0
+                  const extras = (data.services.data ?? [])
+                    .filter((s) => s.active !== false && s.category === 'EXTRA')
+                    .map((s) => ({
+                      service: s,
+                      price: prices.find((pr) =>
+                        pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                      )?.amount,
+                    }))
+                    .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
+                  if (extras.length === 0) return null
+                  const onAddExtra = (extraName: string, extraPrice: number) => {
+                    form.setValue('priceOverride', baseAmount + extraPrice, { shouldValidate: true })
+                    const currentNotes = (watched.notes ?? '').trim()
+                    const marker = `+ ${extraName}`
+                    if (!currentNotes.toLowerCase().includes(extraName.toLowerCase())) {
+                      form.setValue('notes', currentNotes ? `${currentNotes} ${marker}` : marker, { shouldValidate: true })
+                    }
+                  }
+                  return (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                      <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-amber-800">
+                        Agregar extra — rellena precio especial
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {extras.map(({ service, price }) => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => onAddExtra(service.name, price)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1 text-[12px] font-semibold text-amber-800 transition hover:bg-amber-100"
+                          >
+                            <span>+ {service.name}</span>
+                            <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-bold text-amber-700">
+                              ${price.toLocaleString('es-MX')}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[10.5px] text-amber-700/80">
+                        Click un extra para sumarlo al precio base (${baseAmount.toLocaleString('es-MX')}).
+                        Se anota en las notas del ticket.
+                      </p>
+                    </div>
+                  )
+                })()}
+
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
                     <input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
@@ -4113,24 +4191,8 @@ function CatalogsScreen() {
           <Panel title="Servicios">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[12.5px] text-ink-500">Tipos de lavado disponibles al crear un ticket.</p>
-              <Button kind="ghost" size="sm" onClick={() => setShowAddService(!showAddService)}>
-                {showAddService ? 'Cancelar' : '+ Agregar'}
-              </Button>
+              <Button kind="ghost" size="sm" onClick={() => setShowAddService(true)}>+ Agregar</Button>
             </div>
-            {showAddService && (
-              <div className="mb-4">
-                <form className="grid gap-3 md:grid-cols-[140px_1fr_auto]" onSubmit={serviceForm.handleSubmit((values) => createService.mutate(values))}>
-                  <TextField label="Código" error={serviceForm.formState.errors.code?.message}>
-                    <input placeholder="LAV_MOTOR" {...serviceForm.register('code')} />
-                  </TextField>
-                  <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
-                    <input placeholder="Lavado de motor" {...serviceForm.register('name')} />
-                  </TextField>
-                  <FormButton label="Guardar" loading={createService.isPending} />
-                </form>
-                {createService.error && <ErrorMessage message={createService.error.message} />}
-              </div>
-            )}
             <SimpleList
               empty="No hay servicios."
               rows={services.map((service) => ({
@@ -4144,35 +4206,8 @@ function CatalogsScreen() {
           <Panel title="Tamaños de vehículo">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[12.5px] text-ink-500">Categorías de vehículo que determinan el precio del ticket.</p>
-              <Button kind="ghost" size="sm" onClick={() => setShowAddSize(!showAddSize)}>
-                {showAddSize ? 'Cancelar' : '+ Agregar'}
-              </Button>
+              <Button kind="ghost" size="sm" onClick={() => setShowAddSize(true)}>+ Agregar</Button>
             </div>
-            {showAddSize && (
-              <div className="mb-4">
-                <form className="grid gap-3 md:grid-cols-[120px_1fr_160px_90px_auto]" onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}>
-                  <TextField label="Código" error={sizeForm.formState.errors.code?.message}>
-                    <input placeholder="CHICO" {...sizeForm.register('code')} />
-                  </TextField>
-                  <TextField label="Nombre" error={sizeForm.formState.errors.name?.message}>
-                    <input placeholder="Carro" {...sizeForm.register('name')} />
-                  </TextField>
-                  <SelectField label="Categoría" error={sizeForm.formState.errors.category?.message}>
-                    <select {...sizeForm.register('category')}>
-                      <option value="AUTO">Autos y camionetas</option>
-                      <option value="MOTO">Motos</option>
-                      <option value="RAZR">RAZR</option>
-                      <option value="PERSONAL">Cam. de personal</option>
-                    </select>
-                  </SelectField>
-                  <TextField label="Orden" error={sizeForm.formState.errors.sortOrder?.message}>
-                    <input type="number" inputMode="decimal" min={0} {...sizeForm.register('sortOrder')} />
-                  </TextField>
-                  <FormButton label="Guardar" loading={createSize.isPending} />
-                </form>
-                {createSize.error && <ErrorMessage message={createSize.error.message} />}
-              </div>
-            )}
             <SimpleList
               empty="No hay tamaños."
               rows={sizes.map((size) => {
@@ -4191,49 +4226,13 @@ function CatalogsScreen() {
               <p className="text-[12.5px] text-ink-500">Precios vigentes hoy, agrupados por tipo de vehículo.</p>
               <div className="flex items-center gap-2">
                 {hasRole('DUENO') && (
-                  <Button
-                    kind={editingPrices ? 'danger' : 'ghost'}
-                    size="sm"
-                    onClick={() => editingPrices ? exitEditMode() : setEditingPrices(true)}
-                  >
-                    {editingPrices ? 'Cancelar edición' : 'Editar precios'}
+                  <Button kind="ghost" size="sm" onClick={() => setEditingPrices(true)}>
+                    Editar precios
                   </Button>
                 )}
-                <Button kind="ghost" size="sm" onClick={() => setShowAddPrice(!showAddPrice)}>
-                  {showAddPrice ? 'Cancelar' : '+ Agregar precio'}
-                </Button>
+                <Button kind="ghost" size="sm" onClick={() => setShowAddPrice(true)}>+ Agregar precio</Button>
               </div>
             </div>
-            {showAddPrice && (
-              <div className="mb-5">
-                <form className="grid gap-3 sm:grid-cols-[1fr_1fr_110px_140px_auto]" onSubmit={priceForm.handleSubmit((values) => createPrice.mutate(values))}>
-                  <SelectField label="Servicio" error={priceForm.formState.errors.serviceTypeId?.message}>
-                    <select {...priceForm.register('serviceTypeId')}>
-                      <option value={0}>Seleccionar</option>
-                      {services.map((service) => (
-                        <option key={service.id} value={service.id}>{service.name}</option>
-                      ))}
-                    </select>
-                  </SelectField>
-                  <SelectField label="Tamaño de vehículo" error={priceForm.formState.errors.vehicleSizeId?.message}>
-                    <select {...priceForm.register('vehicleSizeId')}>
-                      <option value={0}>Seleccionar</option>
-                      {sizes.map((size) => (
-                        <option key={size.id} value={size.id}>{size.name}</option>
-                      ))}
-                    </select>
-                  </SelectField>
-                  <TextField label="Precio $" error={priceForm.formState.errors.amount?.message}>
-                    <input type="number" inputMode="decimal" min={0} step="0.01" {...priceForm.register('amount')} />
-                  </TextField>
-                  <TextField label="Válido desde" error={priceForm.formState.errors.effectiveFrom?.message}>
-                    <input type="date" {...priceForm.register('effectiveFrom')} />
-                  </TextField>
-                  <FormButton label="Guardar" loading={createPrice.isPending} />
-                </form>
-                {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
-              </div>
-            )}
             {prices.length === 0 && (
               <EmptyState
                 icon={<IMoney size={20} />}
@@ -4241,28 +4240,6 @@ function CatalogsScreen() {
                 description="Agrega un precio con la fecha de hoy o anterior."
                 tone="info"
               />
-            )}
-            {editingPrices && (
-              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <span className="text-[12px] font-semibold text-amber-800">Ajuste rápido</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="1"
-                  step="1"
-                  placeholder="$10"
-                  value={quickAdjustInput}
-                  onChange={(e) => setQuickAdjustInput(e.target.value)}
-                  className="w-20 rounded border border-amber-300 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none"
-                />
-                <Button kind="ghost" size="sm" onClick={() => applyQuickAdjust(1)}>+ Subir a todos</Button>
-                <Button kind="ghost" size="sm" onClick={() => applyQuickAdjust(-1)}>− Bajar a todos</Button>
-                <span className="ml-auto text-[11px] text-amber-600">
-                  {pendingAmounts.size > 0
-                    ? `${pendingAmounts.size} cambio${pendingAmounts.size !== 1 ? 's' : ''} pendiente${pendingAmounts.size !== 1 ? 's' : ''}`
-                    : 'Sin cambios'}
-                </span>
-              </div>
             )}
             {mxnGroups.map(group => (
               <div key={group.cat} className="mb-5">
@@ -4281,34 +4258,9 @@ function CatalogsScreen() {
                           <td className="font-medium">{group.szName[szId]}</td>
                           {group.svcIds.map(svcId => {
                             const currentAmount = group.priceMap[`${svcId}-${szId}`]
-                            const key = `${svcId}-${szId}`
-                            const pendingVal = pendingAmounts.get(key)
-                            const isDirty = pendingVal !== undefined && pendingVal !== currentAmount
                             return (
                               <td key={svcId} className="r p-1">
-                                {editingPrices && currentAmount !== undefined ? (
-                                  <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0.01"
-                                    step="1"
-                                    value={pendingVal ?? currentAmount}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value)
-                                      setPendingAmounts(prev => {
-                                        const next = new Map(prev)
-                                        next.set(key, val)
-                                        return next
-                                      })
-                                    }}
-                                    className={[
-                                      'w-24 rounded border px-1.5 py-1 text-right text-sm tabular-nums focus:outline-none',
-                                      isDirty
-                                        ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900'
-                                        : 'border-border-soft bg-white focus:border-blue-400',
-                                    ].join(' ')}
-                                  />
-                                ) : currentAmount !== undefined
+                                {currentAmount !== undefined
                                   ? money(currentAmount, 'MXN')
                                   : <span className="text-ink-300">—</span>}
                               </td>
@@ -4321,22 +4273,6 @@ function CatalogsScreen() {
                 </div>
               </div>
             ))}
-            {editingPrices && (
-              <div className="mt-2 flex items-center justify-end gap-3 border-t border-border-soft pt-4">
-                <Button kind="ghost" size="sm" onClick={exitEditMode} disabled={savingAll}>
-                  Cancelar
-                </Button>
-                <Button
-                  kind="go"
-                  size="sm"
-                  onClick={saveAllPending}
-                  loading={savingAll}
-                  disabled={pendingAmounts.size === 0}
-                >
-                  {pendingAmounts.size > 0 ? `Guardar (${pendingAmounts.size})` : 'Guardar'}
-                </Button>
-              </div>
-            )}
           </Panel>
         </div>
 

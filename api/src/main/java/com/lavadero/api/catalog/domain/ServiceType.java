@@ -27,6 +27,10 @@ public class ServiceType extends AuditedEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    /** STANDARD for primary wash services, EXTRA for add-ons (Encerado, Pulido, Lav. Interior). */
+    @Column(nullable = false, length = 20)
+    private String category = "STANDARD";
+
     protected ServiceType() {
     }
 
@@ -54,5 +58,9 @@ public class ServiceType extends AuditedEntity {
 
     public boolean isActive() {
         return active;
+    }
+
+    public String getCategory() {
+        return category;
     }
 }

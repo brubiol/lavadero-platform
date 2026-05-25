@@ -23,11 +23,11 @@ public final class ServiceTypeDtos {
     }
 
     public record ServiceTypeResponse(Long id, String code, String name, String description, boolean active,
-            Instant createdAt, Instant updatedAt) {
+            String category, Instant createdAt, Instant updatedAt) {
         public static ServiceTypeResponse from(ServiceType serviceType) {
             return new ServiceTypeResponse(serviceType.getId(), serviceType.getCode(), serviceType.getName(),
-                    serviceType.getDescription(), serviceType.isActive(), serviceType.getCreatedAt(),
-                    serviceType.getUpdatedAt());
+                    serviceType.getDescription(), serviceType.isActive(), serviceType.getCategory(),
+                    serviceType.getCreatedAt(), serviceType.getUpdatedAt());
         }
     }
 }
