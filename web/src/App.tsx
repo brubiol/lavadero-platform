@@ -1649,9 +1649,11 @@ function Dashboard() {
       </div>
 
       {/* ─── Secondary metric strip ────────────────────────────────── */}
-      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-6">
+      {/* Tarjeta intentionally hidden: card terminal is offline so new
+          tickets can't pick CARD. Historical card revenue stays in the API
+          and in /reportes. */}
+      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Metric label="Efectivo" value={<MetricVal v={data ? money(data.cashRevenue, 'MXN') : undefined} wide />} variant="success" />
-        <Metric label="Tarjeta" value={<MetricVal v={data ? money(data.cardRevenue, 'MXN') : undefined} wide />} variant="info" />
         <Metric label="Deposito" value={<MetricVal v={data ? money(data.transferRevenue, 'MXN') : undefined} wide />} variant="warn" />
         <Metric label="Miscelanea" value={<MetricVal v={data ? money(data.inventorySalesRevenue, 'MXN') : undefined} wide />} />
         <Metric label="Gastos" value={<MetricVal v={data ? money(data.expensesTotal, 'MXN') : undefined} wide />} variant="danger" />
@@ -1815,7 +1817,6 @@ function EndOfDayScreen() {
                     <Metric label="Tickets" tone="info" value={daily ? String(daily.recentTickets.length) : sk()} />
                     <Metric label="Carros" tone="info" value={daily ? String(daily.carsWashed) : sk()} />
                     <Metric label="Efectivo" tone="good" value={daily ? money(daily.cashRevenue, 'MXN') : sk(true)} />
-                    <Metric label="Tarjeta" tone="info" value={daily ? money(daily.cardRevenue, 'MXN') : sk(true)} />
                     <Metric label="Depósito" tone="warn" value={daily ? money(daily.transferRevenue, 'MXN') : sk(true)} />
                     <Metric label="Miscelánea" value={daily ? money(daily.inventorySalesRevenue, 'MXN') : sk(true)} />
                     <Metric label="Gastos" tone="bad" value={daily ? money(daily.expensesTotal, 'MXN') : sk(true)} />
@@ -3691,7 +3692,6 @@ function TicketWorkspace({
                 <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
                   <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
                     <option value="CASH">Efectivo</option>
-                    <option value="CARD">Tarjeta</option>
                     <option value="TRANSFER">Depósito</option>
                   </select>
                 </SelectField>
@@ -5323,7 +5323,6 @@ function ShiftCloseScreen() {
               <div className="rounded-xl border border-border-soft bg-ink-50/40 p-4 font-mono text-[12.5px]">
                 <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400 font-sans">Desglose por método</p>
                 <SummaryRow k="Efectivo (tickets)" v={summary ? money(summary.cashRevenue, 'MXN') : '…'} />
-                <SummaryRow k="Tarjeta" v={summary ? money(summary.cardRevenue, 'MXN') : '…'} />
                 <SummaryRow k="Depósito" v={summary ? money(summary.transferRevenue, 'MXN') : '…'} />
                 {summary?.prepaidPackagesTotal != null && summary.prepaidPackagesTotal > 0 && (
                   <SummaryRow k="Paquetes prepagados" v={money(summary.prepaidPackagesTotal, 'MXN')} />
@@ -7552,7 +7551,6 @@ function PrepaidPackageScreen() {
             <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
               <select {...form.register('paymentMethod')}>
                 <option value="CASH">Efectivo</option>
-                <option value="CARD">Tarjeta</option>
                 <option value="TRANSFER">Depósito</option>
               </select>
             </SelectField>

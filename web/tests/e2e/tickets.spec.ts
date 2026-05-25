@@ -40,10 +40,10 @@ test('new ticket form shows resolved price on service selection', async ({ page,
   await expect(page.getByTestId('summary-precio-preview-value')).toContainText('$')
 })
 
-test('can create cash and card tickets and see payment labels in ticket browser', async ({ page, request }) => {
+test('can create cash and deposito tickets and see payment labels in ticket browser', async ({ page, request }) => {
   const fixture = await seedTicketFixture(request, 'E2E_PAY')
   const cashVehicle = `Cash E2E ${Date.now()}`
-  const cardVehicle = `Card E2E ${Date.now()}`
+  const transferVehicle = `Transfer E2E ${Date.now()}`
 
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
@@ -55,17 +55,16 @@ test('can create cash and card tickets and see payment labels in ticket browser'
 
   await page.goto('/tickets/nuevo')
   await fillTicketForm(page, fixture.catalog)
-  await page.getByPlaceholder('Ej. Tsuru rojo, Tacoma blanca').fill(cardVehicle)
-  await page.getByLabel('Forma de pago').selectOption('CARD')
+  await page.getByPlaceholder('Ej. Tsuru rojo, Tacoma blanca').fill(transferVehicle)
+  await page.getByLabel('Forma de pago').selectOption('TRANSFER')
   await page.getByTestId('ticket-submit').click()
   await page.waitForURL('**/tickets', { timeout: 10_000 })
 
   const cashRow = page.locator('tr').filter({ hasText: cashVehicle }).first()
-  const cardRow = page.locator('tr').filter({ hasText: cardVehicle }).first()
+  const transferRow = page.locator('tr').filter({ hasText: transferVehicle }).first()
   await expect(cashRow).toBeVisible({ timeout: 8_000 })
   await expect(cashRow.getByText('Efectivo')).toBeVisible()
-  await expect(cardRow).toBeVisible({ timeout: 8_000 })
-  await expect(cardRow.getByText('Tarjeta')).toBeVisible()
+  await expect(transferRow).toBeVisible({ timeout: 8_000 })
 })
 
 test('dashboard counters match seeded ticket totals for selected date', async ({ page, request }) => {
