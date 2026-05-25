@@ -3027,6 +3027,16 @@ function TicketWorkspace({
   const [toast, setToast] = useState<string | null>(null)
   const [lavadorQuery, setLavadorQuery] = useState('')
   const [lavadorFocused, setLavadorFocused] = useState(false)
+  // Prepago = loyalty stamp card. Customer brings back N previous nota
+  // receipts; 5 notas = half wash off, 10 notas = full wash free. We store
+  // the mode locally and translate to discount/courtesy on the underlying
+  // form fields so the backend stays unchanged.
+  const [prepagoMode, setPrepagoMode] = useState<'none' | '5' | '10'>(() => {
+    if (ticket?.courtesyReason?.startsWith('Prepago')) return '10'
+    if (ticket?.discountReason?.startsWith('Prepago')) return '5'
+    return 'none'
+  })
+  const [prepagoOpen, setPrepagoOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(() =>
     Boolean(
       ticket && (
@@ -3171,6 +3181,35 @@ function TicketWorkspace({
     .some((field) => form.formState.errors[field])
   const effectiveShowAdvanced = showAdvanced || hasAdvancedError
 
+  // Prepago helpers — map 5/10 notas presets onto discountPercent/courtesy.
+  // Encoded reason lets us round-trip the mode when editing a saved ticket.
+  const applyPrepago = (mode: '5' | '10') => {
+    setPrepagoMode(mode)
+    setPrepagoOpen(false)
+    if (mode === '5') {
+      form.setValue('courtesy', false, { shouldValidate: true })
+      form.setValue('courtesyReason', '')
+      form.setValue('discountPercent', 50, { shouldValidate: true })
+      form.setValue('discountReason', 'Prepago: 5 notas (medio lavado)', { shouldValidate: true })
+    } else {
+      form.setValue('discountPercent', 0, { shouldValidate: true })
+      form.setValue('discountReason', '')
+      form.setValue('courtesy', true, { shouldValidate: true })
+      form.setValue('courtesyReason', 'Prepago: 10 notas (lavado completo)', { shouldValidate: true })
+    }
+  }
+  const clearPrepago = () => {
+    setPrepagoMode('none')
+    setPrepagoOpen(false)
+    if (prepagoMode === '5') {
+      form.setValue('discountPercent', 0, { shouldValidate: true })
+      form.setValue('discountReason', '')
+    } else if (prepagoMode === '10') {
+      form.setValue('courtesy', false, { shouldValidate: true })
+      form.setValue('courtesyReason', '')
+    }
+  }
+
   // Live clock for header (updates every minute)
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -3275,15 +3314,66 @@ function TicketWorkspace({
                   <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
                   Cortesía
                 </label>
-                {/* Prepago — visible per wireframe; full wiring to /paquetes is deferred. */}
-                <label
-                  title="Próximamente — usa /paquetes para registrar paquetes prepagados"
-                  className="relative flex cursor-not-allowed select-none items-center gap-2 rounded-full border border-border-soft bg-ink-50 px-3 py-1 text-[12px] font-semibold text-ink-400"
-                >
-                  <input type="checkbox" disabled aria-label="Prepago (próximamente)" className="absolute inset-0 h-full w-full opacity-0" />
-                  <span className="h-3 w-3 rounded-full bg-ink-300" />
-                  Prepago
-                </label>
+                {/* Prepago — loyalty stamp card. 5 notas = half wash off, 10 = full wash free. */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (prepagoMode !== 'none') {
+                        clearPrepago()
+                      } else {
+                        setPrepagoOpen((v) => !v)
+                      }
+                    }}
+                    className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-semibold transition-all duration-150 ${
+                      prepagoMode === '10'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]'
+                        : prepagoMode === '5'
+                          ? 'border-sky-300 bg-sky-50 text-sky-800 shadow-[0_0_0_3px_rgba(14,165,233,0.12)]'
+                          : 'border-border-soft bg-white text-ink-600 hover:border-sky-200 hover:bg-sky-50/60 hover:text-sky-700'
+                    }`}
+                    aria-label="Prepago — descuento por notas acumuladas"
+                    aria-expanded={prepagoOpen}
+                  >
+                    <span className={`h-3 w-3 rounded-full transition-colors ${
+                      prepagoMode === '10' ? 'bg-emerald-500'
+                        : prepagoMode === '5' ? 'bg-sky-500'
+                          : 'bg-ink-300'
+                    }`} />
+                    {prepagoMode === '5' ? 'Prepago · 5 notas (50% off)'
+                      : prepagoMode === '10' ? 'Prepago · 10 notas (gratis)'
+                        : 'Prepago'}
+                    {prepagoMode !== 'none' && (
+                      <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white/60 text-[10px] leading-none">×</span>
+                    )}
+                  </button>
+                  {prepagoOpen && prepagoMode === 'none' && (
+                    <div className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-border-soft bg-white p-3 shadow-lg">
+                      <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">
+                        ¿Cuántas notas trae el cliente?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => applyPrepago('5')}
+                        className="mb-1.5 flex w-full items-center justify-between rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-left text-[12.5px] font-semibold text-sky-800 hover:bg-sky-100"
+                      >
+                        <span>5 notas — medio lavado</span>
+                        <span className="rounded-full bg-sky-200 px-1.5 text-[10.5px] font-bold text-sky-800">-50%</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPrepago('10')}
+                        className="flex w-full items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-[12.5px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                      >
+                        <span>10 notas — lavado completo</span>
+                        <span className="rounded-full bg-emerald-200 px-1.5 text-[10.5px] font-bold text-emerald-800">GRATIS</span>
+                      </button>
+                      <p className="mt-2 text-[10.5px] text-ink-400">
+                        El motivo se llena automáticamente para la auditoría.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -3399,17 +3489,76 @@ function TicketWorkspace({
                     <option value="TRANSFER">Depósito</option>
                   </select>
                 </SelectField>
-                <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
+                {/* Precio especial — typeable input + 1-click chips for the catalog extras
+                    (Encerado/Pulido/Lav.Interior) right below. Chips only appear after both
+                    Servicio and Vehículo are picked AND the catalog has extras for that size. */}
+                <div>
+                  <label className="mb-1 block text-[12px] font-semibold text-ink-700">
+                    Precio especial ($)
+                  </label>
                   <input
                     type="number"
                     inputMode="decimal"
                     min="0.01"
                     step="0.01"
-                    placeholder="Opcional"
+                    placeholder="Opcional · o pick un extra abajo"
                     disabled={watched.courtesy}
                     {...form.register('priceOverride')}
                   />
-                </TextField>
+                  {form.formState.errors.priceOverride?.message && (
+                    <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
+                  )}
+                  {/* Inline extras chips. Same logic the EXTRAS box used to render;
+                      now positioned in the Precio Especial cell so the cashier sees
+                      them without scrolling. */}
+                  {(() => {
+                    if (watched.courtesy) return null
+                    const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
+                    const sizeId = Number(watched.vehicleSizeId)
+                    if (!currentSvc || sizeId === 0) return null
+                    if (currentSvc.category === 'EXTRA') return null
+                    const prices = data.prices.data ?? []
+                    const baseAmount = prices.find((pr) =>
+                      pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                    )?.amount ?? 0
+                    const extras = (data.services.data ?? [])
+                      .filter((s) => s.active !== false && s.category === 'EXTRA')
+                      .map((s) => ({
+                        service: s,
+                        price: prices.find((pr) =>
+                          pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                        )?.amount,
+                      }))
+                      .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
+                    if (extras.length === 0) return null
+                    const onAddExtra = (extraName: string, extraPrice: number) => {
+                      form.setValue('priceOverride', baseAmount + extraPrice, { shouldValidate: true })
+                      const currentNotes = (watched.notes ?? '').trim()
+                      const marker = `+ ${extraName}`
+                      if (!currentNotes.toLowerCase().includes(extraName.toLowerCase())) {
+                        form.setValue('notes', currentNotes ? `${currentNotes} ${marker}` : marker, { shouldValidate: true })
+                      }
+                    }
+                    return (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {extras.map(({ service, price }) => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => onAddExtra(service.name, price)}
+                            title={`Suma ${service.name} (+$${price}) al precio base $${baseAmount}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800 transition hover:bg-amber-100"
+                          >
+                            + {service.name}
+                            <span className="rounded-full bg-amber-200/70 px-1 text-[10px] font-bold text-amber-800">
+                              ${price}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
 
               {/* Row 2: No. de Nota · Descripción · Hora · Lavadores (compact) */}
@@ -3515,58 +3664,6 @@ function TicketWorkspace({
                 <fieldset className="rounded-xl border-2 border-border-soft p-3">
                   <legend className="px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">EXTRAS</legend>
                   <div className="space-y-3">
-                    {/* Encerado / Pulido / Lav. Interior presets — fill Precio especial */}
-                    {(() => {
-                      const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
-                      const sizeId = Number(watched.vehicleSizeId)
-                      if (!currentSvc || sizeId === 0) return null
-                      if (currentSvc.category === 'EXTRA') return null
-                      const prices = data.prices.data ?? []
-                      const baseAmount = prices.find((pr) =>
-                        pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
-                      )?.amount ?? 0
-                      const extras = (data.services.data ?? [])
-                        .filter((s) => s.active !== false && s.category === 'EXTRA')
-                        .map((s) => ({
-                          service: s,
-                          price: prices.find((pr) =>
-                            pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
-                          )?.amount,
-                        }))
-                        .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
-                      if (extras.length === 0) return null
-                      const onAddExtra = (extraName: string, extraPrice: number) => {
-                        form.setValue('priceOverride', baseAmount + extraPrice, { shouldValidate: true })
-                        const currentNotes = (watched.notes ?? '').trim()
-                        const marker = `+ ${extraName}`
-                        if (!currentNotes.toLowerCase().includes(extraName.toLowerCase())) {
-                          form.setValue('notes', currentNotes ? `${currentNotes} ${marker}` : marker, { shouldValidate: true })
-                        }
-                      }
-                      return (
-                        <div>
-                          <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">
-                            Sumar al precio especial
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {extras.map(({ service, price }) => (
-                              <button
-                                key={service.id}
-                                type="button"
-                                onClick={() => onAddExtra(service.name, price)}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11.5px] font-semibold text-amber-800 transition hover:bg-amber-100"
-                              >
-                                + {service.name}
-                                <span className="rounded-full bg-amber-200/70 px-1.5 text-[10.5px] font-bold text-amber-800">
-                                  ${price.toLocaleString('es-MX')}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })()}
-
                     {/* Cargo + Motivo del cargo */}
                     <div className="grid gap-2 grid-cols-[100px_1fr]">
                       <TextField label="Cargo" error={form.formState.errors.surchargeAmount?.message}>
