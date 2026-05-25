@@ -3012,6 +3012,220 @@ function localTimeToIso(timeStr: string, baseDate: string): string {
   return new Date(`${baseDate}T${timeStr}:00`).toISOString()
 }
 
+function paymentLabel(method: PaymentMethod): string {
+  if (method === 'CARD') return 'Tarjeta'
+  if (method === 'TRANSFER') return 'Depósito'
+  return 'Efectivo'
+}
+
+/**
+ * Read-only summary of a saved ticket. Replaces the old "open the edit form
+ * to see what was captured" UX with a glanceable card that shows every
+ * persisted reason and amount in one place. Managers get an "Editar" button
+ * that flips the parent modal into edit mode.
+ */
+function TicketDetail({
+  ticket,
+  onEdit,
+  onVoid,
+  canEdit,
+}: {
+  ticket: Ticket
+  onEdit?: () => void
+  onVoid?: () => void
+  canEdit: boolean
+}) {
+  const lavadores = ticket.assignments.map((a) => a.employeeName)
+  const basePrice = ticket.originalPriceAmount != null
+    ? Number(ticket.originalPriceAmount)
+    : Number(ticket.priceAmount)
+  const override = ticket.priceOverride != null ? Number(ticket.priceOverride) : null
+  const surcharge = ticket.surchargeAmount != null ? Number(ticket.surchargeAmount) : 0
+  const discountPct = Number(ticket.discountPercent ?? 0)
+  const finalAmount = Number(ticket.priceAmount)
+  const isVoid = ticket.status === 'VOIDED'
+
+  const Row = ({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: string; tone?: 'good' | 'warn' | 'bad' }) => {
+    const valueClass =
+      tone === 'good' ? 'text-emerald-700'
+      : tone === 'warn' ? 'text-amber-700'
+      : tone === 'bad' ? 'text-red-700'
+      : 'text-ink-900'
+    return (
+      <div className="flex items-start justify-between gap-4 py-1.5">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-400">{label}</p>
+          {hint && <p className="text-[11.5px] text-ink-400">{hint}</p>}
+        </div>
+        <p className={`text-right text-[13.5px] font-semibold tabular-nums ${valueClass}`}>{value}</p>
+      </div>
+    )
+  }
+
+  return (
+    <section className="space-y-4">
+      {/* ─── Hero: nota + status + service ─── */}
+      <header className="overflow-hidden rounded-2xl border border-border-soft bg-white shadow-sm">
+        <div
+          className="relative px-5 py-5 text-white"
+          style={{ background: ticket.courtesy
+            ? 'linear-gradient(140deg, #78350f 0%, #b45309 100%)'
+            : isVoid
+              ? 'linear-gradient(140deg, #4b5563 0%, #1f2937 100%)'
+              : 'linear-gradient(140deg, #1a0f2e 0%, #3b1d5c 60%, #1f8a3d 130%)'
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/60">
+                Ticket {ticket.internalRef ? `· Nº ${ticket.internalRef}` : `· #${ticket.notaNumber}`}
+              </p>
+              <p className="mt-1 truncate font-display text-[20px] font-bold leading-tight tracking-[-0.02em]">
+                {ticket.serviceTypeName} <span className="text-white/60">·</span> {ticket.vehicleSizeName}
+              </p>
+              <p className="mt-1 text-[12.5px] font-medium text-white/70">
+                {formatDateTime(ticket.occurredAt ?? ticket.createdAt)}
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${
+              isVoid ? 'bg-red-500/20 text-red-100 ring-1 ring-red-300/40'
+              : ticket.courtesy ? 'bg-amber-200/30 text-amber-100 ring-1 ring-amber-200/40'
+              : 'bg-emerald-400/20 text-emerald-100 ring-1 ring-emerald-300/40'
+            }`}>
+              {isVoid ? 'Cancelado' : ticket.courtesy ? 'Cortesía' : 'Activo'}
+            </span>
+          </div>
+
+          <div className="mt-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">
+                {ticket.courtesy ? 'Sin cobro' : 'Total cobrado'}
+              </p>
+              <p className="font-display text-[36px] font-black leading-none tracking-[-0.03em] tabular-nums">
+                {ticket.courtesy ? 'GRATIS' : money(finalAmount, ticket.currency)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/50">Pago</p>
+              <p className="text-[13.5px] font-semibold">
+                {ticket.courtesy ? 'N/A' : paymentLabel(ticket.paymentMethod)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ─── Captura ─── */}
+      <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
+        <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Captura</h4>
+        <div className="divide-y divide-dashed divide-border-soft">
+          <Row label="Lavadores" value={lavadores.length ? lavadores.join(', ') : <span className="italic text-ink-400">Ninguno</span>} />
+          <Row label="Descripción del vehículo" value={ticket.vehicleDescription || <span className="italic text-ink-400">—</span>} />
+          {ticket.internalRef && <Row label="No. de nota" value={ticket.internalRef} />}
+        </div>
+      </div>
+
+      {/* ─── Desglose del precio ─── */}
+      {!ticket.courtesy && (
+        <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
+          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Desglose del precio</h4>
+          <div className="divide-y divide-dashed divide-border-soft">
+            {override != null ? (
+              <Row label="Precio especial" hint="Override manual — sin descuento/cargo aplicado" value={money(override, ticket.currency)} />
+            ) : (
+              <>
+                <Row label="Precio base" value={money(basePrice, ticket.currency)} />
+                {discountPct > 0 && (
+                  <Row
+                    label={`Descuento ${discountPct}%`}
+                    hint={ticket.discountReason || undefined}
+                    value={`−${money(basePrice * discountPct / 100, ticket.currency)}`}
+                    tone="good"
+                  />
+                )}
+                {surcharge > 0 && (
+                  <Row
+                    label="Cargo extra"
+                    hint={ticket.surchargeReason || undefined}
+                    value={`+${money(surcharge, ticket.currency)}`}
+                    tone="warn"
+                  />
+                )}
+              </>
+            )}
+            <div className="mt-1 flex items-baseline justify-between border-t-2 border-ink-200 pt-2.5">
+              <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-700">Total</span>
+              <span className="font-display text-[18px] font-black tabular-nums text-ink-900">
+                {money(finalAmount, ticket.currency)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Motivos ─── */}
+      {(ticket.courtesy || ticket.courtesyReason || ticket.discountReason || ticket.surchargeReason) && (
+        <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
+          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Motivos</h4>
+          <div className="space-y-2">
+            {ticket.courtesy && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-700">Cortesía</p>
+                <p className="text-[13px] text-amber-900">{ticket.courtesyReason || <span className="italic text-amber-600">Sin motivo registrado</span>}</p>
+              </div>
+            )}
+            {ticket.discountReason && discountPct > 0 && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">Motivo del descuento ({discountPct}%)</p>
+                <p className="text-[13px] text-emerald-900">{ticket.discountReason}</p>
+              </div>
+            )}
+            {ticket.surchargeReason && surcharge > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-700">Motivo del cargo ({money(surcharge, ticket.currency)})</p>
+                <p className="text-[13px] text-amber-900">{ticket.surchargeReason}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Notas ─── */}
+      {ticket.notes && (
+        <div className="rounded-2xl border border-border-soft bg-white p-4 shadow-xs">
+          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Notas internas</h4>
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-800">{ticket.notes}</p>
+        </div>
+      )}
+
+      {/* ─── Cancelación ─── */}
+      {isVoid && (
+        <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4">
+          <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-red-700">Ticket cancelado</h4>
+          <p className="text-[13px] text-red-800">{ticket.voidReason || <span className="italic">Sin motivo registrado</span>}</p>
+          {ticket.voidedAt && <p className="mt-1 text-[11.5px] text-red-600">Cancelado el {formatDateTime(ticket.voidedAt)}</p>}
+        </div>
+      )}
+
+      {/* ─── Auditoría ─── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-border-soft bg-ink-50/40 px-4 py-2.5 text-[11.5px] text-ink-500">
+        <span>Capturado · {formatDateTime(ticket.createdAt)}</span>
+        {ticket.updatedAt && ticket.updatedAt !== ticket.createdAt && (
+          <span>Última edición · {formatDateTime(ticket.updatedAt)}</span>
+        )}
+      </div>
+
+      {/* ─── Acciones ─── */}
+      {canEdit && (onEdit || onVoid) && !isVoid && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {onVoid && <Button kind="ghost" onClick={onVoid}>Cancelar ticket</Button>}
+          {onEdit && <Button kind="primary" onClick={onEdit}>Editar ticket</Button>}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function TicketWorkspace({
   mode,
   ticket,
@@ -3386,8 +3600,8 @@ function TicketWorkspace({
             </div>
 
             <div className="space-y-3.5 p-4">
-              {/* Row 1: Turno · Servicio · Vehículo · Forma de pago · Precio especial */}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {/* Row 1: Turno · Servicio · Vehículo · Forma de pago — Precio especial gets its own row below for breathing room. */}
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {/* Turno (auto-locked, click to override) */}
                 <div>
                   <div className="mb-1 flex items-center justify-between">
@@ -3439,25 +3653,9 @@ function TicketWorkspace({
                 <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
                   <select {...form.register('serviceTypeId')}>
                     <option value={0}>Selecciona</option>
-                    {(() => {
-                      const all = (data.services.data ?? []).filter((s) => s.active !== false)
-                      const standard = all.filter((s) => s.category !== 'EXTRA')
-                      const extras = all.filter((s) => s.category === 'EXTRA')
-                      return (
-                        <>
-                          {standard.length > 0 && (
-                            <optgroup label="Lavados">
-                              {standard.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </optgroup>
-                          )}
-                          {extras.length > 0 && (
-                            <optgroup label="Extras (precio aparte)">
-                              {extras.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </optgroup>
-                          )}
-                        </>
-                      )
-                    })()}
+                    {(data.services.data ?? [])
+                      .filter((s) => s.active !== false && s.category !== 'EXTRA')
+                      .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </SelectField>
                 <SelectField label="Vehículo" error={form.formState.errors.vehicleSizeId?.message}>
@@ -3497,30 +3695,13 @@ function TicketWorkspace({
                     <option value="TRANSFER">Depósito</option>
                   </select>
                 </SelectField>
-                {/* Precio Especial — typeable input + always-visible extras chips.
-                    Chip names render even before Servicio/Vehículo are picked so
-                    the cashier knows the menu. Prices and click-to-stack only
-                    activate once we know what to charge (service+vehicle picked,
-                    not courtesy, not an EXTRA-as-primary). Multi-select: each
-                    tick adds the extra's price to the running override; untick
-                    subtracts. Corte sees a single priceOverride number so cash
-                    totals match automatically. */}
+              </div>
+
+              {/* Extras chip picker. Operators cannot enter a free-form price —
+                  ticking extras stacks each one's catalog price onto the base
+                  via priceOverride, so corte still sees a single number. */}
+              <div className="rounded-xl border border-amber-200/70 bg-gradient-to-br from-amber-50/60 via-white to-white p-3">
                 <div>
-                  <label className="mb-1 block text-[12px] font-semibold text-ink-700">
-                    Precio especial ($)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0.01"
-                    step="0.01"
-                    placeholder={watched.courtesy ? 'N/A (cortesía)' : 'Opcional'}
-                    disabled={watched.courtesy}
-                    {...form.register('priceOverride')}
-                  />
-                  {form.formState.errors.priceOverride?.message && (
-                    <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
-                  )}
                   {(() => {
                     if (watched.courtesy) return null
                     const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
@@ -3586,15 +3767,18 @@ function TicketWorkspace({
                     }
 
                     return (
-                      <div className="mt-1.5">
-                        {!priceable && (
-                          <p className="mb-0.5 text-[10px] text-ink-400">
-                            {sizeId === 0 || !currentSvc
-                              ? 'Pick servicio + vehículo para activar:'
-                              : 'Sin precio para este vehículo'}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-1">
+                      <div>
+                        <p className="mb-1 text-[12px] font-semibold text-ink-700">
+                          Sumar al precio base
+                          {!priceable && (
+                            <span className="ml-1.5 text-[10.5px] font-medium text-ink-400">
+                              {sizeId === 0 || !currentSvc
+                                ? '— elige servicio y vehículo'
+                                : '— sin precio para este vehículo'}
+                            </span>
+                          )}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
                           {allExtras.map(({ service, price }) => {
                             const picked = selectedExtraIds.has(service.id)
                             const canPrice = price != null && priceable
@@ -3607,20 +3791,20 @@ function TicketWorkspace({
                                 disabled={!canPrice}
                                 title={canPrice
                                   ? `Suma ${service.name} (+$${price}) al precio base $${baseAmount}`
-                                  : 'Pick servicio y vehículo primero'}
-                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition ${
+                                  : 'Elige servicio y vehículo primero'}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] font-semibold transition ${
                                   picked
-                                    ? 'border-amber-400 bg-amber-100 text-amber-900'
+                                    ? 'border-amber-400 bg-amber-100 text-amber-900 shadow-[0_0_0_3px_rgba(251,191,36,0.15)]'
                                     : canPrice
-                                      ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                                      : 'cursor-not-allowed border-dashed border-ink-200 bg-ink-50/40 text-ink-400'
+                                      ? 'border-amber-300 bg-white text-amber-800 hover:bg-amber-50'
+                                      : 'cursor-not-allowed border-dashed border-ink-200 bg-white/40 text-ink-400'
                                 }`}
                               >
                                 {picked && <span className="text-amber-600">✓</span>}
                                 {service.name}
                                 {canPrice && (
-                                  <span className={`rounded-full px-1 text-[10px] font-bold ${
-                                    picked ? 'bg-amber-300 text-amber-900' : 'bg-amber-200/70 text-amber-800'
+                                  <span className={`rounded-full px-1.5 text-[10.5px] font-bold ${
+                                    picked ? 'bg-amber-300 text-amber-900' : 'bg-amber-100 text-amber-800'
                                   }`}>
                                     {picked ? '−' : '+'}${price}
                                   </span>
@@ -7452,7 +7636,9 @@ function TicketsBrowser() {
   const [notaLookup, setNotaLookup] = useState('')
   const [status, setStatus] = useState<TicketStatus>('ACTIVE')
   const [selected, setSelected] = useState<Ticket | null>(null)
+  const [editing, setEditing] = useState(false)
   const [voiding, setVoiding] = useState<Ticket | null>(null)
+  const closeDetail = () => { setSelected(null); setEditing(false) }
 
   // Live clock for header
   const [now, setNow] = useState(() => new Date())
@@ -7714,13 +7900,25 @@ function TicketsBrowser() {
       </div>
 
       {selected && (
-        <Modal title={`Ticket ${selected.notaNumber}`} onClose={() => setSelected(null)}>
-          <TicketWorkspace
-            mode="edit"
-            ticket={selected}
-            onSaved={() => setSelected(null)}
-            readOnly={!hasRole('GERENTE')}
-          />
+        <Modal
+          title={editing ? `Editar ticket ${selected.notaNumber}` : `Ticket ${selected.notaNumber}`}
+          onClose={closeDetail}
+        >
+          {editing ? (
+            <TicketWorkspace
+              mode="edit"
+              ticket={selected}
+              onSaved={closeDetail}
+              readOnly={!hasRole('GERENTE')}
+            />
+          ) : (
+            <TicketDetail
+              ticket={selected}
+              canEdit={hasRole('GERENTE')}
+              onEdit={() => setEditing(true)}
+              onVoid={() => { setVoiding(selected); setSelected(null); setEditing(false) }}
+            />
+          )}
         </Modal>
       )}
       {voiding && (
@@ -8634,9 +8832,12 @@ function AttendanceScreen() {
       )}
 
       {clockOutId != null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-base font-semibold">Registrar salida</h3>
+        <Modal
+          title="Registrar salida"
+          narrow
+          onClose={() => { setClockOutId(null); setClockOutTime('') }}
+        >
+          <div className="p-6">
             <label className="block">
               <span className="mb-1 block text-sm font-medium text-ink-700">Hora de salida</span>
               <input
@@ -8644,17 +8845,18 @@ function AttendanceScreen() {
                 value={clockOutTime}
                 onChange={(e) => setClockOutTime(e.target.value)}
                 className="w-full"
+                autoFocus
               />
             </label>
             {clockOut.error && <p className="mt-2 text-sm text-red-600">{clockOut.error.message}</p>}
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2">
               <Button kind="ghost" onClick={() => { setClockOutId(null); setClockOutTime('') }}>Cancelar</Button>
               <Button kind="primary" disabled={!clockOutTime || clockOut.isPending} onClick={submitClockOut}>
                 {clockOut.isPending ? 'Guardando...' : 'Guardar'}
               </Button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {toast && <Toast message={toast} />}
