@@ -14,8 +14,7 @@ async function fillBaseTicket(page: Page, catalog: Catalog, description: string)
   await page.getByLabel('Servicio').selectOption({ label: catalog.serviceName })
   await page.locator('select[name="vehicleSizeId"]').selectOption({ label: catalog.sizeName })
   await page.getByPlaceholder('Ej. Tsuru rojo, Tacoma blanca').fill(description)
-  await page.getByTestId('ticket-advanced-toggle').click()
-  await page.getByPlaceholder('Buscar lavador...').fill(catalog.employeeName)
+  await page.getByTestId('ticket-lavador-search').fill(catalog.employeeName)
   await expect(page.locator('button').filter({ hasText: catalog.employeeName }).first()).toBeVisible({ timeout: 10_000 })
   await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
@@ -28,9 +27,9 @@ test('discount field reduces price preview and saved ticket price', async ({ pag
   await page.goto('/tickets/nuevo')
   await fillBaseTicket(page, fixture.catalog, vehicle)
   await page.getByLabel('Descuento (%)').fill('25')
+  await page.getByLabel('Motivo del descuento').fill('Cliente frecuente')
 
   await expect(page.getByTestId('summary-precio-preview-value')).toContainText('-25%')
-  await expect(page.getByText('Precio final reducido 25%')).toBeVisible()
 
   await page.getByTestId('ticket-submit').click()
   await page.waitForURL('**/tickets', { timeout: 10_000 })

@@ -3466,6 +3466,7 @@ function TicketWorkspace({
                           onFocus={() => setLavadorFocused(true)}
                           onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
                           placeholder={selectedEmployees.length === 0 ? 'Buscar...' : ''}
+                          data-testid="ticket-lavador-search"
                           className="min-w-[80px] flex-1 border-0 bg-transparent text-[12.5px] outline-none focus:ring-0"
                           style={{ padding: '2px 4px' }}
                         />
