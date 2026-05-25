@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lavadero.api.ai.tools.AiTool;
+import jakarta.annotation.PostConstruct;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -43,6 +44,22 @@ public class ConfiguredAiProvider implements AiProvider {
         this.properties = properties;
         this.fallback = fallback;
         this.objectMapper = objectMapper;
+    }
+
+    @PostConstruct
+    void logResolvedConfig() {
+        String model = properties.getModel();
+        boolean httpProvider = isHttpProvider();
+        boolean hasKey = properties.getApiKey() != null && !properties.getApiKey().isBlank();
+        log.info("AI provider resolved: enabled={}, provider={}, model={}, hasApiKey={}",
+                properties.isEnabled(), properties.getProvider(), model, hasKey);
+        if (properties.isEnabled() && httpProvider && !hasKey) {
+            log.warn("AI is enabled with provider={} but LAVADERO_AI_API_KEY is blank — every call will fall back to the deterministic-local provider.",
+                    properties.getProvider());
+        }
+        if (httpProvider && model != null && model.toLowerCase().contains("mini")) {
+            log.warn("AI model is a *-mini variant ({}) — owner-facing analysis quality will degrade. Set LAVADERO_AI_MODEL to a full-size model.", model);
+        }
     }
 
     @Override

@@ -176,17 +176,21 @@ Spring Security 6 OAuth2 Resource Server with a symmetric HMAC-SHA256 JWT.
 
 AI is DUENO-only and exposed under `/api/v1/ai/**` plus the `/ai` frontend route.
 
-Production env vars:
+Production AI config (enabled, provider, base URL, model, timeout) is **pinned in `docker-compose.prod.yml`** so it can't drift from the host `/opt/lavadero/.env`. The pinned model is `gpt-5.4`. Only `LAVADERO_AI_API_KEY` lives in `.env` because it's a real secret.
 
-```bash
+Resolved at startup:
+
+```
 LAVADERO_AI_ENABLED=true
 LAVADERO_AI_PROVIDER=openai-compatible
 LAVADERO_AI_BASE_URL=https://api.openai.com/v1
-LAVADERO_AI_API_KEY=<real key stored only in prod secrets>
-LAVADERO_AI_MODEL=gpt-5.5
+LAVADERO_AI_MODEL=gpt-5.4
 LAVADERO_AI_TIMEOUT_SECONDS=20
 LAVADERO_AI_SCHEDULER_ENABLED=false
+LAVADERO_AI_API_KEY=<real key in /opt/lavadero/.env, mode 600>
 ```
+
+`ConfiguredAiProvider` logs the resolved config on startup and warns if the model contains `mini` or if the API key is missing while the provider is HTTP — so silent fallbacks to deterministic-local are visible in `docker logs lavadero-api`.
 
 Never commit or paste a real API key into source, docs, frontend code, or logs. Without `LAVADERO_AI_API_KEY`, the deterministic fallback provider keeps tests and local UI behavior stable.
 

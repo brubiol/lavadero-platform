@@ -18,6 +18,15 @@ services:
       LAVADERO_BOOTSTRAP_USERNAME: ${LAVADERO_BOOTSTRAP_USERNAME}
       LAVADERO_BOOTSTRAP_PASSWORD: ${LAVADERO_BOOTSTRAP_PASSWORD}
       LAVADERO_BOOTSTRAP_FULL_NAME: ${LAVADERO_BOOTSTRAP_FULL_NAME}
+      # AI config is pinned here (not in .env) so the model never drifts back
+      # to the deterministic-local fallback or a mini variant on redeploy.
+      # Only LAVADERO_AI_API_KEY is a secret and comes from .env.
+      LAVADERO_AI_ENABLED: "true"
+      LAVADERO_AI_PROVIDER: openai-compatible
+      LAVADERO_AI_BASE_URL: https://api.openai.com/v1
+      LAVADERO_AI_MODEL: gpt-5.4
+      LAVADERO_AI_TIMEOUT_SECONDS: "20"
+      LAVADERO_AI_API_KEY: ${LAVADERO_AI_API_KEY}
     env_file:
       - .env
     healthcheck:
