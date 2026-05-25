@@ -1801,7 +1801,6 @@ function EndOfDayScreen() {
       <PageHead
         tone="hero"
         title="Cierre del día"
-        subtitle="Ruta rápida para terminar el día sin brincar entre pantallas."
       />
 
       <DayStatusCard />
