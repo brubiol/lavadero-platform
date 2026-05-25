@@ -4,6 +4,10 @@ const isCI = !!process.env.CI
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Deactivate the prefixed catalog rows the suite created. Without this
+  // every local run leaves residue in the dev DB and dropdowns fill up.
+  // Skipped automatically in CI (CI uses a fresh container per run).
+  globalTeardown: './tests/e2e/helpers/global-teardown.ts',
   // Full-stack E2E against a freshly built Docker stack on a 2-core CI runner
   // needs more than Playwright's 30s default; the heaviest form tests brush
   // that ceiling. 45s gives headroom without dragging out genuine failures.
