@@ -4318,6 +4318,188 @@ function CatalogsScreen() {
           </Panel>
         </aside>
       </div>
+      {showAddService && (
+        <Modal title="Nuevo servicio" onClose={() => setShowAddService(false)} narrow>
+          <form
+            className="space-y-4 px-6 py-5"
+            onSubmit={serviceForm.handleSubmit((values) => createService.mutate(values))}
+          >
+            <TextField label="Código" error={serviceForm.formState.errors.code?.message}>
+              <input placeholder="LAV_MOTOR" {...serviceForm.register('code')} />
+            </TextField>
+            <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
+              <input placeholder="Lavado de motor" {...serviceForm.register('name')} />
+            </TextField>
+            {createService.error && <ErrorMessage message={createService.error.message} />}
+            <ModalActions
+              onClose={() => setShowAddService(false)}
+              submitLabel={createService.isPending ? 'Guardando…' : 'Guardar servicio'}
+            />
+          </form>
+        </Modal>
+      )}
+      {showAddSize && (
+        <Modal title="Nuevo tamaño de vehículo" onClose={() => setShowAddSize(false)} narrow>
+          <form
+            className="space-y-4 px-6 py-5"
+            onSubmit={sizeForm.handleSubmit((values) => createSize.mutate(values))}
+          >
+            <TextField label="Código" error={sizeForm.formState.errors.code?.message}>
+              <input placeholder="CHICO" {...sizeForm.register('code')} />
+            </TextField>
+            <TextField label="Nombre" error={sizeForm.formState.errors.name?.message}>
+              <input placeholder="Carro" {...sizeForm.register('name')} />
+            </TextField>
+            <SelectField label="Categoría" error={sizeForm.formState.errors.category?.message}>
+              <select {...sizeForm.register('category')}>
+                <option value="AUTO">Autos y camionetas</option>
+                <option value="MOTO">Motos</option>
+                <option value="RAZR">RAZR</option>
+                <option value="PERSONAL">Cam. de personal</option>
+              </select>
+            </SelectField>
+            <TextField label="Orden de aparición" error={sizeForm.formState.errors.sortOrder?.message}>
+              <input type="number" inputMode="decimal" min={0} {...sizeForm.register('sortOrder')} />
+            </TextField>
+            {createSize.error && <ErrorMessage message={createSize.error.message} />}
+            <ModalActions
+              onClose={() => setShowAddSize(false)}
+              submitLabel={createSize.isPending ? 'Guardando…' : 'Guardar tamaño'}
+            />
+          </form>
+        </Modal>
+      )}
+      {showAddPrice && (
+        <Modal title="Nuevo precio de servicio" onClose={() => setShowAddPrice(false)} narrow>
+          <form
+            className="space-y-4 px-6 py-5"
+            onSubmit={priceForm.handleSubmit((values) => createPrice.mutate(values))}
+          >
+            <SelectField label="Servicio" error={priceForm.formState.errors.serviceTypeId?.message}>
+              <select {...priceForm.register('serviceTypeId')}>
+                <option value={0}>Seleccionar</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>{service.name}</option>
+                ))}
+              </select>
+            </SelectField>
+            <SelectField label="Tamaño de vehículo" error={priceForm.formState.errors.vehicleSizeId?.message}>
+              <select {...priceForm.register('vehicleSizeId')}>
+                <option value={0}>Seleccionar</option>
+                {sizes.map((size) => (
+                  <option key={size.id} value={size.id}>{size.name}</option>
+                ))}
+              </select>
+            </SelectField>
+            <TextField label="Precio $" error={priceForm.formState.errors.amount?.message}>
+              <input type="number" inputMode="decimal" min={0} step="0.01" {...priceForm.register('amount')} />
+            </TextField>
+            <TextField label="Válido desde" error={priceForm.formState.errors.effectiveFrom?.message}>
+              <input type="date" {...priceForm.register('effectiveFrom')} />
+            </TextField>
+            {createPrice.error && <ErrorMessage message={createPrice.error.message} />}
+            <ModalActions
+              onClose={() => setShowAddPrice(false)}
+              submitLabel={createPrice.isPending ? 'Guardando…' : 'Guardar precio'}
+            />
+          </form>
+        </Modal>
+      )}
+      {editingPrices && (
+        <Modal title="Editar precios" onClose={savingAll ? () => {} : exitEditMode}>
+          <div className="space-y-5 px-6 py-5">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <span className="text-[12px] font-semibold text-amber-800">Ajuste rápido</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="1"
+                step="1"
+                placeholder="$10"
+                value={quickAdjustInput}
+                onChange={(e) => setQuickAdjustInput(e.target.value)}
+                className="w-20 rounded border border-amber-300 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none"
+              />
+              <Button kind="ghost" size="sm" onClick={() => applyQuickAdjust(1)}>+ Subir a todos</Button>
+              <Button kind="ghost" size="sm" onClick={() => applyQuickAdjust(-1)}>− Bajar a todos</Button>
+              <span className="ml-auto text-[11px] text-amber-600">
+                {pendingAmounts.size > 0
+                  ? `${pendingAmounts.size} cambio${pendingAmounts.size !== 1 ? 's' : ''} pendiente${pendingAmounts.size !== 1 ? 's' : ''}`
+                  : 'Sin cambios'}
+              </span>
+            </div>
+            {mxnGroups.map(group => (
+              <div key={group.cat}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">{group.label}</p>
+                <div className="overflow-auto rounded-xl border border-border-soft">
+                  <table className="tl-tbl min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Vehículo</th>
+                        {group.svcIds.map(id => <th key={id} className="r whitespace-nowrap">{group.svcName[id]}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.szIds.map(szId => (
+                        <tr key={szId}>
+                          <td className="font-medium">{group.szName[szId]}</td>
+                          {group.svcIds.map(svcId => {
+                            const currentAmount = group.priceMap[`${svcId}-${szId}`]
+                            const key = `${svcId}-${szId}`
+                            const pendingVal = pendingAmounts.get(key)
+                            const isDirty = pendingVal !== undefined && pendingVal !== currentAmount
+                            return (
+                              <td key={svcId} className="r p-1">
+                                {currentAmount !== undefined ? (
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0.01"
+                                    step="1"
+                                    value={pendingVal ?? currentAmount}
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value)
+                                      setPendingAmounts(prev => {
+                                        const next = new Map(prev)
+                                        next.set(key, val)
+                                        return next
+                                      })
+                                    }}
+                                    className={[
+                                      'w-24 rounded border px-1.5 py-1 text-right text-sm tabular-nums focus:outline-none',
+                                      isDirty
+                                        ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900'
+                                        : 'border-border-soft bg-white focus:border-blue-400',
+                                    ].join(' ')}
+                                  />
+                                ) : <span className="text-ink-300">—</span>}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t border-border-soft px-6 py-4">
+            <Button kind="ghost" size="sm" onClick={exitEditMode} disabled={savingAll}>
+              Cancelar
+            </Button>
+            <Button
+              kind="go"
+              size="sm"
+              onClick={saveAllPending}
+              loading={savingAll}
+              disabled={pendingAmounts.size === 0}
+            >
+              {pendingAmounts.size > 0 ? `Guardar (${pendingAmounts.size})` : 'Guardar'}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }
