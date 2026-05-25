@@ -707,6 +707,7 @@ const serviceTypeSchema = z.object({
   code: codeSchema,
   name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
   description: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  category: z.enum(['STANDARD', 'EXTRA']).default('STANDARD'),
 })
 
 type ServiceTypeFormValues = z.infer<typeof serviceTypeSchema>
@@ -3816,7 +3817,7 @@ function CatalogsScreen() {
   })
   const serviceForm = useForm<ServiceTypeFormValues>({
     resolver: zodResolver(serviceTypeSchema) as Resolver<ServiceTypeFormValues>,
-    defaultValues: { code: '', name: '', description: '' },
+    defaultValues: { code: '', name: '', description: '', category: 'STANDARD' },
   })
   const sizeForm = useForm<VehicleSizeFormValues>({
     resolver: zodResolver(vehicleSizeSchema) as Resolver<VehicleSizeFormValues>,
@@ -3911,10 +3912,11 @@ function CatalogsScreen() {
         code: values.code.trim().toUpperCase(),
         name: values.name.trim(),
         description: values.description?.trim() || undefined,
+        category: values.category,
       }),
     }),
     onSuccess: async () => {
-      serviceForm.reset({ code: '', name: '', description: '' })
+      serviceForm.reset({ code: '', name: '', description: '', category: 'STANDARD' })
       await queryClient.invalidateQueries({ queryKey: ['service-types'] })
       showToast('Servicio guardado')
       setShowAddService(false)
@@ -4124,16 +4126,31 @@ function CatalogsScreen() {
 
           <Panel title="Servicios">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[12.5px] text-ink-500">Tipos de lavado disponibles al crear un ticket.</p>
+              <p className="text-[12.5px] text-ink-500">Lavados y extras disponibles al crear un ticket.</p>
               <Button kind="ghost" size="sm" onClick={() => setShowAddService(true)}>+ Agregar</Button>
             </div>
             <SimpleList
               empty="No hay servicios."
-              rows={services.map((service) => ({
-                id: service.id,
-                title: service.name,
-                detail: service.code,
-              }))}
+              rows={[...services]
+                .sort((a, b) => {
+                  const ac = a.category === 'EXTRA' ? 1 : 0
+                  const bc = b.category === 'EXTRA' ? 1 : 0
+                  return ac - bc || a.name.localeCompare(b.name)
+                })
+                .map((service) => ({
+                  id: service.id,
+                  title: (
+                    <span className="inline-flex items-center gap-2">
+                      <span>{service.name}</span>
+                      {service.category === 'EXTRA' && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-amber-800">
+                          Extra
+                        </span>
+                      )}
+                    </span>
+                  ),
+                  detail: service.code,
+                }))}
             />
           </Panel>
 
@@ -4264,6 +4281,15 @@ function CatalogsScreen() {
             <TextField label="Nombre" error={serviceForm.formState.errors.name?.message}>
               <input placeholder="Lavado de motor" {...serviceForm.register('name')} />
             </TextField>
+            <SelectField label="Tipo" error={serviceForm.formState.errors.category?.message}>
+              <select {...serviceForm.register('category')}>
+                <option value="STANDARD">Lavado (servicio principal)</option>
+                <option value="EXTRA">Extra (se suma a un lavado, p.ej. Encerado)</option>
+              </select>
+            </SelectField>
+            <p className="text-[11.5px] leading-snug text-ink-500">
+              Los Extras aparecen como botones en el ticket para sumar al precio del lavado base. Después de crearlo, agrega un precio por cada tamaño de vehículo en el panel de Precios.
+            </p>
             {createService.error && <ErrorMessage message={createService.error.message} />}
             <ModalActions
               onClose={() => setShowAddService(false)}
@@ -8060,7 +8086,7 @@ function EmployeeEditModal({
   )
 }
 
-function SimpleList({ rows, empty }: { rows: { id: number; title: string; detail: string }[]; empty: string }) {
+function SimpleList({ rows, empty }: { rows: { id: number; title: React.ReactNode; detail: string }[]; empty: string }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border-soft bg-ink-50/60 px-4 py-5 text-center text-[13px] text-ink-500">

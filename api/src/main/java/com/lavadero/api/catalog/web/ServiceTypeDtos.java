@@ -13,7 +13,8 @@ public final class ServiceTypeDtos {
     public record CreateServiceTypeRequest(
             @NotBlank @Size(max = 40) @Pattern(regexp = "^[A-Z0-9_]+$") String code,
             @NotBlank @Size(max = 120) String name,
-            @Size(max = 500) String description) {
+            @Size(max = 500) String description,
+            @Pattern(regexp = "STANDARD|EXTRA") String category) {
     }
 
     public record UpdateServiceTypeRequest(

@@ -35,9 +35,14 @@ public class ServiceType extends AuditedEntity {
     }
 
     public ServiceType(String code, String name, String description) {
+        this(code, name, description, "STANDARD");
+    }
+
+    public ServiceType(String code, String name, String description, String category) {
         this.code = code;
         this.name = name;
         this.description = description;
+        this.category = category == null || category.isBlank() ? "STANDARD" : category;
     }
 
     public Long getId() {

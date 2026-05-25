@@ -26,7 +26,7 @@ public class ServiceTypeService {
         if (serviceTypes.existsByCode(request.code())) {
             throw new IllegalArgumentException("Service type code already exists");
         }
-        return serviceTypes.save(new ServiceType(request.code(), request.name(), request.description()));
+        return serviceTypes.save(new ServiceType(request.code(), request.name(), request.description(), request.category()));
     }
 
     @Transactional(readOnly = true)
