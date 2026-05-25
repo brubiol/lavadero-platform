@@ -184,6 +184,7 @@ type Ticket = {
   priceOverride?: number | null
   surchargeAmount?: number | null
   surchargeReason?: string | null
+  discountReason?: string | null
   notes?: string | null
 }
 
@@ -672,6 +673,10 @@ const ticketSchema = z.object({
   priceOverride: z.coerce.number().min(0.01, 'Minimo $0.01').optional().or(z.literal('')),
   surchargeAmount: z.coerce.number().min(0, 'Minimo $0').optional().or(z.literal('')),
   surchargeReason: z.string().max(120, 'Maximo 120 caracteres').optional(),
+  discountReason: z.string().max(120, 'Maximo 120 caracteres').optional(),
+}).refine((v) => !(!v.courtesy && (v.discountPercent ?? 0) > 0 && !v.discountReason?.trim()), {
+  message: 'Captura el motivo del descuento',
+  path: ['discountReason'],
 })
 
 type TicketFormValues = z.infer<typeof ticketSchema>
@@ -3054,6 +3059,7 @@ function TicketWorkspace({
     surchargeAmount: (ticket?.surchargeAmount && Number(ticket.surchargeAmount) > 0
       ? Number(ticket.surchargeAmount) : '') as number | '',
     surchargeReason: ticket?.surchargeReason ?? '',
+    discountReason: ticket?.discountReason ?? '',
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [ticket?.id])
 
@@ -3129,6 +3135,8 @@ function TicketWorkspace({
         surchargeAmount: surcharge > 0 ? surcharge : 0,
         surchargeReason: !values.courtesy && surcharge > 0
           ? (values.surchargeReason?.trim() || undefined) : undefined,
+        discountReason: !values.courtesy && (values.discountPercent ?? 0) > 0
+          ? (values.discountReason?.trim() || undefined) : undefined,
         notes: values.notes?.trim() || undefined,
       }
       if (mode === 'edit' && ticket) {
@@ -3251,440 +3259,365 @@ function TicketWorkspace({
       <form className="grid gap-4 xl:grid-cols-[1fr_340px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
         <div className="space-y-3">
 
-          {/* ── 1. Datos del servicio ──────────────────────────────── */}
+          {/* ── DATOS DEL SERVICIO (flat layout per cashier wireframe) ── */}
           <div className="tl-panel overflow-hidden">
-            <SectionHeader
-              num={1}
-              color="bg-gradient-to-b from-violet-500 to-violet-700"
-              title="Datos del servicio"
-              aside={
-                <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+            {/* Header with title + Cortesía + Prepago checkboxes */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-ink-50/40 px-4 py-2.5">
+              <h3 className="text-[13.5px] font-bold uppercase tracking-[0.04em] text-ink-800">DATOS DEL SERVICIO</h3>
+              <div className="flex items-center gap-2">
+                <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-semibold transition-all duration-150 ${
                   watched.courtesy
                     ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]'
-                    : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
+                    : 'border-border-soft bg-white text-ink-600 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
                 }`}>
                   <input type="checkbox" {...form.register('courtesy')} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Marcar como cortesia" />
                   <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
                   Cortesía
                 </label>
-              }
-            />
-
-            <div className="space-y-3.5 p-4">
-              {/* Servicio subgroup — these drive the price */}
-              <div>
-                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Servicio · determina el precio</p>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="block text-[12px] font-semibold text-ink-700">Turno</label>
-                      <button
-                        type="button"
-                        onClick={() => setShiftLocked((v) => !v)}
-                        className={`text-[10.5px] font-semibold ${shiftLocked ? 'text-violet-600 hover:text-violet-700' : 'text-ink-500 hover:text-ink-700'}`}
-                      >
-                        {shiftLocked ? 'Cambiar' : 'Volver a auto'}
-                      </button>
-                    </div>
-                    {shiftLocked ? (
-                      <>
-                        <div className="flex h-[38px] items-center gap-2 rounded-xl border border-border-soft bg-ink-50/60 px-3.5">
-                          <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                            <rect x="5" y="11" width="14" height="10" rx="2" />
-                            <path d="M8 11V8a4 4 0 018 0v3" />
-                          </svg>
-                          <span className="text-[13px] font-semibold text-ink-800">
-                            {(() => {
-                              const sel = openShifts.find((s) => s.id === Number(watched.shiftId))
-                              if (!sel) return 'Sin turno'
-                              return sel.shiftType === 'MATUTINO' ? 'Mañana (auto)' : 'Tarde (auto)'
-                            })()}
-                          </span>
-                        </div>
-                        {/* Hidden select kept in the DOM so form state + accessibility + E2E selectors keep working */}
-                        <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno" className="sr-only">
-                          <option value={0}>Selecciona turno</option>
-                          {openShifts.map((shift) => (
-                            <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
-                          ))}
-                        </select>
-                      </>
-                    ) : (
-                      <>
-                        <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno">
-                          <option value={0}>Selecciona turno</option>
-                          {openShifts.map((shift) => (
-                            <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
-                          ))}
-                        </select>
-                        {form.formState.errors.shiftId?.message && (
-                          <p className="mt-1 text-xs text-red-600">{form.formState.errors.shiftId.message}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
-                    <select {...form.register('serviceTypeId')}>
-                      <option value={0}>Selecciona servicio</option>
-                      {(() => {
-                        const all = (data.services.data ?? []).filter((s) => s.active !== false)
-                        const standard = all.filter((s) => s.category !== 'EXTRA')
-                        const extras = all.filter((s) => s.category === 'EXTRA')
-                        return (
-                          <>
-                            {standard.length > 0 && (
-                              <optgroup label="Lavados">
-                                {standard.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                              </optgroup>
-                            )}
-                            {extras.length > 0 && (
-                              <optgroup label="Extras (precio aparte)">
-                                {extras.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                              </optgroup>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </select>
-                  </SelectField>
-                  <SelectField label="Vehículo" error={form.formState.errors.vehicleSizeId?.message}>
-                    <select {...form.register('vehicleSizeId')}>
-                      <option value={0}>Selecciona vehículo</option>
-                      {(() => {
-                        const labels: Record<string, string> = {
-                          AUTO: 'Autos y camionetas',
-                          MOTO: 'Motos',
-                          RAZR: 'RAZR',
-                          PERSONAL: 'Camionetas de personal',
-                        }
-                        const order = ['AUTO', 'MOTO', 'RAZR', 'PERSONAL']
-                        const byCat: Record<string, VehicleSize[]> = {}
-                        for (const size of (data.sizes.data ?? []).filter((s) => s.active !== false)) {
-                          const cat = (size.category as string) || 'AUTO'
-                          ;(byCat[cat] ||= []).push(size)
-                        }
-                        const cats = [...new Set([...order, ...Object.keys(byCat)])]
-                          .filter((c) => byCat[c]?.length)
-                        return cats.map((cat) => (
-                          <optgroup key={cat} label={labels[cat] ?? cat}>
-                            {byCat[cat]
-                              .sort((a, b) => a.sortOrder - b.sortOrder)
-                              .map((size) => (
-                                <option key={size.id} value={size.id}>{size.name}</option>
-                              ))}
-                          </optgroup>
-                        ))
-                      })()}
-                    </select>
-                  </SelectField>
-                  <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
-                    <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
-                      <option value="CASH">Efectivo</option>
-                      <option value="CARD">Tarjeta</option>
-                      <option value="TRANSFER">Depósito</option>
-                    </select>
-                  </SelectField>
-                </div>
-              </div>
-
-              {/* Detalle subgroup — context fields */}
-              <div className="border-t border-border-soft pt-3">
-                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Detalle del lavado</p>
-                <div className={`grid gap-3 sm:grid-cols-2 ${watched.courtesy ? 'xl:grid-cols-2' : 'xl:grid-cols-3'}`}>
-                  {!watched.courtesy && (
-                    <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
-                      <input placeholder="Ej. 41703" {...form.register('internalRef')} />
-                    </TextField>
-                  )}
-                  <TextField label="Descripción del vehículo" error={form.formState.errors.vehicleDescription?.message}>
-                    <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-                  </TextField>
-                  <TextField label="Hora del lavado" hint="Formato 24 h — ej. 14:30">
-                    <input
-                      type="time"
-                      lang="es-MX"
-                      {...form.register('occurredAt')}
-                    />
-                  </TextField>
-                </div>
+                {/* Prepago — visible per wireframe; full wiring to /paquetes is deferred. */}
+                <label
+                  title="Próximamente — usa /paquetes para registrar paquetes prepagados"
+                  className="relative flex cursor-not-allowed select-none items-center gap-2 rounded-full border border-border-soft bg-ink-50 px-3 py-1 text-[12px] font-semibold text-ink-400"
+                >
+                  <input type="checkbox" disabled aria-label="Prepago (próximamente)" className="absolute inset-0 h-full w-full opacity-0" />
+                  <span className="h-3 w-3 rounded-full bg-ink-300" />
+                  Prepago
+                </label>
               </div>
             </div>
-          </div>
 
-          {/* ── 2. Lavadores asignados ─────────────────────────────── */}
-          {(() => {
-            const allLavadores = (data.employees.data ?? [])
-              .filter((e) => e.active)
-              .filter((e) => !/tia\s*gabi/i.test(e.fullName))
-            const selectedIds = (watched.employeeIds ?? []).map(Number)
-            const toggle = (id: number) => {
-              const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
-              form.setValue('employeeIds', next, { shouldValidate: true })
-              setLavadorQuery('')
-            }
-            const filtered = lavadorQuery.trim()
-              ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
-              : allLavadores
-            const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
-            return (
-              <div className="tl-panel overflow-hidden">
-                <SectionHeader
-                  num={2}
-                  color="bg-gradient-to-b from-violet-500 to-violet-700"
-                  title="Lavadores asignados"
-                  aside={
-                    selectedEmployees.length > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-bold text-violet-700">
-                        <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                        {selectedEmployees.length} seleccionado{selectedEmployees.length === 1 ? '' : 's'}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-semibold text-ink-400">Ninguno seleccionado</span>
-                    )
-                  }
-                />
-                <div className="space-y-2.5 p-4">
-                  {selectedEmployees.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedEmployees.map((e) => (
-                        <button
-                          key={e.id}
-                          type="button"
-                          onClick={() => toggle(e.id)}
-                          className="flex items-center gap-1 rounded-full border border-violet-300 bg-violet-600 py-0.5 pl-2 pr-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-violet-700"
-                        >
-                          {e.fullName}
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-[10px] leading-none">×</span>
-                        </button>
-                      ))}
-                    </div>
+            <div className="space-y-3.5 p-4">
+              {/* Row 1: Turno · Servicio · Vehículo · Forma de pago · Precio especial */}
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {/* Turno (auto-locked, click to override) */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-[12px] font-semibold text-ink-700">Turno</label>
+                    <button
+                      type="button"
+                      onClick={() => setShiftLocked((v) => !v)}
+                      className={`text-[10.5px] font-semibold ${shiftLocked ? 'text-violet-600 hover:text-violet-700' : 'text-ink-500 hover:text-ink-700'}`}
+                    >
+                      {shiftLocked ? 'Cambiar' : 'Auto'}
+                    </button>
+                  </div>
+                  {shiftLocked ? (
+                    <>
+                      <div className="flex h-[38px] items-center gap-2 rounded-xl border border-border-soft bg-ink-50/60 px-3">
+                        <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                          <rect x="5" y="11" width="14" height="10" rx="2" />
+                          <path d="M8 11V8a4 4 0 018 0v3" />
+                        </svg>
+                        <span className="text-[13px] font-semibold text-ink-800">
+                          {(() => {
+                            const sel = openShifts.find((s) => s.id === Number(watched.shiftId))
+                            if (!sel) return 'Sin turno'
+                            return sel.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'
+                          })()}
+                        </span>
+                      </div>
+                      <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno" className="sr-only">
+                        <option value={0}>Selecciona turno</option>
+                        {openShifts.map((shift) => (
+                          <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno">
+                        <option value={0}>Selecciona turno</option>
+                        {openShifts.map((shift) => (
+                          <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
+                        ))}
+                      </select>
+                      {form.formState.errors.shiftId?.message && (
+                        <p className="mt-1 text-xs text-red-600">{form.formState.errors.shiftId.message}</p>
+                      )}
+                    </>
                   )}
+                </div>
+                <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
+                  <select {...form.register('serviceTypeId')}>
+                    <option value={0}>Selecciona</option>
+                    {(() => {
+                      const all = (data.services.data ?? []).filter((s) => s.active !== false)
+                      const standard = all.filter((s) => s.category !== 'EXTRA')
+                      const extras = all.filter((s) => s.category === 'EXTRA')
+                      return (
+                        <>
+                          {standard.length > 0 && (
+                            <optgroup label="Lavados">
+                              {standard.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </optgroup>
+                          )}
+                          {extras.length > 0 && (
+                            <optgroup label="Extras (precio aparte)">
+                              {extras.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </optgroup>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </select>
+                </SelectField>
+                <SelectField label="Vehículo" error={form.formState.errors.vehicleSizeId?.message}>
+                  <select {...form.register('vehicleSizeId')}>
+                    <option value={0}>Selecciona</option>
+                    {(() => {
+                      const labels: Record<string, string> = {
+                        AUTO: 'Autos y camionetas',
+                        MOTO: 'Motos',
+                        RAZR: 'RAZR',
+                        PERSONAL: 'Camionetas de personal',
+                      }
+                      const order = ['AUTO', 'MOTO', 'RAZR', 'PERSONAL']
+                      const byCat: Record<string, VehicleSize[]> = {}
+                      for (const size of (data.sizes.data ?? []).filter((s) => s.active !== false)) {
+                        const cat = (size.category as string) || 'AUTO'
+                        ;(byCat[cat] ||= []).push(size)
+                      }
+                      const cats = [...new Set([...order, ...Object.keys(byCat)])]
+                        .filter((c) => byCat[c]?.length)
+                      return cats.map((cat) => (
+                        <optgroup key={cat} label={labels[cat] ?? cat}>
+                          {byCat[cat]
+                            .sort((a, b) => a.sortOrder - b.sortOrder)
+                            .map((size) => (
+                              <option key={size.id} value={size.id}>{size.name}</option>
+                            ))}
+                        </optgroup>
+                      ))
+                    })()}
+                  </select>
+                </SelectField>
+                <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
+                  <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
+                    <option value="CASH">Efectivo</option>
+                    <option value="CARD">Tarjeta</option>
+                    <option value="TRANSFER">Depósito</option>
+                  </select>
+                </SelectField>
+                <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
                   <input
-                    type="text"
-                    value={lavadorQuery}
-                    onChange={(e) => setLavadorQuery(e.target.value)}
-                    onFocus={() => setLavadorFocused(true)}
-                    onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
-                    placeholder="Buscar lavador..."
-                    className="w-full"
+                    type="number"
+                    inputMode="decimal"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="Opcional"
+                    disabled={watched.courtesy}
+                    {...form.register('priceOverride')}
                   />
-                  {lavadorFocused && filtered.length > 0 && (
-                    <div className="overflow-hidden rounded-xl border border-border-soft bg-white shadow-md">
-                      {filtered.map((e) => {
-                        const active = selectedIds.includes(e.id)
-                        return (
+                </TextField>
+              </div>
+
+              {/* Row 2: No. de Nota · Descripción · Hora · Lavadores (compact) */}
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[130px_1fr_110px_1.5fr]">
+                <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
+                  <input placeholder="Ej. 41703" disabled={watched.courtesy} {...form.register('internalRef')} />
+                </TextField>
+                <TextField label="Descripción del vehículo" error={form.formState.errors.vehicleDescription?.message}>
+                  <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
+                </TextField>
+                <TextField label="Hora" hint="24 h">
+                  <input type="time" lang="es-MX" {...form.register('occurredAt')} />
+                </TextField>
+                {/* Lavadores — compact tag-picker. Chips inline, dropdown overlays. */}
+                {(() => {
+                  const allLavadores = (data.employees.data ?? [])
+                    .filter((e) => e.active)
+                    .filter((e) => !/tia\s*gabi/i.test(e.fullName))
+                  const selectedIds = (watched.employeeIds ?? []).map(Number)
+                  const toggle = (id: number) => {
+                    const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
+                    form.setValue('employeeIds', next, { shouldValidate: true })
+                    setLavadorQuery('')
+                  }
+                  const filtered = lavadorQuery.trim()
+                    ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
+                    : allLavadores
+                  const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
+                  return (
+                    <div className="relative">
+                      <label className="mb-1 block text-[12px] font-semibold text-ink-700">
+                        Lavadores
+                        {selectedEmployees.length > 0 && (
+                          <span className="ml-1.5 inline-flex items-center rounded-full bg-violet-100 px-1.5 text-[10px] font-bold text-violet-700">
+                            {selectedEmployees.length}
+                          </span>
+                        )}
+                      </label>
+                      <div className="flex min-h-[38px] flex-wrap items-center gap-1 rounded-xl border border-border-soft bg-white px-2 py-1">
+                        {selectedEmployees.map((e) => (
                           <button
                             key={e.id}
                             type="button"
                             onClick={() => toggle(e.id)}
-                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${
-                              active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
-                            }`}
+                            className="inline-flex items-center gap-1 rounded-full bg-violet-600 py-0.5 pl-2 pr-1 text-[11px] font-semibold text-white hover:bg-violet-700"
                           >
-                            {e.fullName}
-                            {active && <span className="text-[11px] text-violet-500">✓</span>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {form.formState.errors.employeeIds?.message && (
-                    <p className="text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* ── 3. Notas (compact accordion) ───────────────────────── */}
-          <div className="tl-panel overflow-hidden">
-            <SectionHeader
-              num={3}
-              color="bg-gradient-to-b from-emerald-400 to-emerald-600"
-              title="Notas"
-              aside={
-                <button
-                  type="button"
-                  onClick={() => setShowFullNotes((v) => !v)}
-                  className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
-                >
-                  {showFullNotes ? 'Compactar −' : 'Detalladas +'}
-                </button>
-              }
-            />
-            <div className="p-4">
-              {showFullNotes ? (
-                <textarea
-                  rows={2}
-                  placeholder="Ej. cliente frecuente, pago con billete grande, lavar con cuidado..."
-                  {...form.register('notes')}
-                  className="tl-input resize-none"
-                />
-              ) : (
-                <input
-                  type="text"
-                  placeholder="Nota corta (opcional)..."
-                  {...form.register('notes')}
-                  className="tl-input"
-                />
-              )}
-            </div>
-          </div>
-
-          {/* ── 4. Mas opciones toggle ─────────────────────────────── */}
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((v) => !v)}
-            data-testid="ticket-advanced-toggle"
-            className={`flex w-full items-center justify-between rounded-xl border px-4 py-2.5 text-[13px] font-semibold transition-all duration-150 ${
-              effectiveShowAdvanced
-                ? 'border-amber-200 bg-amber-50 text-amber-800'
-                : 'border-border-soft bg-white text-ink-500 hover:border-amber-200 hover:bg-amber-50/70 hover:text-amber-700'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <span className={`flex h-5 w-5 items-center justify-center rounded text-[10.5px] font-bold text-white shadow-sm bg-gradient-to-b from-amber-400 to-amber-600`}>
-                4
-              </span>
-              <span>{effectiveShowAdvanced ? 'Ocultar opciones avanzadas' : 'Más opciones — precio especial, descuento, extras'}</span>
-            </div>
-            <svg
-              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${effectiveShowAdvanced ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {/* ── Opciones avanzadas ────────────────────────────────── */}
-          {effectiveShowAdvanced && (
-            <div className="tl-panel overflow-hidden">
-              <SectionHeader
-                num={4}
-                color="bg-gradient-to-b from-amber-400 to-amber-600"
-                title="Opciones avanzadas"
-              />
-              <div className="space-y-3.5 p-4">
-                {/* Extras presets — one-click chips that pre-fill "Precio especial" with
-                    base + extra and tag the notes. Only shown when (a) a vehicle size is
-                    picked, (b) the primary service is a standard wash (no chips on a
-                    standalone Encerado), and (c) at least one extra has a price for the
-                    picked vehicle size. MOTO / RAZR / PERSONAL hide naturally via sparse
-                    pricing. */}
-                {(() => {
-                  const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
-                  const sizeId = Number(watched.vehicleSizeId)
-                  if (!currentSvc || sizeId === 0) return null
-                  if (currentSvc.category === 'EXTRA') return null
-                  const prices = data.prices.data ?? []
-                  const baseAmount = prices.find((pr) =>
-                    pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
-                  )?.amount ?? 0
-                  const extras = (data.services.data ?? [])
-                    .filter((s) => s.active !== false && s.category === 'EXTRA')
-                    .map((s) => ({
-                      service: s,
-                      price: prices.find((pr) =>
-                        pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
-                      )?.amount,
-                    }))
-                    .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
-                  if (extras.length === 0) return null
-                  const onAddExtra = (extraName: string, extraPrice: number) => {
-                    form.setValue('priceOverride', baseAmount + extraPrice, { shouldValidate: true })
-                    const currentNotes = (watched.notes ?? '').trim()
-                    const marker = `+ ${extraName}`
-                    if (!currentNotes.toLowerCase().includes(extraName.toLowerCase())) {
-                      form.setValue('notes', currentNotes ? `${currentNotes} ${marker}` : marker, { shouldValidate: true })
-                    }
-                  }
-                  return (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                      <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-amber-800">
-                        Agregar extra — rellena precio especial
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {extras.map(({ service, price }) => (
-                          <button
-                            key={service.id}
-                            type="button"
-                            onClick={() => onAddExtra(service.name, price)}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1 text-[12px] font-semibold text-amber-800 transition hover:bg-amber-100"
-                          >
-                            <span>+ {service.name}</span>
-                            <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-bold text-amber-700">
-                              ${price.toLocaleString('es-MX')}
-                            </span>
+                            {e.fullName.split(' ')[0]}
+                            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/20 text-[10px] leading-none">×</span>
                           </button>
                         ))}
+                        <input
+                          type="text"
+                          value={lavadorQuery}
+                          onChange={(e) => setLavadorQuery(e.target.value)}
+                          onFocus={() => setLavadorFocused(true)}
+                          onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
+                          placeholder={selectedEmployees.length === 0 ? 'Buscar...' : ''}
+                          className="min-w-[80px] flex-1 border-0 bg-transparent text-[12.5px] outline-none focus:ring-0"
+                          style={{ padding: '2px 4px' }}
+                        />
                       </div>
-                      <p className="mt-2 text-[10.5px] text-amber-700/80">
-                        Click un extra para sumarlo al precio base (${baseAmount.toLocaleString('es-MX')}).
-                        Se anota en las notas del ticket.
-                      </p>
+                      {lavadorFocused && filtered.length > 0 && (
+                        <div className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border-soft bg-white shadow-lg">
+                          {filtered.map((e) => {
+                            const active = selectedIds.includes(e.id)
+                            return (
+                              <button
+                                key={e.id}
+                                type="button"
+                                onClick={() => toggle(e.id)}
+                                className={`flex w-full items-center justify-between px-3 py-2 text-left text-[12.5px] transition-colors ${
+                                  active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
+                                }`}
+                              >
+                                {e.fullName}
+                                {active && <span className="text-[11px] text-violet-500">✓</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {form.formState.errors.employeeIds?.message && (
+                        <p className="mt-1 text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
+                      )}
                     </div>
                   )
                 })()}
+              </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <TextField label="Precio especial ($)" error={form.formState.errors.priceOverride?.message}>
-                    <input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="Dejar vacio = precio de lista" {...form.register('priceOverride')} />
-                  </TextField>
-                  <div>
-                    <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={1}
-                        placeholder="0"
-                        disabled={watched.courtesy}
-                        {...form.register('discountPercent')}
-                      />
-                    </TextField>
-                    {watched.discountPercent > 0 && !watched.courtesy && (
-                      <p className="mt-1.5 text-xs font-medium text-amber-700">Precio final reducido {watched.discountPercent}%</p>
-                    )}
+              {/* Row 3: Notas internas (left) + EXTRAS box (right) */}
+              <div className="grid gap-3 xl:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[12px] font-semibold text-ink-700">Notas internas</label>
+                  <textarea
+                    rows={6}
+                    placeholder="Ej. cliente frecuente, billete grande, lavar con cuidado..."
+                    {...form.register('notes')}
+                    className="tl-input resize-none"
+                  />
+                </div>
+
+                <fieldset className="rounded-xl border-2 border-border-soft p-3">
+                  <legend className="px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">EXTRAS</legend>
+                  <div className="space-y-3">
+                    {/* Encerado / Pulido / Lav. Interior presets — fill Precio especial */}
+                    {(() => {
+                      const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
+                      const sizeId = Number(watched.vehicleSizeId)
+                      if (!currentSvc || sizeId === 0) return null
+                      if (currentSvc.category === 'EXTRA') return null
+                      const prices = data.prices.data ?? []
+                      const baseAmount = prices.find((pr) =>
+                        pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                      )?.amount ?? 0
+                      const extras = (data.services.data ?? [])
+                        .filter((s) => s.active !== false && s.category === 'EXTRA')
+                        .map((s) => ({
+                          service: s,
+                          price: prices.find((pr) =>
+                            pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                          )?.amount,
+                        }))
+                        .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
+                      if (extras.length === 0) return null
+                      const onAddExtra = (extraName: string, extraPrice: number) => {
+                        form.setValue('priceOverride', baseAmount + extraPrice, { shouldValidate: true })
+                        const currentNotes = (watched.notes ?? '').trim()
+                        const marker = `+ ${extraName}`
+                        if (!currentNotes.toLowerCase().includes(extraName.toLowerCase())) {
+                          form.setValue('notes', currentNotes ? `${currentNotes} ${marker}` : marker, { shouldValidate: true })
+                        }
+                      }
+                      return (
+                        <div>
+                          <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">
+                            Sumar al precio especial
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {extras.map(({ service, price }) => (
+                              <button
+                                key={service.id}
+                                type="button"
+                                onClick={() => onAddExtra(service.name, price)}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11.5px] font-semibold text-amber-800 transition hover:bg-amber-100"
+                              >
+                                + {service.name}
+                                <span className="rounded-full bg-amber-200/70 px-1.5 text-[10.5px] font-bold text-amber-800">
+                                  ${price.toLocaleString('es-MX')}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Cargo + Motivo del cargo */}
+                    <div className="grid gap-2 grid-cols-[100px_1fr]">
+                      <TextField label="Cargo" error={form.formState.errors.surchargeAmount?.message}>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          placeholder="0"
+                          disabled={watched.courtesy}
+                          data-testid="ticket-surcharge-amount"
+                          {...form.register('surchargeAmount')}
+                        />
+                      </TextField>
+                      <TextField label="Motivo del cargo" error={form.formState.errors.surchargeReason?.message}>
+                        <input
+                          type="text"
+                          placeholder={Number(watched.surchargeAmount) > 0 ? 'Ej. lleno de lodo' : 'Ingresa primero el monto'}
+                          maxLength={120}
+                          disabled={watched.courtesy || !(Number(watched.surchargeAmount) > 0)}
+                          {...form.register('surchargeReason')}
+                        />
+                      </TextField>
+                    </div>
+
+                    {/* Descuento + Motivo del descuento */}
+                    <div className="grid gap-2 grid-cols-[100px_1fr]">
+                      <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          placeholder="0"
+                          disabled={watched.courtesy}
+                          {...form.register('discountPercent')}
+                        />
+                      </TextField>
+                      <TextField label="Motivo del descuento" error={form.formState.errors.discountReason?.message}>
+                        <input
+                          type="text"
+                          placeholder={watched.discountPercent > 0 ? 'Ej. cliente frecuente' : 'Ingresa primero el %'}
+                          maxLength={120}
+                          disabled={watched.courtesy || !(watched.discountPercent > 0)}
+                          {...form.register('discountReason')}
+                        />
+                      </TextField>
+                    </div>
                   </div>
-                </div>
-
-                {/* Cargo extra (exceso de lodo, vehiculo extra sucio, etc.) */}
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-[180px_1fr]">
-                  <TextField label="Cargo extra ($)" error={form.formState.errors.surchargeAmount?.message}>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      placeholder="0"
-                      disabled={watched.courtesy}
-                      data-testid="ticket-surcharge-amount"
-                      className={watched.courtesy ? 'opacity-60' : undefined}
-                      {...form.register('surchargeAmount')}
-                    />
-                  </TextField>
-                  <TextField label="Motivo del cargo" error={form.formState.errors.surchargeReason?.message}>
-                    <input
-                      type="text"
-                      placeholder={Number(watched.surchargeAmount) > 0
-                        ? 'Ej. Lleno de lodo, mascotas, vómito...'
-                        : 'Ingresa primero el monto'}
-                      maxLength={120}
-                      disabled={watched.courtesy || !(Number(watched.surchargeAmount) > 0)}
-                      className={watched.courtesy || !(Number(watched.surchargeAmount) > 0)
-                        ? 'opacity-60' : undefined}
-                      {...form.register('surchargeReason')}
-                    />
-                  </TextField>
-                </div>
-                {Number(watched.surchargeAmount) > 0 && !watched.courtesy && (
-                  <p className="text-xs font-medium text-amber-700">
-                    Se sumará {money(Number(watched.surchargeAmount), 'MXN')} al precio del servicio.
-                  </p>
-                )}
-
+                </fieldset>
               </div>
             </div>
-          )}
+          </div>
+
         </div>
 
         {/* ── Sidebar: precio + submit ──────────────────────────── */}

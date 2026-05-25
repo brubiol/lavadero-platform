@@ -34,7 +34,9 @@ public final class TicketDtos {
             @Size(max = 40) String internalRef,
             @DecimalMin("0.01") BigDecimal priceOverride,
             @DecimalMin("0") BigDecimal surchargeAmount,
-            @Size(max = 120) String surchargeReason) {
+            @Size(max = 120) String surchargeReason,
+            @Size(max = 120) String discountReason,
+            @Size(max = 500) String notes) {
     }
 
     public record UpdateTicketRequest(
@@ -52,6 +54,7 @@ public final class TicketDtos {
             @DecimalMin("0.01") BigDecimal priceOverride,
             @DecimalMin("0") BigDecimal surchargeAmount,
             @Size(max = 120) String surchargeReason,
+            @Size(max = 120) String discountReason,
             @Size(max = 500) String notes) {
     }
 
@@ -75,7 +78,7 @@ public final class TicketDtos {
             boolean courtesy, String courtesyReason, TicketStatus status, String voidReason, Instant voidedAt,
             List<TicketAssignmentResponse> assignments, Instant createdAt, Instant updatedAt,
             Long customerId, String customerName, Instant occurredAt, String internalRef, BigDecimal priceOverride,
-            BigDecimal surchargeAmount, String surchargeReason, String notes) {
+            BigDecimal surchargeAmount, String surchargeReason, String discountReason, String notes) {
         public static TicketResponse from(Ticket ticket) {
             return new TicketResponse(ticket.getId(), ticket.getBusinessDay().getId(), ticket.getShift().getId(),
                     ticket.getServiceType().getId(), ticket.getServiceType().getName(), ticket.getVehicleSize().getId(),
@@ -89,7 +92,7 @@ public final class TicketDtos {
                     ticket.getCustomer() != null ? ticket.getCustomer().getId() : null,
                     ticket.getCustomer() != null ? ticket.getCustomer().getName() : null,
                     ticket.getOccurredAt(), ticket.getInternalRef(), ticket.getPriceOverride(),
-                    ticket.getSurchargeAmount(), ticket.getSurchargeReason(),
+                    ticket.getSurchargeAmount(), ticket.getSurchargeReason(), ticket.getDiscountReason(),
                     ticket.getNotes());
         }
     }

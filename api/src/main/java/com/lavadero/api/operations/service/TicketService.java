@@ -122,6 +122,7 @@ public class TicketService {
         }
         ticket.setSurchargeAmount(surcharge);
         ticket.setSurchargeReason(normalizeSurchargeReason(courtesy, request.surchargeReason()));
+        ticket.setDiscountReason(normalizeDiscountReason(courtesy, discount, request.discountReason()));
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         Ticket saved = tickets.save(ticket);
         String actor = currentActor();
@@ -260,6 +261,14 @@ public class TicketService {
         } else if (request.surchargeReason() != null) {
             ticket.setSurchargeReason(request.surchargeReason().isBlank() ? null : request.surchargeReason().trim());
         }
+        // Discount reason mirrors surcharge: null leaves untouched, blank clears,
+        // and validateDiscountReason enforces non-blank when discount > 0.
+        if (courtesy) {
+            ticket.setDiscountReason(null);
+        } else if (request.discountReason() != null) {
+            ticket.setDiscountReason(request.discountReason().isBlank() ? null : request.discountReason().trim());
+        }
+        validateDiscountReason(courtesy, discount, ticket.getDiscountReason());
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
         }
@@ -332,6 +341,24 @@ public class TicketService {
             return null;
         }
         return raw.trim();
+    }
+
+    /** Discount reason is required whenever the cashier applies a real discount.
+     *  Courtesy zeros the discount out and skips the reason entirely. */
+    private String normalizeDiscountReason(boolean courtesy, BigDecimal discount, String raw) {
+        if (courtesy || discount == null || discount.signum() <= 0) {
+            return null;
+        }
+        validateDiscountReason(courtesy, discount, raw);
+        return raw.trim();
+    }
+
+    private void validateDiscountReason(boolean courtesy, BigDecimal discount, String reason) {
+        if (courtesy) return;
+        if (discount == null || discount.signum() <= 0) return;
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Captura el motivo del descuento.");
+        }
     }
 
     @Transactional

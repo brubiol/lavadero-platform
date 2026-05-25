@@ -102,6 +102,9 @@ public class Ticket extends AuditedEntity {
     @Column(name = "surcharge_reason", length = 120)
     private String surchargeReason;
 
+    @Column(name = "discount_reason", length = 120)
+    private String discountReason;
+
     @Column(length = 500)
     private String notes;
 
@@ -193,6 +196,14 @@ public class Ticket extends AuditedEntity {
 
     public void setSurchargeReason(String surchargeReason) {
         this.surchargeReason = surchargeReason;
+    }
+
+    public String getDiscountReason() {
+        return discountReason;
+    }
+
+    public void setDiscountReason(String discountReason) {
+        this.discountReason = discountReason;
     }
 
     public TicketCurrency getCurrency() {

@@ -137,6 +137,7 @@ class Phase14DiscountIntegrationTest extends AbstractIntegrationTest {
                   "courtesy": %s,
                   "courtesyReason": %s,
                   "discountPercent": %s,
+                  "discountReason": "Cliente frecuente",
                   "employeeIds": [%d]
                 }
                 """.formatted(f.businessDayId(), f.shiftId(), f.serviceTypeId(), f.vehicleSizeId(),
