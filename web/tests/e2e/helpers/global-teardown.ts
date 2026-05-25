@@ -24,10 +24,10 @@ import { execSync } from 'node:child_process'
  * container per run.
  */
 const CONTAINER = process.env.E2E_CLEANUP_CONTAINER ?? 'lavadero-postgres'
-const PREFIX_RE = "^(E2E|DISC|GASTOS|PAYROLL|REPORT|CORTE|T2|T4|P5|P8|P9|P13|D14|A15|T14)"
+const PREFIX_RE = "^(E2E|DISC|GASTOS|PAYROLL|REPORT|CORTE|SMOKE|T2|T4|P5|P8|P9|P13|D14|A15|T14)"
 // expenses.description and advances.reason can have the prefix anywhere
 // in the text (e.g. "Esponjas E2E 1779..."), not just at start.
-const INFIX_RE = "(E2E|GASTOS_SVC|DISC_|REPORT_|PAYROLL_|CORTE_|T2_|T4_|P5_|P8_|P9_|P13_|D14_|A15_|T14)"
+const INFIX_RE = "(E2E|GASTOS_SVC|DISC_|REPORT_|PAYROLL_|CORTE_|SMOKE_|T2_|T4_|P5_|P8_|P9_|P13_|D14_|A15_|T14)"
 
 const SQL = `
 UPDATE service_types SET active = false

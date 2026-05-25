@@ -3497,58 +3497,76 @@ function TicketWorkspace({
                     <option value="TRANSFER">Depósito</option>
                   </select>
                 </SelectField>
-                {/* Precio especial — click-to-open picker. Tick extras to stack
-                    on top of base price. Each tick recomputes priceOverride =
-                    base + sum(ticked extras). Also accepts a free-text Otro
-                    amount for one-off custom pricing. The Corte sees this as
-                    a single priceOverride (cash totals match automatically);
-                    itemized breakdown by extra would need ticket_addons table. */}
-                <div className="relative">
+                {/* Precio Especial — typeable input + always-visible extras chips.
+                    Chip names render even before Servicio/Vehículo are picked so
+                    the cashier knows the menu. Prices and click-to-stack only
+                    activate once we know what to charge (service+vehicle picked,
+                    not courtesy, not an EXTRA-as-primary). Multi-select: each
+                    tick adds the extra's price to the running override; untick
+                    subtracts. Corte sees a single priceOverride number so cash
+                    totals match automatically. */}
+                <div>
                   <label className="mb-1 block text-[12px] font-semibold text-ink-700">
                     Precio especial ($)
                   </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0.01"
+                    step="0.01"
+                    placeholder={watched.courtesy ? 'N/A (cortesía)' : 'Opcional'}
+                    disabled={watched.courtesy}
+                    {...form.register('priceOverride')}
+                  />
+                  {form.formState.errors.priceOverride?.message && (
+                    <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
+                  )}
                   {(() => {
+                    if (watched.courtesy) return null
                     const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
                     const sizeId = Number(watched.vehicleSizeId)
+                    // Hide chips entirely when the primary service IS an extra
+                    // (would be nonsense to stack Encerado on Encerado).
+                    if (currentSvc && currentSvc.category === 'EXTRA') return null
+
                     const prices = data.prices.data ?? []
                     const baseAmount = currentSvc && sizeId
                       ? (prices.find((pr) =>
                           pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
                         )?.amount ?? 0)
                       : 0
+
+                    // All ACTIVE extras in the catalog — always shown, prices
+                    // resolved per current vehicle (null until vehicle is picked
+                    // or if no price row exists for this size).
                     const allExtras = (data.services.data ?? [])
                       .filter((s) => s.active !== false && s.category === 'EXTRA')
                       .map((s) => ({
                         service: s,
-                        price: prices.find((pr) =>
-                          pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
-                        )?.amount,
+                        price: sizeId
+                          ? prices.find((pr) =>
+                              pr.serviceTypeId === s.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                            )?.amount ?? null
+                          : null,
                       }))
-                      .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
-                    const showPicker = !watched.courtesy && currentSvc && sizeId !== 0 && currentSvc.category !== 'EXTRA' && allExtras.length > 0
+                    if (allExtras.length === 0) return null
 
-                    const pickedExtras = allExtras.filter((x) => selectedExtraIds.has(x.service.id))
-                    const overrideNum = watched.priceOverride !== '' && watched.priceOverride != null
-                      ? Number(watched.priceOverride) : 0
-                    const extrasSum = pickedExtras.reduce((s, x) => s + x.price, 0)
-                    // Custom = whatever isn't accounted for by base + sum(picked extras).
-                    // Lets the cashier type freely AND still see the extras breakdown.
-                    const customExtra = overrideNum > 0 ? Math.max(0, overrideNum - baseAmount - extrasSum) : 0
-
-                    const recompute = (nextIds: Set<number>, nextCustom = customExtra) => {
+                    const priceable = baseAmount > 0
+                    const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                    const recompute = (nextIds: Set<number>) => {
                       const nextSum = allExtras
-                        .filter((x) => nextIds.has(x.service.id))
-                        .reduce((s, x) => s + x.price, 0)
-                      const next = nextIds.size === 0 && nextCustom === 0
+                        .filter((x) => nextIds.has(x.service.id) && x.price != null)
+                        .reduce((s, x) => s + (x.price as number), 0)
+                      const next = nextIds.size === 0
                         ? '' as const  // No override -> catalog price applies
-                        : baseAmount + nextSum + nextCustom
+                        : baseAmount + nextSum
                       form.setValue('priceOverride', next as number | '', { shouldValidate: true })
 
-                      // Keep notes in sync — strip prior extra markers, re-add for picked ones
+                      // Sync notes — strip prior extra markers, re-add for picked
                       const extraNames = allExtras.map((x) => x.service.name)
                       let cleanNotes = (watched.notes ?? '').trim()
                       for (const name of extraNames) {
-                        const re = new RegExp(`\\s*\\+\\s*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`, 'gi')
+                        const re = new RegExp(`\\s*\\+\\s*${escapeRe(name)}`, 'gi')
                         cleanNotes = cleanNotes.replace(re, '').trim()
                       }
                       const markers = allExtras
@@ -3558,161 +3576,60 @@ function TicketWorkspace({
                       const finalNotes = [cleanNotes, markers].filter(Boolean).join(' ').trim()
                       form.setValue('notes', finalNotes, { shouldValidate: true })
                     }
-
                     const toggleExtra = (id: number) => {
+                      const target = allExtras.find((x) => x.service.id === id)
+                      if (!target || target.price == null) return  // not priceable yet
                       const next = new Set(selectedExtraIds)
                       if (next.has(id)) next.delete(id); else next.add(id)
                       setSelectedExtraIds(next)
                       recompute(next)
                     }
-                    const clearAll = () => {
-                      setSelectedExtraIds(new Set())
-                      form.setValue('priceOverride', '' as number | '', { shouldValidate: true })
-                      // strip extra markers from notes
-                      const extraNames = allExtras.map((x) => x.service.name)
-                      let cleanNotes = (watched.notes ?? '').trim()
-                      for (const name of extraNames) {
-                        const re = new RegExp(`\\s*\\+\\s*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`, 'gi')
-                        cleanNotes = cleanNotes.replace(re, '').trim()
-                      }
-                      form.setValue('notes', cleanNotes, { shouldValidate: true })
-                    }
-
-                    if (!showPicker) {
-                      // Fallback to a plain input when there's no service+vehicle yet,
-                      // courtesy is on, or the current service is itself an extra.
-                      return (
-                        <>
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min="0.01"
-                            step="0.01"
-                            placeholder={watched.courtesy ? 'N/A (cortesía)' : 'Opcional'}
-                            disabled={watched.courtesy}
-                            {...form.register('priceOverride')}
-                          />
-                          {form.formState.errors.priceOverride?.message && (
-                            <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
-                          )}
-                        </>
-                      )
-                    }
 
                     return (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setPrecioOpen((v) => !v)}
-                          aria-expanded={precioOpen}
-                          aria-haspopup="listbox"
-                          className={`flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-left text-[13px] transition ${
-                            pickedExtras.length > 0 || customExtra > 0
-                              ? 'border-amber-300 ring-2 ring-amber-100'
-                              : 'border-border-soft hover:border-violet-300'
-                          }`}
-                        >
-                          <span className={overrideNum > 0 ? 'font-bold tabular-nums text-ink-900' : 'text-ink-400'}>
-                            {overrideNum > 0 ? `$${overrideNum.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : 'Opcional · pick extras'}
-                          </span>
-                          <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        {/* Picked-extras pills — visible even when picker is closed */}
-                        {pickedExtras.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {pickedExtras.map(({ service, price }) => (
+                      <div className="mt-1.5">
+                        {!priceable && (
+                          <p className="mb-0.5 text-[10px] text-ink-400">
+                            {sizeId === 0 || !currentSvc
+                              ? 'Pick servicio + vehículo para activar:'
+                              : 'Sin precio para este vehículo'}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {allExtras.map(({ service, price }) => {
+                            const picked = selectedExtraIds.has(service.id)
+                            const canPrice = price != null && priceable
+                            const onClick = () => toggleExtra(service.id)
+                            return (
                               <button
                                 key={service.id}
                                 type="button"
-                                onClick={() => toggleExtra(service.id)}
-                                className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800 hover:bg-amber-200"
+                                onClick={onClick}
+                                disabled={!canPrice}
+                                title={canPrice
+                                  ? `Suma ${service.name} (+$${price}) al precio base $${baseAmount}`
+                                  : 'Pick servicio y vehículo primero'}
+                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition ${
+                                  picked
+                                    ? 'border-amber-400 bg-amber-100 text-amber-900'
+                                    : canPrice
+                                      ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                      : 'cursor-not-allowed border-dashed border-ink-200 bg-ink-50/40 text-ink-400'
+                                }`}
                               >
+                                {picked && <span className="text-amber-600">✓</span>}
                                 {service.name}
-                                <span className="text-amber-600">·${price}</span>
-                                <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-200 text-[9px] leading-none">×</span>
+                                {canPrice && (
+                                  <span className={`rounded-full px-1 text-[10px] font-bold ${
+                                    picked ? 'bg-amber-300 text-amber-900' : 'bg-amber-200/70 text-amber-800'
+                                  }`}>
+                                    {picked ? '−' : '+'}${price}
+                                  </span>
+                                )}
                               </button>
-                            ))}
-                          </div>
-                        )}
-                        {form.formState.errors.priceOverride?.message && (
-                          <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
-                        )}
-                        {precioOpen && (
-                          <div className="absolute right-0 z-30 mt-1 w-72 rounded-xl border border-border-soft bg-white p-2.5 shadow-lg">
-                            <p className="mb-1.5 px-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">
-                              Sumar al precio base ${baseAmount}
-                            </p>
-                            <ul className="space-y-1">
-                              {allExtras.map(({ service, price }) => {
-                                const picked = selectedExtraIds.has(service.id)
-                                return (
-                                  <li key={service.id}>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleExtra(service.id)}
-                                      className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
-                                        picked
-                                          ? 'border-amber-300 bg-amber-50 text-amber-900'
-                                          : 'border-transparent text-ink-700 hover:bg-ink-50'
-                                      }`}
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        <span className={`flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold ${
-                                          picked ? 'border-amber-400 bg-amber-400 text-white' : 'border-ink-300 bg-white text-transparent'
-                                        }`}>✓</span>
-                                        {service.name}
-                                      </span>
-                                      <span className="font-semibold tabular-nums text-ink-700">+${price}</span>
-                                    </button>
-                                  </li>
-                                )
-                              })}
-                            </ul>
-                            <div className="mt-2 border-t border-border-soft pt-2">
-                              <label className="flex items-center justify-between gap-2 px-1 text-[11.5px] font-semibold text-ink-600">
-                                <span>Otro (precio manual)</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step={1}
-                                  value={customExtra || ''}
-                                  placeholder="0"
-                                  onChange={(e) => {
-                                    const v = Number(e.target.value) || 0
-                                    recompute(selectedExtraIds, v)
-                                  }}
-                                  className="w-20 rounded border border-border-soft px-2 py-0.5 text-right text-[12px]"
-                                />
-                              </label>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between border-t border-border-soft pt-2">
-                              <button
-                                type="button"
-                                onClick={clearAll}
-                                disabled={pickedExtras.length === 0 && customExtra === 0}
-                                className="text-[11px] font-semibold text-ink-500 hover:text-ink-800 disabled:opacity-40"
-                              >
-                                Limpiar
-                              </button>
-                              <div className="text-right">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Total</p>
-                                <p className="font-display text-[16px] font-bold tabular-nums text-ink-900">
-                                  ${(overrideNum || baseAmount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setPrecioOpen(false)}
-                              className="mt-2 w-full rounded-lg bg-violet-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-violet-700"
-                            >
-                              Listo
-                            </button>
-                          </div>
-                        )}
-                      </>
+                            )
+                          })}
+                        </div>
+                      </div>
                     )
                   })()}
                 </div>
