@@ -3037,6 +3037,14 @@ function TicketWorkspace({
     return 'none'
   })
   const [prepagoOpen, setPrepagoOpen] = useState(false)
+  // Precio Especial multi-pick. Cashier ticks N extras (Encerado, Pulido,
+  // Lav.Interior) and the picker accumulates base + sum(extras) into
+  // priceOverride. Selecting nothing = no override = catalog price applies.
+  // No round-trip yet for edits: when editing an existing ticket the
+  // override is preserved as a single number; the cashier can re-pick if
+  // they want to itemize again.
+  const [precioOpen, setPrecioOpen] = useState(false)
+  const [selectedExtraIds, setSelectedExtraIds] = useState<Set<number>>(new Set())
   const [showAdvanced, setShowAdvanced] = useState(() =>
     Boolean(
       ticket && (
@@ -3489,39 +3497,26 @@ function TicketWorkspace({
                     <option value="TRANSFER">Depósito</option>
                   </select>
                 </SelectField>
-                {/* Precio especial — typeable input + 1-click chips for the catalog extras
-                    (Encerado/Pulido/Lav.Interior) right below. Chips only appear after both
-                    Servicio and Vehículo are picked AND the catalog has extras for that size. */}
-                <div>
+                {/* Precio especial — click-to-open picker. Tick extras to stack
+                    on top of base price. Each tick recomputes priceOverride =
+                    base + sum(ticked extras). Also accepts a free-text Otro
+                    amount for one-off custom pricing. The Corte sees this as
+                    a single priceOverride (cash totals match automatically);
+                    itemized breakdown by extra would need ticket_addons table. */}
+                <div className="relative">
                   <label className="mb-1 block text-[12px] font-semibold text-ink-700">
                     Precio especial ($)
                   </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="Opcional · o pick un extra abajo"
-                    disabled={watched.courtesy}
-                    {...form.register('priceOverride')}
-                  />
-                  {form.formState.errors.priceOverride?.message && (
-                    <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
-                  )}
-                  {/* Inline extras chips. Same logic the EXTRAS box used to render;
-                      now positioned in the Precio Especial cell so the cashier sees
-                      them without scrolling. */}
                   {(() => {
-                    if (watched.courtesy) return null
                     const currentSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
                     const sizeId = Number(watched.vehicleSizeId)
-                    if (!currentSvc || sizeId === 0) return null
-                    if (currentSvc.category === 'EXTRA') return null
                     const prices = data.prices.data ?? []
-                    const baseAmount = prices.find((pr) =>
-                      pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
-                    )?.amount ?? 0
-                    const extras = (data.services.data ?? [])
+                    const baseAmount = currentSvc && sizeId
+                      ? (prices.find((pr) =>
+                          pr.serviceTypeId === currentSvc.id && pr.vehicleSizeId === sizeId && pr.currency === 'MXN'
+                        )?.amount ?? 0)
+                      : 0
+                    const allExtras = (data.services.data ?? [])
                       .filter((s) => s.active !== false && s.category === 'EXTRA')
                       .map((s) => ({
                         service: s,
@@ -3530,32 +3525,194 @@ function TicketWorkspace({
                         )?.amount,
                       }))
                       .filter((x) => x.price != null && x.price > 0) as Array<{ service: ServiceType; price: number }>
-                    if (extras.length === 0) return null
-                    const onAddExtra = (extraName: string, extraPrice: number) => {
-                      form.setValue('priceOverride', baseAmount + extraPrice, { shouldValidate: true })
-                      const currentNotes = (watched.notes ?? '').trim()
-                      const marker = `+ ${extraName}`
-                      if (!currentNotes.toLowerCase().includes(extraName.toLowerCase())) {
-                        form.setValue('notes', currentNotes ? `${currentNotes} ${marker}` : marker, { shouldValidate: true })
+                    const showPicker = !watched.courtesy && currentSvc && sizeId !== 0 && currentSvc.category !== 'EXTRA' && allExtras.length > 0
+
+                    const pickedExtras = allExtras.filter((x) => selectedExtraIds.has(x.service.id))
+                    const overrideNum = watched.priceOverride !== '' && watched.priceOverride != null
+                      ? Number(watched.priceOverride) : 0
+                    const extrasSum = pickedExtras.reduce((s, x) => s + x.price, 0)
+                    // Custom = whatever isn't accounted for by base + sum(picked extras).
+                    // Lets the cashier type freely AND still see the extras breakdown.
+                    const customExtra = overrideNum > 0 ? Math.max(0, overrideNum - baseAmount - extrasSum) : 0
+
+                    const recompute = (nextIds: Set<number>, nextCustom = customExtra) => {
+                      const nextSum = allExtras
+                        .filter((x) => nextIds.has(x.service.id))
+                        .reduce((s, x) => s + x.price, 0)
+                      const next = nextIds.size === 0 && nextCustom === 0
+                        ? '' as const  // No override -> catalog price applies
+                        : baseAmount + nextSum + nextCustom
+                      form.setValue('priceOverride', next as number | '', { shouldValidate: true })
+
+                      // Keep notes in sync — strip prior extra markers, re-add for picked ones
+                      const extraNames = allExtras.map((x) => x.service.name)
+                      let cleanNotes = (watched.notes ?? '').trim()
+                      for (const name of extraNames) {
+                        const re = new RegExp(`\\s*\\+\\s*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`, 'gi')
+                        cleanNotes = cleanNotes.replace(re, '').trim()
                       }
+                      const markers = allExtras
+                        .filter((x) => nextIds.has(x.service.id))
+                        .map((x) => `+ ${x.service.name}`)
+                        .join(' ')
+                      const finalNotes = [cleanNotes, markers].filter(Boolean).join(' ').trim()
+                      form.setValue('notes', finalNotes, { shouldValidate: true })
                     }
+
+                    const toggleExtra = (id: number) => {
+                      const next = new Set(selectedExtraIds)
+                      if (next.has(id)) next.delete(id); else next.add(id)
+                      setSelectedExtraIds(next)
+                      recompute(next)
+                    }
+                    const clearAll = () => {
+                      setSelectedExtraIds(new Set())
+                      form.setValue('priceOverride', '' as number | '', { shouldValidate: true })
+                      // strip extra markers from notes
+                      const extraNames = allExtras.map((x) => x.service.name)
+                      let cleanNotes = (watched.notes ?? '').trim()
+                      for (const name of extraNames) {
+                        const re = new RegExp(`\\s*\\+\\s*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`, 'gi')
+                        cleanNotes = cleanNotes.replace(re, '').trim()
+                      }
+                      form.setValue('notes', cleanNotes, { shouldValidate: true })
+                    }
+
+                    if (!showPicker) {
+                      // Fallback to a plain input when there's no service+vehicle yet,
+                      // courtesy is on, or the current service is itself an extra.
+                      return (
+                        <>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0.01"
+                            step="0.01"
+                            placeholder={watched.courtesy ? 'N/A (cortesía)' : 'Opcional'}
+                            disabled={watched.courtesy}
+                            {...form.register('priceOverride')}
+                          />
+                          {form.formState.errors.priceOverride?.message && (
+                            <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
+                          )}
+                        </>
+                      )
+                    }
+
                     return (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {extras.map(({ service, price }) => (
-                          <button
-                            key={service.id}
-                            type="button"
-                            onClick={() => onAddExtra(service.name, price)}
-                            title={`Suma ${service.name} (+$${price}) al precio base $${baseAmount}`}
-                            className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800 transition hover:bg-amber-100"
-                          >
-                            + {service.name}
-                            <span className="rounded-full bg-amber-200/70 px-1 text-[10px] font-bold text-amber-800">
-                              ${price}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setPrecioOpen((v) => !v)}
+                          aria-expanded={precioOpen}
+                          aria-haspopup="listbox"
+                          className={`flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-left text-[13px] transition ${
+                            pickedExtras.length > 0 || customExtra > 0
+                              ? 'border-amber-300 ring-2 ring-amber-100'
+                              : 'border-border-soft hover:border-violet-300'
+                          }`}
+                        >
+                          <span className={overrideNum > 0 ? 'font-bold tabular-nums text-ink-900' : 'text-ink-400'}>
+                            {overrideNum > 0 ? `$${overrideNum.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : 'Opcional · pick extras'}
+                          </span>
+                          <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {/* Picked-extras pills — visible even when picker is closed */}
+                        {pickedExtras.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {pickedExtras.map(({ service, price }) => (
+                              <button
+                                key={service.id}
+                                type="button"
+                                onClick={() => toggleExtra(service.id)}
+                                className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800 hover:bg-amber-200"
+                              >
+                                {service.name}
+                                <span className="text-amber-600">·${price}</span>
+                                <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-200 text-[9px] leading-none">×</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {form.formState.errors.priceOverride?.message && (
+                          <p className="mt-1 text-xs text-red-600">{form.formState.errors.priceOverride.message}</p>
+                        )}
+                        {precioOpen && (
+                          <div className="absolute right-0 z-30 mt-1 w-72 rounded-xl border border-border-soft bg-white p-2.5 shadow-lg">
+                            <p className="mb-1.5 px-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-400">
+                              Sumar al precio base ${baseAmount}
+                            </p>
+                            <ul className="space-y-1">
+                              {allExtras.map(({ service, price }) => {
+                                const picked = selectedExtraIds.has(service.id)
+                                return (
+                                  <li key={service.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExtra(service.id)}
+                                      className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
+                                        picked
+                                          ? 'border-amber-300 bg-amber-50 text-amber-900'
+                                          : 'border-transparent text-ink-700 hover:bg-ink-50'
+                                      }`}
+                                    >
+                                      <span className="flex items-center gap-2">
+                                        <span className={`flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold ${
+                                          picked ? 'border-amber-400 bg-amber-400 text-white' : 'border-ink-300 bg-white text-transparent'
+                                        }`}>✓</span>
+                                        {service.name}
+                                      </span>
+                                      <span className="font-semibold tabular-nums text-ink-700">+${price}</span>
+                                    </button>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                            <div className="mt-2 border-t border-border-soft pt-2">
+                              <label className="flex items-center justify-between gap-2 px-1 text-[11.5px] font-semibold text-ink-600">
+                                <span>Otro (precio manual)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={customExtra || ''}
+                                  placeholder="0"
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value) || 0
+                                    recompute(selectedExtraIds, v)
+                                  }}
+                                  className="w-20 rounded border border-border-soft px-2 py-0.5 text-right text-[12px]"
+                                />
+                              </label>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between border-t border-border-soft pt-2">
+                              <button
+                                type="button"
+                                onClick={clearAll}
+                                disabled={pickedExtras.length === 0 && customExtra === 0}
+                                className="text-[11px] font-semibold text-ink-500 hover:text-ink-800 disabled:opacity-40"
+                              >
+                                Limpiar
+                              </button>
+                              <div className="text-right">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400">Total</p>
+                                <p className="font-display text-[16px] font-bold tabular-nums text-ink-900">
+                                  ${(overrideNum || baseAmount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPrecioOpen(false)}
+                              className="mt-2 w-full rounded-lg bg-violet-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-violet-700"
+                            >
+                              Listo
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )
                   })()}
                 </div>
