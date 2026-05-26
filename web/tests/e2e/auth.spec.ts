@@ -18,6 +18,6 @@ test('login with wrong password shows error and stays on login', async ({ page }
 
 test('logout redirects to login screen', async ({ page }) => {
   await loginAsDueno(page)
-  await page.getByTitle('Cerrar sesion').click()
+  await page.getByTitle('Cerrar sesión').click()
   await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 5_000 })
 })
