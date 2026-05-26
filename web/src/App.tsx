@@ -6489,6 +6489,79 @@ function AuditScreen() {
   )
 }
 
+/**
+ * Multi-bar chart strip — paired daily bars for ingresos (purple) + carros×$200
+ * reference (emerald). No charting lib so we don't ship one for a single panel.
+ * Last bar renders at full opacity to highlight the most recent day.
+ */
+function ReportsChartStrip({ days, total }: { days: DailySummary[]; total?: number }) {
+  if (!days || days.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border-soft bg-white p-5">
+        <div className="text-[11px] font-bold uppercase tracking-[0.10em] text-ink-500">
+          Ingresos y carros · sin datos en el rango
+        </div>
+      </div>
+    )
+  }
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date))
+  const series = sorted.map((d) => ({
+    label: d.date.slice(8),
+    revenue: Number(d.ticketRevenue) || 0,
+    carsRef: (d.carsWashed || 0) * 200,
+  }))
+  const max = Math.max(...series.map((s) => Math.max(s.revenue, s.carsRef)), 1)
+  const height = 96
+  return (
+    <div className="rounded-2xl border border-border-soft bg-white px-5 py-4 shadow-xs">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-ink-500">
+            Ingresos y carros · últimos {series.length} día{series.length === 1 ? '' : 's'}
+          </div>
+          {typeof total === 'number' && (
+            <div className="font-display mt-1 text-[26px] font-black tracking-[-0.03em] text-ink-900 tabular-nums">
+              {money(total, 'MXN')}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 text-[11.5px] text-ink-500">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-violet-600" /> Ingresos
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-emerald-500" /> Carros (×$200 ref)
+          </span>
+        </div>
+      </div>
+      <div className="flex items-end gap-1" style={{ height }}>
+        {series.map((s, i) => {
+          const h1 = (s.revenue / max) * height
+          const h2 = (s.carsRef / max) * height
+          const isLast = i === series.length - 1
+          return (
+            <div key={s.label + i} className="flex flex-1 flex-col items-center gap-1">
+              <div className="flex w-full items-end justify-center gap-1" style={{ height }}>
+                <div
+                  className="w-[40%] rounded-t-[3px] bg-violet-600"
+                  style={{ height: h1, opacity: isLast ? 1 : 0.75 }}
+                  title={`${s.label}: ${money(s.revenue, 'MXN')}`}
+                />
+                <div
+                  className="w-[40%] rounded-t-[3px] bg-emerald-500"
+                  style={{ height: h2, opacity: isLast ? 1 : 0.55 }}
+                  title={`${s.label}: ${s.carsRef / 200} carros`}
+                />
+              </div>
+              <div className="font-mono text-[9.5px] text-ink-400">{s.label}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function ReportsScreen() {
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
@@ -6561,8 +6634,18 @@ function ReportsScreen() {
       <PageHead
         tone="hero"
         title="Reportes"
-        subtitle="Resumen diario, mensual, corte de caja, lavadores y exportacion Excel."
+        subtitle={`Análisis · ${from} → ${to}`}
+        actions={
+          <Button kind="primary" onClick={downloadExport} testId="reports-export-hero">
+            Descargar Excel
+          </Button>
+        }
       />
+
+      {/* Full-width chart strip — daily ingresos (purple) + carros×$200 ref
+          (emerald) for the selected range. Matches the design-kit chart-strip
+          pattern: dot legend, mono day labels, last day at full opacity. */}
+      <ReportsChartStrip days={range?.days ?? []} total={range?.ticketRevenue} />
 
       <Panel title="Rango">
         <div className="grid gap-3 md:grid-cols-[180px_180px_220px_auto]">
