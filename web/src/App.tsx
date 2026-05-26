@@ -4496,8 +4496,11 @@ const employeeEditSchema = z.object({
 })
 type EmployeeEditFormValues = z.infer<typeof employeeEditSchema>
 
+type CatalogTab = 'precios' | 'servicios' | 'tamanos' | 'lavadores' | 'descuentos'
+
 function CatalogsScreen() {
   const queryClient = useQueryClient()
+  const [tab, setTab] = useState<CatalogTab>('precios')
   const [toast, setToast] = useState<string | null>(null)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [showInactiveEmployees, setShowInactiveEmployees] = useState(false)
@@ -4759,19 +4762,62 @@ function CatalogsScreen() {
   return (
     <section className="space-y-5">
       {toast && <Toast message={toast} />}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Configuración · datos base</p>
-          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Catálogos</h2>
-          <p className="mt-1 text-[12.5px] text-ink-500">Lavadores, servicios, tamaños y precios — la base que alimenta los tickets.</p>
+
+      {/* v2 PageHeader — eyebrow with green pulse dot + display title + subtitle */}
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-soft pb-4">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-500">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'var(--brand-green-bright)', boxShadow: '0 0 6px rgba(34,197,94,0.55)' }}
+            />
+            Configuración · Catálogos
+          </div>
+          <h1 className="mt-1 font-display text-[26px] font-extrabold leading-[1.05] tracking-[-0.025em] text-ink-900">
+            Catálogos
+          </h1>
+          <p className="mt-1.5 text-[13.5px] text-ink-500">
+            Servicios, tamaños, precios, lavadores y descuentos del día.
+          </p>
         </div>
         <NavLink to="/tickets/nuevo" className="tl-btn tl-btn-primary">
           + Nuevo ticket
         </NavLink>
       </div>
 
+      {/* UnderlineTabs — Precios / Servicios / Tamaños / Lavadores / Descuentos */}
+      <div className="-mt-1 flex gap-1 overflow-x-auto border-b border-border-soft">
+        {([
+          { id: 'precios',    label: 'Precios',    count: prices.length },
+          { id: 'servicios',  label: 'Servicios',  count: services.length },
+          { id: 'tamanos',    label: 'Tamaños',    count: sizes.length },
+          { id: 'lavadores',  label: 'Lavadores',  count: employees.filter(e => e.active).length },
+          { id: 'descuentos', label: 'Descuentos', count: 0 },
+        ] as Array<{ id: CatalogTab; label: string; count: number }>).map((it) => {
+          const active = tab === it.id
+          return (
+            <button
+              key={it.id}
+              type="button"
+              onClick={() => setTab(it.id)}
+              className={`-mb-px inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-[13.5px] font-semibold transition-colors ${
+                active
+                  ? 'border-ink-900 text-ink-900'
+                  : 'border-transparent text-ink-500 hover:text-ink-700'
+              }`}
+            >
+              {it.label}
+              <span className={`inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10.5px] font-bold ${
+                active ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'
+              }`}>{it.count}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
+          {tab === 'lavadores' && (
           <Panel title="Lavadores">
             <form className="space-y-3" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -4836,7 +4882,9 @@ function CatalogsScreen() {
               />
             )}
           </Panel>
+          )}
 
+          {tab === 'servicios' && (
           <Panel title="Servicios">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[12.5px] text-ink-500">Lavados y extras disponibles al crear un ticket.</p>
@@ -4866,7 +4914,9 @@ function CatalogsScreen() {
                 }))}
             />
           </Panel>
+          )}
 
+          {tab === 'tamanos' && (
           <Panel title="Tamaños de vehículo">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[12.5px] text-ink-500">Categorías de vehículo que determinan el precio del ticket.</p>
@@ -4884,7 +4934,9 @@ function CatalogsScreen() {
               })}
             />
           </Panel>
+          )}
 
+          {tab === 'precios' && (
           <Panel title="Precios">
             <div className="mb-4 flex items-center justify-between">
               <p className="text-[12.5px] text-ink-500">Precios vigentes hoy, agrupados por tipo de vehículo.</p>
@@ -4938,6 +4990,55 @@ function CatalogsScreen() {
               </div>
             ))}
           </Panel>
+          )}
+
+          {tab === 'descuentos' && (
+            <>
+              <Banner
+                tone="info"
+                title="Los descuentos se aplican al inicio del turno"
+                text="Configura aquí los descuentos automáticos. Si marcas «Auto al iniciar turno», el cajero los ve activos por defecto al abrir su shift. También se podrán activar manualmente desde Nuevo ticket."
+              />
+              <Panel
+                title="Descuentos del catálogo"
+                subtitle="Configura descuentos disponibles. Marca AUTO para que se enciendan solos al iniciar turno los días que apliquen."
+                actions={<Button kind="primary" size="sm" disabled>+ Nuevo descuento</Button>}
+              >
+                <EmptyState
+                  icon={
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                      <path d="M4 8h16M4 8a2 2 0 012-2h12a2 2 0 012 2M4 8l8 8 8-8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  }
+                  title="Descuentos automáticos — próximamente"
+                  description="Por ahora los descuentos manuales se ingresan al capturar el ticket. Esta pestaña hospedará los descuentos por día (LUN15, FREC10, CUMP15…) con activación automática al inicio del turno."
+                  tone="info"
+                />
+              </Panel>
+              <Panel
+                title="Calendario · próximos 14 días"
+                subtitle="Cuando los descuentos automáticos estén activos, los días marcados con AUTO se aplicarán al iniciar el turno."
+              >
+                <div className="grid grid-cols-7 gap-1.5">
+                  {Array.from({ length: 14 }).map((_, i) => {
+                    const d = new Date()
+                    d.setDate(d.getDate() + i)
+                    const dowKey = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'][d.getDay()]
+                    return (
+                      <div
+                        key={i}
+                        className="flex min-h-[80px] flex-col gap-1 rounded-lg border border-border-soft bg-white px-2.5 py-2"
+                      >
+                        <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-ink-500">{dowKey}</div>
+                        <div className="font-display text-[18px] font-extrabold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{d.getDate()}</div>
+                        <div className="mt-auto text-[10px] italic text-ink-300">sin descuentos</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Panel>
+            </>
+          )}
         </div>
 
         <aside className="space-y-5">
