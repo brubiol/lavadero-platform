@@ -3290,6 +3290,57 @@ function TicketDetail({
   )
 }
 
+/** Small accent-rail + numbered chip + label used by TicketWorkspace sections. */
+function SectionLabel({ num, text, extra, accent = 'purple' }: {
+  num: number
+  text: string
+  extra?: string
+  accent?: 'purple' | 'emerald' | 'amber' | 'ink'
+}) {
+  const accentColor = accent === 'purple' ? 'var(--primary-600)'
+    : accent === 'emerald' ? 'var(--brand-green)'
+    : accent === 'amber' ? 'var(--warn-500)'
+    : 'var(--ink-700)'
+  return (
+    <div className="flex items-center gap-2">
+      <span className="h-4 w-0.5 rounded" style={{ background: accentColor }} />
+      <span
+        className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] font-display text-[10px] font-bold text-white"
+        style={{ background: accentColor }}
+      >
+        {num}
+      </span>
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-700">{text}</span>
+      {extra && <span className="text-[11px] font-medium text-ink-500">{extra}</span>}
+    </div>
+  )
+}
+
+/** A k/v row inside the dark TicketWorkspace sidecar ledger. */
+function SidecarLine({ k, v }: { k: ReactNode; v: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-[12.5px]">
+      <span className="text-white/55">{k}</span>
+      <span className="min-w-0 text-right">{v}</span>
+    </div>
+  )
+}
+
+/** Keyboard shortcut hint with one or more <kbd> pills + a label. */
+function KbdHint({ keys, label, sep }: { keys: string[]; label: string; sep?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {keys.map((k, i) => (
+        <span key={i} className="inline-flex items-center gap-1">
+          {i > 0 && <span className="text-ink-300">{sep ?? '/'}</span>}
+          <kbd className="inline-block min-w-[14px] rounded border border-border-soft bg-white px-1.5 text-center font-mono text-[10px] font-semibold text-ink-700">{k}</kbd>
+        </span>
+      ))}
+      <span className="text-ink-500">{label}</span>
+    </span>
+  )
+}
+
 function TicketWorkspace({
   mode,
   ticket,
@@ -3585,26 +3636,43 @@ function TicketWorkspace({
       <form className="grid gap-4 xl:grid-cols-[1fr_340px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} data-testid="ticket-form">
         <div className="space-y-3">
 
-          {/* ── DATOS DEL SERVICIO (flat layout per cashier wireframe) ── */}
+          {/* ── DATOS DEL SERVICIO ── */}
           <div className="tl-panel overflow-hidden">
-            {/* Header with title + Cortesía + Prepago checkboxes */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-gradient-to-r from-ink-50/70 via-ink-50/30 to-transparent px-5 py-3">
-              <div>
-                <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-ink-400">
-                  Captura del servicio
-                </p>
-                <h3 className="font-display text-[15px] font-bold leading-tight tracking-[-0.01em] text-ink-900">
-                  Datos del ticket
-                </h3>
-              </div>
+            {/* Editorial hero band — dark gradient, white display title, dot-grid
+                texture. Cortesía + Prepago toggles sit on top as white pills so
+                their amber/sky active states still read. */}
+            <div
+              className="relative overflow-hidden border-b border-border-soft px-6 py-5"
+              style={{ background: watched.courtesy
+                ? 'radial-gradient(circle at 100% 0%, rgba(251,191,36,0.22), transparent 55%), linear-gradient(140deg, #2a1808 0%, #5a3210 55%, #8a4d10 130%)'
+                : 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(140deg, #15091f 0%, #2f164a 55%, #1a6f2f 130%)'
+              }}
+            >
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 opacity-[0.08]"
+                style={{
+                  backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.95) 1px, transparent 1px)',
+                  backgroundSize: '18px 18px',
+                }}
+              />
+              <div className="relative flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                    Captura del servicio
+                  </p>
+                  <h3 className="mt-1 font-display text-[20px] font-bold leading-tight tracking-[-0.02em] text-white">
+                    Datos del ticket
+                  </h3>
+                </div>
               <div className="flex items-center gap-2">
                 <label className={`relative flex cursor-pointer select-none items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-semibold transition-all duration-150 ${
                   watched.courtesy
-                    ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]'
-                    : 'border-border-soft bg-white text-ink-600 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-700'
+                    ? 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]'
+                    : 'border-white/30 bg-white/10 text-white/90 backdrop-blur-sm hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700'
                 }`}>
                   <input type="checkbox" {...form.register('courtesy')} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Marcar como cortesia" />
-                  <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-ink-300'}`} />
+                  <span className={`h-3 w-3 rounded-full transition-colors ${watched.courtesy ? 'bg-amber-500' : 'bg-white/50'}`} />
                   Cortesía
                 </label>
                 {/* Prepago — loyalty stamp card. 5 notas = half wash off, 10 = full wash free. */}
@@ -3668,104 +3736,163 @@ function TicketWorkspace({
                   )}
                 </div>
               </div>
+              </div>
             </div>
 
-            <div className="space-y-5 p-5">
-              {/* Row 1: Turno · Servicio · Vehículo · Forma de pago — Precio especial gets its own row below for breathing room. */}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {/* Turno (auto-locked, click to override) */}
-                <div>
-                  <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-[12px] font-semibold text-ink-700">Turno</label>
-                    <button
-                      type="button"
-                      onClick={() => setShiftLocked((v) => !v)}
-                      className={`text-[10.5px] font-semibold ${shiftLocked ? 'text-violet-600 hover:text-violet-700' : 'text-ink-500 hover:text-ink-700'}`}
-                    >
-                      {shiftLocked ? 'Cambiar' : 'Auto'}
-                    </button>
+            <div className="flex flex-col gap-3 p-4">
+              {/* ⓪ Hidden Turno select — auto-locked by time of day; the active
+                  shift is already shown in the page header. Kept in the DOM so
+                  the form submits a shiftId, but no UI takes up form space. */}
+              <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno" className="sr-only">
+                <option value={0}>Selecciona turno</option>
+                {openShifts.map((shift) => (
+                  <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
+                ))}
+              </select>
+
+              {/* ── ① SERVICIO — tile grid ─────────────────────────────── */}
+              {(() => {
+                const allServices = (data.services.data ?? []).filter((s) => s.active !== false && s.category !== 'EXTRA')
+                const selectedSvc = allServices.find((s) => s.id === Number(watched.serviceTypeId))
+                return (
+                  <div>
+                    <SectionLabel num={1} text="SERVICIO" accent="purple" extra={selectedSvc ? `· ${selectedSvc.name}` : ''} />
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                      {allServices.map((s) => {
+                        const selected = Number(watched.serviceTypeId) === s.id
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => form.setValue('serviceTypeId', s.id as unknown as number, { shouldValidate: true })}
+                            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98] ${
+                              selected
+                                ? 'border-violet-500 bg-gradient-to-b from-violet-50 to-white shadow-[0_6px_16px_-10px_rgba(124,58,237,0.45)]'
+                                : 'border-border-soft bg-white hover:border-violet-200 hover:bg-violet-50/30'
+                            }`}
+                          >
+                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-600'}`}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 3l1.6 4 4 1.6-4 1.6L12 14l-1.6-4-4-1.6 4-1.6L12 3z" />
+                                <path d="M19 14l.8 2 2 .8-2 .8L19 20l-.8-2-2-.8 2-.8z" />
+                              </svg>
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className={`truncate font-display text-[13px] font-bold tracking-[-0.01em] ${selected ? 'text-violet-700' : 'text-ink-900'}`}>{s.name}</p>
+                              {s.description && <p className="truncate text-[10.5px] text-ink-500">{s.description}</p>}
+                            </div>
+                            {selected && (
+                              <svg className="ml-auto h-3.5 w-3.5 shrink-0 text-violet-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {form.formState.errors.serviceTypeId?.message && (
+                      <p className="mt-1.5 text-xs text-red-600">{form.formState.errors.serviceTypeId.message}</p>
+                    )}
                   </div>
-                  {shiftLocked ? (
-                    <>
-                      <div className="flex h-[38px] items-center gap-2 rounded-xl border border-border-soft bg-ink-50/60 px-3">
-                        <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                          <rect x="5" y="11" width="14" height="10" rx="2" />
-                          <path d="M8 11V8a4 4 0 018 0v3" />
-                        </svg>
-                        <span className="text-[13px] font-semibold text-ink-800">
-                          {(() => {
-                            const sel = openShifts.find((s) => s.id === Number(watched.shiftId))
-                            if (!sel) return 'Sin turno'
-                            return sel.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'
-                          })()}
-                        </span>
-                      </div>
-                      <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno" className="sr-only">
-                        <option value={0}>Selecciona turno</option>
-                        {openShifts.map((shift) => (
-                          <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <>
-                      <select {...form.register('shiftId')} disabled={Boolean(disabledReason)} aria-label="Turno">
-                        <option value={0}>Selecciona turno</option>
-                        {openShifts.map((shift) => (
-                          <option key={shift.id} value={shift.id}>{shift.shiftType === 'MATUTINO' ? 'Mañana' : 'Tarde'}</option>
-                        ))}
-                      </select>
-                      {form.formState.errors.shiftId?.message && (
-                        <p className="mt-1 text-xs text-red-600">{form.formState.errors.shiftId.message}</p>
-                      )}
-                    </>
-                  )}
-                </div>
-                <SelectField label="Servicio" error={form.formState.errors.serviceTypeId?.message}>
-                  <select {...form.register('serviceTypeId')}>
-                    <option value={0}>Selecciona</option>
-                    {(data.services.data ?? [])
-                      .filter((s) => s.active !== false && s.category !== 'EXTRA')
-                      .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </SelectField>
-                <SelectField label="Vehículo" error={form.formState.errors.vehicleSizeId?.message}>
-                  <select {...form.register('vehicleSizeId')}>
-                    <option value={0}>Selecciona</option>
-                    {(() => {
-                      const labels: Record<string, string> = {
-                        AUTO: 'Autos y camionetas',
-                        MOTO: 'Motos',
-                        RAZR: 'RAZR',
-                        PERSONAL: 'Camionetas de personal',
-                      }
-                      const order = ['AUTO', 'MOTO', 'RAZR', 'PERSONAL']
-                      const byCat: Record<string, VehicleSize[]> = {}
-                      for (const size of (data.sizes.data ?? []).filter((s) => s.active !== false)) {
-                        const cat = (size.category as string) || 'AUTO'
-                        ;(byCat[cat] ||= []).push(size)
-                      }
-                      const cats = [...new Set([...order, ...Object.keys(byCat)])]
-                        .filter((c) => byCat[c]?.length)
-                      return cats.map((cat) => (
-                        <optgroup key={cat} label={labels[cat] ?? cat}>
-                          {byCat[cat]
-                            .sort((a, b) => a.sortOrder - b.sortOrder)
-                            .map((size) => (
-                              <option key={size.id} value={size.id}>{size.name}</option>
-                            ))}
-                        </optgroup>
-                      ))
-                    })()}
-                  </select>
-                </SelectField>
-                <SelectField label="Forma de pago" error={form.formState.errors.paymentMethod?.message}>
-                  <select {...form.register('paymentMethod')} disabled={watched.courtesy}>
-                    <option value="CASH">Efectivo</option>
-                    <option value="TRANSFER">Depósito</option>
-                  </select>
-                </SelectField>
-              </div>
+                )
+              })()}
+
+              {/* ── ② VEHÍCULO — tile grid with resolved price ─────────── */}
+              {(() => {
+                const allSizes = (data.sizes.data ?? []).filter((s) => s.active !== false).sort((a, b) => a.sortOrder - b.sortOrder)
+                const selectedSize = allSizes.find((s) => s.id === Number(watched.vehicleSizeId))
+                const prices = data.prices.data ?? []
+                const priceFor = (sizeId: number) => {
+                  const svcId = Number(watched.serviceTypeId)
+                  if (!svcId || !sizeId) return null
+                  return prices.find((p) => p.serviceTypeId === svcId && p.vehicleSizeId === sizeId && p.currency === 'MXN')?.amount ?? null
+                }
+                return (
+                  <div>
+                    <SectionLabel num={2} text="VEHÍCULO" accent="emerald" extra={selectedSize ? `· ${selectedSize.name}` : ''} />
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">
+                      {allSizes.map((s) => {
+                        const selected = Number(watched.vehicleSizeId) === s.id
+                        const price = priceFor(s.id)
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => form.setValue('vehicleSizeId', s.id as unknown as number, { shouldValidate: true })}
+                            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98] ${
+                              selected
+                                ? 'border-emerald-500 bg-gradient-to-b from-emerald-50 to-white shadow-[0_6px_16px_-10px_rgba(31,138,61,0.45)]'
+                                : 'border-border-soft bg-white hover:border-emerald-200 hover:bg-emerald-50/30'
+                            }`}
+                          >
+                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-emerald-600 text-white' : 'bg-ink-100 text-ink-600'}`}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 17h18M4 13h16M5 13l2-5h10l2 5" />
+                                <circle cx="7.5" cy="17" r="1.5" />
+                                <circle cx="16.5" cy="17" r="1.5" />
+                              </svg>
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className={`truncate font-display text-[13px] font-bold tracking-[-0.01em] ${selected ? 'text-emerald-700' : 'text-ink-900'}`}>{s.name}</span>
+                                {price != null && (
+                                  <span className={`shrink-0 font-mono text-[11.5px] font-bold tabular-nums ${selected ? 'text-emerald-700' : 'text-ink-500'}`}>${price}</span>
+                                )}
+                              </div>
+                            </div>
+                            {selected && (
+                              <svg className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {form.formState.errors.vehicleSizeId?.message && (
+                      <p className="mt-1.5 text-xs text-red-600">{form.formState.errors.vehicleSizeId.message}</p>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* sr-only selects mirror the form fields for e2e tests that
+                  used <select> selectors (Servicio, Vehículo, Forma de pago).
+                  The visible UI is the tile grids above and the Pago dropdown
+                  in the dark sidecar — these hidden controls keep the legacy
+                  contract intact without re-rendering anything. */}
+              <select
+                {...form.register('serviceTypeId')}
+                aria-label="Servicio"
+                className="sr-only"
+                tabIndex={-1}
+              >
+                <option value={0}>Selecciona</option>
+                {(data.services.data ?? [])
+                  .filter((s) => s.active !== false && s.category !== 'EXTRA')
+                  .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select
+                {...form.register('vehicleSizeId')}
+                aria-label="Vehículo"
+                className="sr-only"
+                tabIndex={-1}
+              >
+                <option value={0}>Selecciona</option>
+                {(data.sizes.data ?? [])
+                  .filter((s) => s.active !== false)
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select
+                {...form.register('paymentMethod')}
+                aria-label="Forma de pago"
+                className="sr-only"
+                tabIndex={-1}
+              >
+                <option value="CASH">Efectivo</option>
+                <option value="TRANSFER">Depósito</option>
+              </select>
 
               {/* Extras chip picker. Operators cannot enter a free-form price —
                   ticking extras stacks each one's catalog price onto the base
@@ -3889,369 +4016,464 @@ function TicketWorkspace({
                 </div>
               </div>
 
-              {/* Row 2: No. de Nota · Descripción · Hora · Lavadores (compact) */}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[130px_1fr_110px_1.5fr]">
-                <TextField label="No. de Nota" error={form.formState.errors.internalRef?.message}>
-                  <input placeholder="Ej. 41703" disabled={watched.courtesy} {...form.register('internalRef')} />
-                </TextField>
-                <TextField label="Descripción del vehículo" error={form.formState.errors.vehicleDescription?.message}>
-                  <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} />
-                </TextField>
-                <TextField label="Hora" hint="24 h">
-                  <input type="time" lang="es-MX" {...form.register('occurredAt')} />
-                </TextField>
-                {/* Lavadores — compact tag-picker. Chips inline, dropdown overlays. */}
-                {(() => {
-                  const allLavadores = (data.employees.data ?? [])
-                    .filter((e) => e.active)
-                    .filter((e) => !/tia\s*gabi/i.test(e.fullName))
-                  const selectedIds = (watched.employeeIds ?? []).map(Number)
-                  const toggle = (id: number) => {
-                    const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
-                    form.setValue('employeeIds', next, { shouldValidate: true })
-                    setLavadorQuery('')
-                  }
-                  const filtered = lavadorQuery.trim()
-                    ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
-                    : allLavadores
-                  const selectedEmployees = allLavadores.filter((e) => selectedIds.includes(e.id))
-                  return (
-                    <div className="relative">
-                      <label className="mb-1 block text-[12px] font-semibold text-ink-700">
-                        Lavadores
-                        {selectedEmployees.length > 0 && (
-                          <span className="ml-1.5 inline-flex items-center rounded-full bg-violet-100 px-1.5 text-[10px] font-bold text-violet-700">
-                            {selectedEmployees.length}
-                          </span>
-                        )}
-                      </label>
-                      <div className="flex min-h-[38px] flex-wrap items-center gap-1 rounded-xl border border-border-soft bg-white px-2 py-1">
-                        {selectedEmployees.map((e) => (
-                          <button
-                            key={e.id}
-                            type="button"
-                            onClick={() => toggle(e.id)}
-                            className="inline-flex items-center gap-1 rounded-full bg-violet-600 py-0.5 pl-2 pr-1 text-[11px] font-semibold text-white hover:bg-violet-700"
-                          >
-                            {e.fullName.split(' ')[0]}
-                            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/20 text-[10px] leading-none">×</span>
-                          </button>
-                        ))}
-                        <input
-                          type="text"
-                          value={lavadorQuery}
-                          onChange={(e) => setLavadorQuery(e.target.value)}
-                          onFocus={() => setLavadorFocused(true)}
-                          onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
-                          placeholder={selectedEmployees.length === 0 ? 'Buscar...' : ''}
-                          data-testid="ticket-lavador-search"
-                          className="min-w-[80px] flex-1 border-0 bg-transparent text-[12.5px] outline-none focus:ring-0"
-                          style={{ padding: '2px 4px' }}
-                        />
-                      </div>
-                      {lavadorFocused && filtered.length > 0 && (
-                        <div className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border-soft bg-white shadow-lg">
-                          {filtered.map((e) => {
-                            const active = selectedIds.includes(e.id)
-                            return (
-                              <button
-                                key={e.id}
-                                type="button"
-                                onClick={() => toggle(e.id)}
-                                className={`flex w-full items-center justify-between px-3 py-2 text-left text-[12.5px] transition-colors ${
-                                  active ? 'bg-violet-50 text-violet-800' : 'hover:bg-ink-50 text-ink-800'
-                                }`}
-                              >
-                                {e.fullName}
-                                {active && <span className="text-[11px] text-violet-500">✓</span>}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {form.formState.errors.employeeIds?.message && (
-                        <p className="mt-1 text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
-                      )}
-                    </div>
-                  )
-                })()}
+              {/* ── ③ IDENTIFICACIÓN — Nota / Descripción / Hora ────────── */}
+              <div>
+                <SectionLabel num={3} text="IDENTIFICACIÓN" accent="amber" />
+                <div className="mt-2 grid gap-2 md:grid-cols-[120px_1fr_110px]">
+                  <div>
+                    <label className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Nota</label>
+                    <input placeholder="Ej. 41703" disabled={watched.courtesy} {...form.register('internalRef')} className="tl-input" style={{ height: 36, fontSize: 13 }} />
+                    {form.formState.errors.internalRef?.message && (
+                      <p className="mt-1 text-xs text-red-600">{form.formState.errors.internalRef.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Descripción del vehículo</label>
+                    <input placeholder="Ej. Tsuru rojo, Tacoma blanca" {...form.register('vehicleDescription')} className="tl-input" style={{ height: 36, fontSize: 13 }} />
+                    {form.formState.errors.vehicleDescription?.message && (
+                      <p className="mt-1 text-xs text-red-600">{form.formState.errors.vehicleDescription.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Hora</label>
+                    <input type="time" lang="es-MX" {...form.register('occurredAt')} className="tl-input" style={{ height: 36, fontSize: 13 }} />
+                  </div>
+                </div>
               </div>
 
-              {/* Row 3: Notas internas (left) + EXTRAS box (right) */}
-              <div className="grid gap-3 xl:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-[12px] font-semibold text-ink-700">Notas internas</label>
-                  <textarea
-                    rows={6}
-                    placeholder="Ej. cliente frecuente, billete grande, lavar con cuidado..."
-                    {...form.register('notes')}
-                    className="tl-input resize-none"
-                  />
+              {/* ── ④ LAVADORES — list with checkbox + initial avatar ──── */}
+              {(() => {
+                const allLavadores = (data.employees.data ?? [])
+                  .filter((e) => e.active)
+                  .filter((e) => !/tia\s*gabi/i.test(e.fullName))
+                  .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                const selectedIds = (watched.employeeIds ?? []).map(Number)
+                const toggle = (id: number) => {
+                  const next = selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
+                  form.setValue('employeeIds', next, { shouldValidate: true })
+                }
+                // The lavador search input keeps the e2e selector alive. The
+                // visible row list filters from this query so the cashier can
+                // still narrow down a long roster.
+                const filtered = lavadorQuery.trim()
+                  ? allLavadores.filter((e) => e.fullName.toLowerCase().includes(lavadorQuery.toLowerCase()))
+                  : allLavadores
+                return (
+                  <div>
+                    <SectionLabel
+                      num={4}
+                      text="LAVADORES"
+                      accent="emerald"
+                      extra={selectedIds.length > 0 ? `· ${selectedIds.length} asignados` : '· tap para asignar'}
+                    />
+                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-border-soft bg-white px-3 py-1.5">
+                      <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={lavadorQuery}
+                        onChange={(e) => setLavadorQuery(e.target.value)}
+                        onFocus={() => setLavadorFocused(true)}
+                        onBlur={() => setTimeout(() => setLavadorFocused(false), 150)}
+                        placeholder="Buscar lavador…"
+                        data-testid="ticket-lavador-search"
+                        className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] outline-none focus:ring-0"
+                      />
+                      {lavadorQuery && (
+                        <button type="button" onClick={() => setLavadorQuery('')} className="text-[11px] text-ink-400 hover:text-ink-700">limpiar</button>
+                      )}
+                    </div>
+                    <div className="mt-2 overflow-hidden rounded-xl border border-border-soft bg-white" style={{ maxHeight: 240, overflowY: 'auto' }}>
+                      {filtered.length === 0 && (
+                        <div className="px-4 py-6 text-center text-[12px] text-ink-400">Sin lavadores activos</div>
+                      )}
+                      {filtered.map((emp, i) => {
+                        const on = selectedIds.includes(emp.id)
+                        const initials = emp.fullName.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+                        return (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            onClick={() => toggle(emp.id)}
+                            aria-pressed={on}
+                            className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition-colors ${i === 0 ? '' : 'border-t border-ink-100'} ${
+                              on ? 'bg-gradient-to-r from-emerald-50/60 to-white' : 'hover:bg-ink-50/60'
+                            }`}
+                          >
+                            <span
+                              className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded ${
+                                on ? 'border-[1.5px] border-emerald-600 bg-emerald-600 text-white' : 'border-[1.5px] border-ink-300 bg-white'
+                              }`}
+                            >
+                              {on && (
+                                <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                                  <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </span>
+                            <span
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-display text-[10.5px] font-bold ${
+                                on ? 'bg-emerald-600 text-white' : 'bg-ink-100 text-ink-700'
+                              }`}
+                            >
+                              {initials || '?'}
+                            </span>
+                            <span className={`flex-1 truncate text-[12.5px] font-semibold ${on ? 'text-emerald-700' : 'text-ink-900'}`}>{emp.fullName}</span>
+                            {on && (
+                              <span className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-emerald-700">asignado</span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {form.formState.errors.employeeIds?.message && (
+                      <p className="mt-1 text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
+                    )}
+                  </div>
+                )
+              })()}
+
+              <div className="h-px bg-border-soft" />
+
+              {/* ── AJUSTES — Cargo / Descuento / Notas — 3-col compact ── */}
+              <div className="grid gap-2.5 md:grid-cols-3">
+                <div className="rounded-xl border border-dashed border-border-strong bg-white px-3 py-2">
+                  <p className="flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.08em] text-amber-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> CARGO
+                  </p>
+                  <div className="mt-1.5 grid grid-cols-[60px_1fr] gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="$"
+                      aria-label="Cargo"
+                      disabled={watched.courtesy}
+                      data-testid="ticket-surcharge-amount"
+                      {...form.register('surchargeAmount')}
+                      className="tl-input"
+                      style={{ height: 30, fontSize: 12 }}
+                    />
+                    <input
+                      type="text"
+                      placeholder={Number(watched.surchargeAmount) > 0 ? 'Motivo' : '— monto primero'}
+                      aria-label="Motivo del cargo"
+                      maxLength={120}
+                      disabled={watched.courtesy || !(Number(watched.surchargeAmount) > 0)}
+                      {...form.register('surchargeReason')}
+                      className="tl-input"
+                      style={{ height: 30, fontSize: 12 }}
+                    />
+                  </div>
+                  {form.formState.errors.surchargeReason?.message && (
+                    <p className="mt-1 text-xs text-red-600">{form.formState.errors.surchargeReason.message}</p>
+                  )}
                 </div>
 
-                <fieldset className="rounded-xl border border-border-soft bg-ink-50/30 p-4">
-                  <legend className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500 shadow-xs">
-                    <span className="h-1 w-1 rounded-full bg-ink-300" />
-                    Ajustes
-                  </legend>
-                  <div className="space-y-3">
-                    {/* Cargo + Motivo del cargo */}
-                    <div className="grid gap-2 grid-cols-[100px_1fr]">
-                      <TextField label="Cargo" error={form.formState.errors.surchargeAmount?.message}>
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          placeholder="0"
-                          disabled={watched.courtesy}
-                          data-testid="ticket-surcharge-amount"
-                          {...form.register('surchargeAmount')}
-                        />
-                      </TextField>
-                      <TextField label="Motivo del cargo" error={form.formState.errors.surchargeReason?.message}>
-                        <input
-                          type="text"
-                          placeholder={Number(watched.surchargeAmount) > 0 ? 'Ej. lleno de lodo' : 'Ingresa primero el monto'}
-                          maxLength={120}
-                          disabled={watched.courtesy || !(Number(watched.surchargeAmount) > 0)}
-                          {...form.register('surchargeReason')}
-                        />
-                      </TextField>
-                    </div>
-
-                    {/* Descuento + Motivo del descuento */}
-                    <div className="grid gap-2 grid-cols-[100px_1fr]">
-                      <TextField label="Descuento (%)" error={form.formState.errors.discountPercent?.message}>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={1}
-                          placeholder="0"
-                          disabled={watched.courtesy}
-                          {...form.register('discountPercent')}
-                        />
-                      </TextField>
-                      <TextField label="Motivo del descuento" error={form.formState.errors.discountReason?.message}>
-                        <input
-                          type="text"
-                          placeholder={watched.discountPercent > 0 ? 'Ej. cliente frecuente' : 'Ingresa primero el %'}
-                          maxLength={120}
-                          disabled={watched.courtesy || !(watched.discountPercent > 0)}
-                          {...form.register('discountReason')}
-                        />
-                      </TextField>
-                    </div>
+                <div className="rounded-xl border border-dashed border-border-strong bg-white px-3 py-2">
+                  <p className="flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.08em] text-emerald-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> DESCUENTO MANUAL
+                  </p>
+                  <div className="mt-1.5 grid grid-cols-[54px_1fr] gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      placeholder="%"
+                      aria-label="Descuento (%)"
+                      disabled={watched.courtesy}
+                      {...form.register('discountPercent')}
+                      className="tl-input"
+                      style={{ height: 30, fontSize: 12 }}
+                    />
+                    <input
+                      type="text"
+                      placeholder={watched.discountPercent > 0 ? 'Motivo' : '— % primero'}
+                      aria-label="Motivo del descuento"
+                      maxLength={120}
+                      disabled={watched.courtesy || !(watched.discountPercent > 0)}
+                      {...form.register('discountReason')}
+                      className="tl-input"
+                      style={{ height: 30, fontSize: 12 }}
+                    />
                   </div>
-                </fieldset>
+                  {form.formState.errors.discountReason?.message && (
+                    <p className="mt-1 text-xs text-red-600">{form.formState.errors.discountReason.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Notas internas</label>
+                  <input
+                    type="text"
+                    placeholder="Cliente frecuente, billete grande…"
+                    {...form.register('notes')}
+                    className="tl-input mt-1"
+                    style={{ height: 30, fontSize: 12 }}
+                  />
+                </div>
+              </div>
+
+              {/* Keyboard hints strip */}
+              <div className="mt-1 flex flex-wrap items-center gap-3 rounded-lg bg-ink-50 px-3 py-2 text-[10.5px] text-ink-500">
+                <span className="font-bold uppercase tracking-[0.08em] text-ink-700">Atajos</span>
+                <KbdHint keys={['1', '2', '3', '4']} label="servicio" />
+                <KbdHint keys={['Q', 'W', 'E', 'R']} label="vehículo" />
+                <KbdHint keys={['Tab']} label="siguiente campo" />
+                <KbdHint keys={['⌘', '↵']} label="guardar" sep="+" />
               </div>
             </div>
           </div>
 
         </div>
 
-        {/* ── Sidebar: live receipt preview + submit ────────────── */}
+        {/* ── Sidecar: Total a cobrar (dark) — design kit v2 ─────── */}
         <aside>
-          <div className="overflow-hidden rounded-2xl border border-border-soft bg-white shadow-md xl:sticky xl:top-4">
-            {/* ── Hero ─────────────────────────────────────────── */}
-            <div
-              className="relative px-6 py-6 text-center"
-              style={{ background: watched.courtesy
-                ? 'radial-gradient(circle at 100% 0%, rgba(251,191,36,0.22), transparent 55%), linear-gradient(140deg, #2a1808 0%, #5a3210 55%, #8a4d10 130%)'
-                : 'radial-gradient(circle at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(140deg, #15091f 0%, #2f164a 55%, #1a6f2f 130%)'
-              }}
-            >
+          {(() => {
+            const selectedSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
+            const selectedSize = (data.sizes.data ?? []).find((s) => s.id === Number(watched.vehicleSizeId))
+            const svcSelected = Boolean(selectedSvc && selectedSize)
+            const lavadorNames = (data.employees.data ?? [])
+              .filter((e) => (watched.employeeIds ?? []).map(Number).includes(e.id))
+              .map((e) => e.fullName)
+            const surchargeNum = Number(watched.surchargeAmount) || 0
+            const discountNum = Number(watched.discountPercent) || 0
+            const overrideNum = Number(watched.priceOverride) || 0
+            const baseAmount = (data.prices.data ?? []).find((p) =>
+              p.serviceTypeId === Number(watched.serviceTypeId)
+              && p.vehicleSizeId === Number(watched.vehicleSizeId)
+              && p.currency === 'MXN'
+            )?.amount ?? 0
+            const subTotal = livePrice ?? 0
+            const integerPart = Math.floor(subTotal)
+            const decimalPart = Math.round((subTotal - integerPart) * 100).toString().padStart(2, '0')
+            const showTotal = svcSelected || watched.courtesy
+            return (
               <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 opacity-[0.07]"
+                className="overflow-hidden text-white shadow-[0_24px_48px_-20px_rgba(15,23,42,0.45)] xl:sticky xl:top-4"
                 style={{
-                  backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
-                  backgroundSize: '18px 18px',
+                  borderRadius: 18,
+                  background: 'radial-gradient(120% 100% at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(135deg, #0f0820 0%, #1a0f2e 40%, #1f3a2e 100%)',
                 }}
-              />
-              {watched.internalRef && (
-                <div className="absolute right-3 top-3 rotate-[6deg]">
-                  <span className="inline-block rounded border-2 border-emerald-300/55 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-200">
-                    Nº {watched.internalRef}
+              >
+                {/* ── EN CAPTURA top bar ────────────────────────── */}
+                <div className="relative flex items-center justify-between border-b border-white/[0.08] px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="relative inline-flex h-2 w-2 rounded-full"
+                      style={{ background: 'var(--brand-green-bright)', boxShadow: '0 0 8px rgba(34,197,94,0.7)' }}
+                    />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/65">EN CAPTURA</span>
+                  </div>
+                  <span className="font-mono text-[10px] font-bold tracking-[0.10em] text-white/45 tabular-nums">
+                    {watched.internalRef ? `#${watched.internalRef}` : '#PENDIENTE'}
                   </span>
                 </div>
-              )}
-              <p className="relative mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/55">
-                {watched.courtesy ? 'Cortesía' : 'Total a cobrar'}
-              </p>
-              {livePrice === undefined ? (
-                <p className="relative font-display text-[22px] font-bold leading-tight tracking-tight text-white/40">
-                  Selecciona servicio<br />y vehículo…
-                </p>
-              ) : watched.discountPercent > 0 && !watched.courtesy ? (
-                <div className="relative">
-                  {(() => {
-                    const base = (data.prices.data ?? []).find((p) =>
-                      p.serviceTypeId === Number(watched.serviceTypeId) &&
-                      p.vehicleSizeId === Number(watched.vehicleSizeId) &&
-                      p.currency === 'MXN'
-                    )?.amount
-                    return base ? (
-                      <p className="font-mono text-[13px] font-medium text-white/40 line-through">
-                        {money(base, 'MXN')}
-                      </p>
-                    ) : null
-                  })()}
-                  <p
-                    key={livePrice}
-                    className="font-display text-[44px] font-black leading-none tracking-[-0.035em] text-emerald-300 tl-fade-in"
-                    style={{ fontVariantNumeric: 'tabular-nums' }}
+
+                {/* ── Big total — split typography ──────────────── */}
+                <div className="relative px-5 pb-3 pt-5">
+                  {/* ghosted $ watermark */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute bottom-0 right-5 font-display font-black uppercase leading-none text-white/[0.05]"
+                    style={{ fontSize: 88, letterSpacing: '-0.04em' }}
                   >
-                    {money(livePrice, 'MXN')}
-                  </p>
-                  <span className="mt-2.5 inline-block rounded-full border border-amber-400/30 bg-amber-400/20 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
-                    −{watched.discountPercent}% descuento
+                    $
                   </span>
-                </div>
-              ) : (
-                <p
-                  key={watched.courtesy ? 'cortesia' : livePrice}
-                  className="relative font-display text-[44px] font-black leading-none tracking-[-0.035em] text-white tl-fade-in"
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
-                  {watched.courtesy ? 'GRATIS' : money(livePrice, 'MXN')}
-                </p>
-              )}
-              <span data-testid="summary-precio-preview-value" className="sr-only">
-                {livePrice === undefined
-                  ? 'Sin precio'
-                  : watched.courtesy
-                    ? money(0, 'MXN')
-                    : watched.discountPercent > 0
-                      ? `${money(livePrice, 'MXN')} (-${watched.discountPercent}%)`
-                      : money(livePrice, 'MXN')}
-              </span>
-            </div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">Total a cobrar</p>
+                  {showTotal ? (
+                    <>
+                      <div className="mt-1.5 flex items-baseline gap-1">
+                        <span
+                          className="font-display font-bold"
+                          style={{
+                            fontSize: 20,
+                            color: watched.courtesy ? 'rgba(252,211,77,0.55)' : 'rgba(255,255,255,0.45)',
+                          }}
+                        >$</span>
+                        <span
+                          key={subTotal}
+                          className="font-display font-extrabold leading-none tl-fade-in"
+                          style={{
+                            fontSize: 48,
+                            letterSpacing: '-0.04em',
+                            color: watched.courtesy ? '#fcd34d' : '#fff',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {watched.courtesy ? '0' : integerPart.toLocaleString('es-MX')}
+                        </span>
+                        <span
+                          className="ml-0.5 font-display font-bold"
+                          style={{
+                            fontSize: 18,
+                            color: watched.courtesy ? 'rgba(252,211,77,0.55)' : 'rgba(255,255,255,0.45)',
+                          }}
+                        >.{watched.courtesy ? '00' : decimalPart}</span>
+                      </div>
+                      {discountNum > 0 && !watched.courtesy && baseAmount > 0 && (
+                        <div className="mt-1 text-[11.5px] text-white/55">
+                          antes <span className="font-mono line-through">{money(baseAmount, 'MXN')}</span>
+                          <span className="ml-1.5 font-bold text-emerald-300">ahorra {money(baseAmount * discountNum / 100, 'MXN')}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p
+                      className="mt-1.5 font-display font-bold leading-tight text-white/45"
+                      style={{ fontSize: 18, letterSpacing: '-0.02em' }}
+                    >
+                      Selecciona servicio<br />y vehículo…
+                    </p>
+                  )}
 
-            {/* ── Perforated divider ─────────────────────────── */}
-            <div className="relative">
-              <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
-              <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-ink-50" />
-              <div className="border-t border-dashed border-border-soft" />
-            </div>
-
-            {/* ── Live receipt preview ──────────────────────────
-                Each line item fades in as the cashier fills the form,
-                so the receipt grows organically toward what gets saved. */}
-            {(() => {
-              const selectedSvc = (data.services.data ?? []).find((s) => s.id === Number(watched.serviceTypeId))
-              const selectedSize = (data.sizes.data ?? []).find((s) => s.id === Number(watched.vehicleSizeId))
-              const lavadorNames = (data.employees.data ?? [])
-                .filter((e) => (watched.employeeIds ?? []).map(Number).includes(e.id))
-                .map((e) => e.fullName.split(' ')[0])
-              const surchargeNum = Number(watched.surchargeAmount) || 0
-              const discountNum = Number(watched.discountPercent) || 0
-              const overrideNum = Number(watched.priceOverride) || 0
-              const ReceiptLn = ({ k, v, hint, tone }: { k: string; v: React.ReactNode; hint?: string; tone?: 'good' | 'warn' | 'bad' }) => {
-                const valueStyle = tone === 'good' ? { color: 'var(--good-700)' } : tone === 'warn' ? { color: 'var(--warn-700)' } : tone === 'bad' ? { color: 'var(--bad-700)' } : undefined
-                return (
-                  <div className="tl-fade-in">
-                    <div className="ln">
-                      <span>{k}</span>
-                      <b style={valueStyle}>{v}</b>
-                    </div>
-                    {hint && (
-                      <p className="-mt-1 truncate pl-1 text-[10.5px] italic text-ink-400" title={hint}>↳ {hint}</p>
+                  {/* ── Status pills row ──────────────────────── */}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {watched.courtesy && (
+                      <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-bold tracking-[0.06em] text-amber-200">CORTESÍA</span>
+                    )}
+                    {prepagoMode !== 'none' && (
+                      <span className="rounded-full bg-violet-400/25 px-2 py-0.5 text-[10px] font-bold tracking-[0.06em] text-violet-200">PREPAGO</span>
+                    )}
+                    {svcSelected && !watched.courtesy && discountNum > 0 && (
+                      <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold tracking-[0.06em] text-emerald-300">−{discountNum}% DESCUENTO</span>
+                    )}
+                    {svcSelected && surchargeNum > 0 && (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold tracking-[0.06em] text-amber-200">+CARGO</span>
                     )}
                   </div>
-                )
-              }
-              return (
-                <div className="tl-receipt" style={{ border: 0, borderRadius: 0, margin: 0, padding: '14px 20px' }}>
-                  <div className="head">
-                    <h4>Detalle</h4>
-                    <span>{data.currentBusinessDay?.businessDate ?? ''}</span>
-                  </div>
-                  <hr />
-                  {selectedSvc && <ReceiptLn k="Servicio" v={selectedSvc.name} />}
-                  {selectedSize && <ReceiptLn k="Vehículo" v={selectedSize.name} />}
-                  {lavadorNames.length > 0 && <ReceiptLn k="Lavadores" v={lavadorNames.join(', ')} />}
-                  <ReceiptLn
-                    k="Pago"
-                    v={watched.courtesy ? 'N/A (cortesía)' : watched.paymentMethod === 'CARD' ? 'Tarjeta' : watched.paymentMethod === 'TRANSFER' ? 'Depósito' : 'Efectivo'}
-                  />
-                  {!watched.courtesy && overrideNum > 0 && (
-                    <ReceiptLn k="Precio especial" v={money(overrideNum, 'MXN')} />
-                  )}
-                  {!watched.courtesy && overrideNum === 0 && discountNum > 0 && (
-                    <ReceiptLn
-                      k={`Descuento ${discountNum}%`}
-                      v={(() => {
-                        const base = (data.prices.data ?? []).find((p) =>
-                          p.serviceTypeId === Number(watched.serviceTypeId)
-                          && p.vehicleSizeId === Number(watched.vehicleSizeId)
-                          && p.currency === 'MXN'
-                        )?.amount ?? 0
-                        return `−${money(base * discountNum / 100, 'MXN')}`
-                      })()}
-                      hint={watched.discountReason?.trim() || undefined}
-                      tone="good"
-                    />
-                  )}
-                  {!watched.courtesy && overrideNum === 0 && surchargeNum > 0 && (
-                    <ReceiptLn
-                      k="Cargo extra"
-                      v={`+${money(surchargeNum, 'MXN')}`}
-                      hint={watched.surchargeReason?.trim() || undefined}
-                      tone="warn"
-                    />
-                  )}
-                  {watched.courtesy && watched.courtesyReason?.trim() && (
-                    <ReceiptLn k="Motivo cortesía" v={watched.courtesyReason.trim()} tone="warn" />
-                  )}
-                  {watched.vehicleDescription?.trim() && (
-                    <ReceiptLn k="Descripción" v={watched.vehicleDescription.trim()} />
-                  )}
-                  {watched.notes?.trim() && (
-                    <ReceiptLn k="Notas" v={watched.notes.trim().length > 40 ? `${watched.notes.trim().slice(0, 40)}…` : watched.notes.trim()} />
-                  )}
-                  {livePrice !== undefined && !watched.courtesy && (
+
+                  <span data-testid="summary-precio-preview-value" className="sr-only">
+                    {livePrice === undefined
+                      ? 'Sin precio'
+                      : watched.courtesy
+                        ? money(0, 'MXN')
+                        : watched.discountPercent > 0
+                          ? `${money(livePrice, 'MXN')} (-${watched.discountPercent}%)`
+                          : money(livePrice, 'MXN')}
+                  </span>
+                </div>
+
+                {/* ── Ledger ─────────────────────────────────────── */}
+                <div className="flex flex-col gap-[7px] border-t border-dashed border-white/10 px-5 py-3">
+                  {svcSelected && (
                     <>
-                      <hr />
-                      <div className="ln tot tl-fade-in">
-                        <span>Total</span>
-                        <b>{money(livePrice, 'MXN')}</b>
-                      </div>
+                      <SidecarLine k="Servicio" v={<span className="text-[12px] font-semibold text-white">{selectedSvc!.name}</span>} />
+                      <SidecarLine k="Vehículo" v={<span className="text-[12px] font-semibold text-white">{selectedSize!.name}</span>} />
+                      <SidecarLine k="Base" v={<span className="font-mono text-white tabular-nums">{money(baseAmount, 'MXN')}</span>} />
+                      {overrideNum > 0 && overrideNum !== baseAmount && (
+                        <SidecarLine k="Precio especial" v={<span className="font-mono text-violet-300 tabular-nums">{money(overrideNum, 'MXN')}</span>} />
+                      )}
+                      {surchargeNum > 0 && (
+                        <SidecarLine k="Cargo" v={<span className="font-mono text-amber-300 tabular-nums">+{money(surchargeNum, 'MXN')}</span>} />
+                      )}
+                      {discountNum > 0 && !watched.courtesy && (
+                        <SidecarLine k={`Descuento · ${discountNum}%`} v={<span className="font-mono text-emerald-300 tabular-nums">−{money(baseAmount * discountNum / 100, 'MXN')}</span>} />
+                      )}
                     </>
                   )}
+                  {lavadorNames.length > 0 && (
+                    <SidecarLine k={`Lavadores · ${lavadorNames.length}`} v={
+                      <span className="flex flex-wrap justify-end gap-1">
+                        {lavadorNames.map((name) => (
+                          <span key={name} className="rounded-full bg-emerald-400/20 px-1.5 py-0.5 text-[10.5px] font-bold text-emerald-300">{name.split(' ')[0]}</span>
+                        ))}
+                      </span>
+                    } />
+                  )}
+                  {watched.vehicleDescription?.trim() && (
+                    <SidecarLine k="Descripción" v={<span className="text-[11.5px] text-white/80">{watched.vehicleDescription.trim()}</span>} />
+                  )}
+                  {watched.notes?.trim() && (
+                    <SidecarLine k="Notas" v={<span className="text-[11.5px] text-white/70">{watched.notes.trim().length > 36 ? `${watched.notes.trim().slice(0, 36)}…` : watched.notes.trim()}</span>} />
+                  )}
+                  <div className="my-1 border-t border-dashed border-white/10" />
+                  <SidecarLine k="Pago" v={
+                    // Controlled mirror of the sr-only Forma de pago select
+                    // (which holds the RHF ref). Both write through setValue
+                    // so the form state stays in sync.
+                    <select
+                      value={watched.paymentMethod}
+                      onChange={(e) => form.setValue('paymentMethod', e.target.value as 'CASH' | 'TRANSFER', { shouldValidate: true })}
+                      disabled={watched.courtesy}
+                      className="rounded-md px-2 py-0.5 text-[12px] font-semibold text-white outline-none focus:ring-2 focus:ring-emerald-400/40"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)' }}
+                    >
+                      <option value="CASH" style={{ color: 'var(--ink-900)' }}>Efectivo</option>
+                      <option value="TRANSFER" style={{ color: 'var(--ink-900)' }}>Depósito</option>
+                    </select>
+                  } />
                 </div>
-              )
-            })()}
 
-            {/* ── Submit ─────────────────────────────────────── */}
-            <div className="px-5 pb-5 pt-2">
-              {save.error && (
-                <p className="mb-3 rounded-lg bg-bad-50 p-3 text-[12.5px] text-bad-700 ring-1 ring-bad-100">{save.error.message}</p>
-              )}
-              {readOnly ? (
-                <Banner tone="warn" title="Turno cerrado — solo lectura" />
-              ) : (
-                <Button
-                  kind="go"
-                  size="lg"
-                  type="submit"
-                  block
-                  disabled={save.isPending || Boolean(disabledReason)}
-                  testId="ticket-submit"
-                >
-                  {save.isPending
-                    ? 'Guardando…'
-                    : mode === 'edit'
-                      ? 'Guardar cambios'
-                      : watched.courtesy
-                        ? 'Guardar cortesía'
-                        : livePrice && livePrice > 0
-                          ? `Cobrar ${money(livePrice, 'MXN')} y guardar`
-                          : 'Guardar ticket'}
-                </Button>
-              )}
-            </div>
-          </div>
+                {/* ── CTA ───────────────────────────────────────── */}
+                <div className="px-5 pb-4 pt-1">
+                  {save.error && (
+                    <p className="mb-2.5 rounded-lg bg-red-500/15 px-3 py-2 text-[12px] font-medium text-red-200 ring-1 ring-red-300/30">{save.error.message}</p>
+                  )}
+                  {readOnly ? (
+                    <div className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-[11.5px] font-semibold text-amber-200">
+                      Turno cerrado — solo lectura
+                    </div>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={save.isPending || Boolean(disabledReason) || (!svcSelected && !watched.courtesy)}
+                      data-testid="ticket-submit"
+                      className="active:scale-[0.98]"
+                      style={{
+                        width: '100%',
+                        height: 46,
+                        borderRadius: 11,
+                        background: (!svcSelected && !watched.courtesy) || save.isPending
+                          ? 'rgba(255,255,255,0.10)'
+                          : 'linear-gradient(180deg, var(--brand-green-bright), var(--brand-green))',
+                        color: '#fff',
+                        border: 0,
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 14,
+                        fontWeight: 800,
+                        letterSpacing: '-0.01em',
+                        cursor: (!svcSelected && !watched.courtesy) || save.isPending ? 'not-allowed' : 'pointer',
+                        boxShadow: (!svcSelected && !watched.courtesy) || save.isPending
+                          ? 'none'
+                          : '0 1px 0 rgba(255,255,255,0.30) inset, 0 10px 22px -10px rgba(31,138,61,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      {save.isPending ? (
+                        <span>Guardando…</span>
+                      ) : (
+                        <>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 12l5 5L20 7" />
+                          </svg>
+                          <span>
+                            {mode === 'edit' ? 'Guardar cambios' : watched.courtesy ? 'Guardar cortesía' : 'Guardar ticket'}
+                          </span>
+                          {showTotal && livePrice !== undefined && (
+                            <span className="font-mono font-bold opacity-90 tabular-nums">· {watched.courtesy ? 'GRATIS' : money(livePrice, 'MXN')}</span>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onSaved()}
+                    className="mt-1.5 w-full bg-transparent text-[11.5px] font-semibold text-white/45 hover:text-white/70"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
         </aside>
       </form>
     </section>
@@ -7076,6 +7298,34 @@ function PayrollScreen() {
     },
   })
 
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState<string>('')
+  const [paymentNote, setPaymentNote] = useState('')
+  const recordDebtPayment = useMutation({
+    mutationFn: () => {
+      const employeeId = selectedEntry?.employeeId
+      if (!employeeId) throw new Error('No employee selected')
+      const amount = Number(paymentAmount)
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Monto invalido')
+      return api(`/api/v1/payroll/employees/${employeeId}/debt-payments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          paymentDate: today,
+          amount,
+          note: paymentNote.trim() || undefined,
+        }),
+      })
+    },
+    onSuccess: async () => {
+      setPaymentOpen(false)
+      setPaymentAmount('')
+      setPaymentNote('')
+      await queryClient.invalidateQueries({ queryKey: ['debt-balance'] })
+      await invalidatePayroll(queryClient)
+      setToast('Pago registrado')
+    },
+  })
+
   // Auto-compute when an OPEN period is loaded/selected
   useEffect(() => {
     if (selectedPeriod?.status === 'OPEN' && !compute.isPending) {
@@ -7440,7 +7690,24 @@ function PayrollScreen() {
                     <span>{money(selectedEntry.netPay, 'MXN')}</span>
                   </div>
                   <div className="my-2 border-t border-border-soft" />
-                  <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : <span className="tl-metric-skeleton" />} />
+                  <div className="flex items-center justify-between gap-2">
+                    <SummaryRow label="Saldo deuda" value={debt.data ? money(debt.data.balance, 'MXN') : <span className="tl-metric-skeleton" />} />
+                  </div>
+                  {(debt.data?.balance ?? 0) > 0 && (
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        kind="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setPaymentAmount(String(debt.data?.balance ?? ''))
+                          setPaymentNote('')
+                          setPaymentOpen(true)
+                        }}
+                      >
+                        Registrar pago
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="overflow-hidden rounded-xl border border-border-soft">
                   <table className="tl-tbl zebra">
@@ -7469,6 +7736,61 @@ function PayrollScreen() {
           </Panel>
         </div>
       </div>
+
+      {paymentOpen && selectedEntry && (
+        <Modal
+          title={`Pago de deuda — ${selectedEntry.employeeName}`}
+          narrow
+          onClose={() => { if (!recordDebtPayment.isPending) setPaymentOpen(false) }}
+        >
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-ink-600">
+              Saldo actual: <span className="font-semibold">{money(debt.data?.balance ?? 0, 'MXN')}</span>
+            </p>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-ink-700">Monto a pagar ($)</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0.01"
+                step="0.01"
+                className="w-full"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder={String(debt.data?.balance ?? '')}
+                autoFocus
+              />
+              <span className="mt-1 block text-[11px] text-ink-400">Fecha: {today} · El monto se suma al fondo de caja.</span>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-ink-700">Nota (opcional)</span>
+              <input
+                type="text"
+                className="w-full"
+                value={paymentNote}
+                onChange={(e) => setPaymentNote(e.target.value)}
+                placeholder="Ej. Devolvio en efectivo el viernes"
+                maxLength={500}
+              />
+            </label>
+            {recordDebtPayment.error && (
+              <p className="text-sm text-red-600">{recordDebtPayment.error.message}</p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button kind="ghost" onClick={() => setPaymentOpen(false)} disabled={recordDebtPayment.isPending}>
+                Cancelar
+              </Button>
+              <Button
+                kind="primary"
+                onClick={() => recordDebtPayment.mutate()}
+                disabled={!paymentAmount || Number(paymentAmount) <= 0 || recordDebtPayment.isPending}
+              >
+                {recordDebtPayment.isPending ? 'Guardando...' : 'Guardar pago'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }
