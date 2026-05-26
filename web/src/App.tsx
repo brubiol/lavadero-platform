@@ -7022,6 +7022,93 @@ function AuditScreen() {
 }
 
 /**
+ * "Top lavadores · esta semana" — a feature-purple card showing the top
+ * performers from the employee-performance report. Uses the existing data;
+ * shows up to 5 rows ordered by carsWashed desc with the ticket revenue as
+ * a mono-display number on the right.
+ */
+function ReportsTopLavadores({ rows }: { rows: EmployeePerformanceRow[] }) {
+  const top = [...rows].sort((a, b) => b.carsWashed - a.carsWashed).slice(0, 5)
+  if (top.length === 0) {
+    return (
+      <Panel tone="feature" title="Top lavadores · este rango">
+        <p className="text-[12.5px] text-white/70">Sin tickets acreditados en el rango.</p>
+      </Panel>
+    )
+  }
+  return (
+    <Panel tone="feature" title="Top lavadores · este rango">
+      <div className="space-y-2">
+        {top.map((e, i) => {
+          const initials = e.employeeName.split(/\s+/).filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase()
+          const isLast = i === top.length - 1
+          return (
+            <div
+              key={e.employeeId}
+              className={`flex items-center justify-between gap-2 py-1.5 ${isLast ? '' : 'border-b border-dashed border-white/15'}`}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-[10.5px] font-bold text-white">
+                  {initials}
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <div className="truncate text-[12.5px] font-semibold text-white">{e.employeeName}</div>
+                  <div className="text-[10.5px] text-white/65">{e.carsWashed.toFixed(1)} carros · {e.ticketCount} tickets</div>
+                </div>
+              </div>
+              <div className="flex-shrink-0 font-mono text-[12.5px] font-bold tabular-nums text-white">
+                {money(e.ticketRevenue, 'MXN')}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
+/**
+ * "Diferencia de caja · por día" — amber card showing per-shift cash
+ * variance. Compact view of the cashVariance.rows data — see the full
+ * "Varianza de caja" panel below the breakdown table for the breakdown.
+ */
+function ReportsDiferenciaCaja({ rows }: { rows: CashVarianceRow[] }) {
+  const shown = rows.slice(0, 6)
+  if (shown.length === 0) {
+    return (
+      <Panel tone="warn" title="Diferencia de caja · por día">
+        <p className="text-[12.5px] text-ink-500">Sin cortes cerrados en el rango.</p>
+      </Panel>
+    )
+  }
+  return (
+    <Panel tone="warn" title="Diferencia de caja · por día">
+      <div className="space-y-1.5">
+        {shown.map((row, i) => {
+          const v = Number(row.variance)
+          const isLast = i === shown.length - 1
+          const sign = v > 0 ? '+' : ''
+          const tone = v > 0 ? 'text-emerald-700' : v < 0 ? 'text-rose-700' : 'text-ink-500'
+          return (
+            <div
+              key={`${row.shiftId}-${row.date}`}
+              className={`flex items-center justify-between gap-2 py-1 ${isLast ? '' : 'border-b border-dashed border-amber-200'}`}
+            >
+              <div className="text-[11.5px] text-ink-700">
+                <span className="font-mono">{row.date}</span> <span className="text-ink-400">·</span> {row.shiftType === 'MATUTINO' ? 'matutino' : 'vespertino'}
+              </div>
+              <div className={`font-mono text-[12.5px] font-bold tabular-nums ${tone}`}>
+                {v === 0 ? money(0, 'MXN') : `${sign}${money(v, 'MXN')}`}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
+/**
  * Multi-bar chart strip — paired daily bars for ingresos (purple) + carros×$200
  * reference line (emerald), rendered without a charting lib so we don't ship one
  * just for this. Matches the design-kit "tl2-chart-strip" treatment: dot-legend,
@@ -7211,12 +7298,17 @@ function ReportsScreen() {
       <div className="tl-stagger grid gap-4 md:grid-cols-3 xl:grid-cols-6" data-testid="reports-range-metrics">
         {(() => {
           const sk = (wide?: boolean) => <span className={`tl-metric-skeleton${wide ? ' wide' : ''}`} />
+          const series = range?.days ?? []
+          const revSpark = series.map((d) => Number(d.ticketRevenue) || 0)
+          const expSpark = series.map((d) => Number(d.expensesTotal) || 0)
+          const resSpark = series.map((d) => Number(d.result) || 0)
+          const carSpark = series.map((d) => d.carsWashed || 0)
           return (
             <>
-              <Metric label="Ingresos" tone="good" value={range ? money(range.ticketRevenue, 'MXN') : sk(true)} />
-              <Metric label="Salidas" tone="bad" value={range ? money(range.expensesTotal, 'MXN') : sk(true)} />
-              <Metric label="Resultado" variant={resultTone} value={range ? money(range.result, 'MXN') : sk(true)} />
-              <Metric label="Carros" tone="info" value={range ? String(range.carsWashed) : sk()} />
+              <Metric label="Ingresos" tone="good" value={range ? money(range.ticketRevenue, 'MXN') : sk(true)} sub={<Sparkline data={revSpark} w={80} h={20} color="#059669" />} />
+              <Metric label="Salidas" tone="bad" value={range ? money(range.expensesTotal, 'MXN') : sk(true)} sub={<Sparkline data={expSpark} w={80} h={20} color="#dc2626" />} />
+              <Metric label="Resultado" variant={resultTone} value={range ? money(range.result, 'MXN') : sk(true)} sub={<Sparkline data={resSpark} w={80} h={20} color="#7c3aed" />} />
+              <Metric label="Carros" tone="info" value={range ? String(range.carsWashed) : sk()} sub={<Sparkline data={carSpark} w={80} h={20} color="#7c3aed" />} />
               <Metric label="Cortesias" value={range ? String(range.courtesyCount) : sk()} />
               <Metric label="Anulados" tone="warn" value={range ? String(range.voidedCount) : sk()} />
             </>
@@ -7369,6 +7461,9 @@ function ReportsScreen() {
         </div>
 
         <aside className="space-y-5">
+          <ReportsTopLavadores rows={performance.data?.employees ?? []} />
+          <ReportsDiferenciaCaja rows={cashVariance.data?.rows ?? []} />
+
           <Panel title="Export preview">
             <div className="tl-stagger flex flex-col gap-2">
               {(() => {
