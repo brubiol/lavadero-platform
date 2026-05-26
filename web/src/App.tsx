@@ -1009,11 +1009,12 @@ const ROUTE_META: Record<string, { title: string; section: string }> = {
   '/nomina':        { title: 'Nómina',        section: 'Gestión'   },
   '/inventario':    { title: 'Inventario',    section: 'Gestión'   },
   '/catalogos':     { title: 'Catálogos',     section: 'Gestión'   },
-  '/asistencia':    { title: 'Asistencia',    section: 'Gestión'   },
-  '/reportes':      { title: 'Reportes',      section: 'Dueño'     },
-  '/ai':            { title: 'Análisis IA',  section: 'Dueño'     },
-  '/auditoria':     { title: 'Auditoría',     section: 'Dueño'     },
-  '/vigilancia':    { title: 'Vigilancia',    section: 'Dueño'     },
+  '/asistencia':      { title: 'Asistencia',           section: 'Gestión' },
+  '/reporte-personal':{ title: 'Reporte de personal',  section: 'Gestión' },
+  '/vigilancia':      { title: 'Operación y personal', section: 'Gestión' },
+  '/reportes':        { title: 'Reportes',             section: 'Dueño'   },
+  '/ai':              { title: 'Análisis IA',          section: 'Dueño'   },
+  '/auditoria':       { title: 'Auditoría',            section: 'Dueño'   },
 }
 
 function routeMeta(pathname: string) {
@@ -1031,6 +1032,30 @@ function AppShell() {
     refetchInterval: 60_000,
   })
 
+  // Live sidebar stats — works for any role (OPERADOR can hit both endpoints).
+  // Counts today's ACTIVE tickets for the carros stat and sums CASH tickets
+  // for an approximate "caja en turno" indicator.
+  const sidebarDay = useQuery({
+    queryKey: ['sidebar-business-day', today],
+    enabled: Boolean(auth),
+    queryFn: () => api<BusinessDay[]>(`/api/v1/business-days?from=${today}&to=${today}`),
+    refetchInterval: 60_000,
+  })
+  const sidebarBdayId = sidebarDay.data?.find((d) => d.status === 'OPEN')?.id ?? sidebarDay.data?.[0]?.id
+  const sidebarTickets = useQuery({
+    queryKey: ['sidebar-tickets', sidebarBdayId],
+    enabled: Boolean(sidebarBdayId),
+    queryFn: () => api<Ticket[]>(`/api/v1/tickets?business_day_id=${sidebarBdayId}`),
+    refetchInterval: 30_000,
+  })
+  const carsToday = sidebarTickets.data?.filter((t) => t.status === 'ACTIVE').length
+  const cashSum = (sidebarTickets.data ?? [])
+    .filter((t) => t.status === 'ACTIVE' && t.paymentMethod === 'CASH')
+    .reduce((sum, t) => sum + Number(t.priceAmount ?? 0), 0)
+  const cashLabel = cashSum > 0
+    ? cashSum >= 1000 ? `$${(cashSum / 1000).toFixed(cashSum >= 10_000 ? 0 : 1)}k` : `$${Math.round(cashSum)}`
+    : '—'
+
   if (!auth) {
     return <LoginScreen />
   }
@@ -1046,6 +1071,7 @@ function AppShell() {
           userName={auth.user.fullName}
           payrollAccess={auth.user.payrollAccess ?? true}
           flaggedCount={isOwner ? (flaggedCount.data?.length ?? 0) : 0}
+          liveStats={{ carsToday, cashLabel }}
           onLogout={() => void logout()}
         />
       }
@@ -1072,9 +1098,10 @@ function AppShell() {
           <Route path="/ai" element={<RequireRole role="DUENO"><AiScreen /></RequireRole>} />
           <Route path="/reportes" element={<RequireRole role="DUENO"><ReportsScreen /></RequireRole>} />
           <Route path="/auditoria" element={<RequireRole role="DUENO"><AuditScreen /></RequireRole>} />
-          <Route path="/vigilancia" element={<RequireRole role="DUENO"><VigilanciaScreen /></RequireRole>} />
+          <Route path="/vigilancia" element={<RequireRole role="GERENTE"><VigilanciaScreen /></RequireRole>} />
           <Route path="/catalogos" element={<RequireRole role="GERENTE"><CatalogsScreen /></RequireRole>} />
           <Route path="/asistencia" element={<RequireRole role="OPERADOR"><AttendanceScreen /></RequireRole>} />
+          <Route path="/reporte-personal" element={<RequireRole role="GERENTE"><StaffReportScreen /></RequireRole>} />
         </Routes>
       </main>
 
@@ -2058,21 +2085,24 @@ function AiScreen() {
   const critical = today_?.criticalCount ?? 0
   const warnings = today_?.warningCount ?? 0
   const historyRows = (history.data ?? []).filter((i) => i.featureType !== 'ANOMALY_ALERT' && i.featureType !== 'DAILY_BRIEF')
+  const revisedAlerts = (history.data ?? [])
+    .filter((i) => i.featureType === 'ANOMALY_ALERT' && i.status !== 'NEW')
+    .slice(0, 20)
 
   return (
     <section className="space-y-5">
       {/* ─── Editorial header ─────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-            Asistente · {today_?.date ?? date}
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-500" />
+            DUEÑO · INTELIGENCIA · {today_?.date ?? date}
           </p>
           <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
-            AI Command Center
+            Análisis IA
           </h2>
           <p className="mt-1 text-[12.5px] text-ink-500 max-w-xl">
-            Pregúntale al asistente, revisa el brief del día y las alertas. La AI guarda insights pero no modifica
-            tickets, caja, gastos, nómina ni inventario.
+            Brief diario, alertas activas y un analista que responde con datos del negocio.
           </p>
         </div>
         <div className="flex items-end gap-3">
@@ -2093,6 +2123,15 @@ function AiScreen() {
           </label>
         </div>
       </div>
+
+      <AiBriefHero
+        today={today_}
+        loading={todayData.isLoading}
+        onReloadBrief={() => refreshBrief.mutate()}
+        reloading={refreshBrief.isPending}
+        briefError={refreshBrief.error?.message}
+        onAskQuestion={(q) => submitMessage(q)}
+      />
 
       <ForecastPanel
         data={forecast.data}
@@ -2257,8 +2296,34 @@ function AiScreen() {
           {/* Composer */}
           <form
             onSubmit={(e) => { e.preventDefault(); submitMessage(input) }}
-            className="border-t border-border-soft bg-white p-4 space-y-2"
+            className="border-t border-border-soft bg-ink-50/60 p-4 space-y-3"
           >
+            {/* SUGERENCIAS — single-click emoji prompts */}
+            <div>
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-500">SUGERENCIAS</span>
+                <span className="text-[11px] text-ink-400">Toca para empezar</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  ['📊', '¿Cómo fue el día?'],
+                  ['👤', '¿Quién lavó más carros?'],
+                  ['💰', '¿Hubo faltante o sobrante?'],
+                  ['📦', '¿Qué productos están bajos?'],
+                  ['📈', '¿Cómo va el mes vs. el anterior?'],
+                ].map(([emoji, q]) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => submitMessage(q)}
+                    disabled={ask.isPending}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border-soft bg-white px-3 py-1 text-[12px] font-semibold text-ink-700 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                  >
+                    <span className="text-[13px]">{emoji}</span>{q}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-end gap-2">
               <AutoTextarea
                 value={input}
@@ -2305,16 +2370,14 @@ function AiScreen() {
           </form>
         </div>
 
-        {/* ─── Right rail: Today + Alerts + Bitácora ─────────── */}
+        {/* ─── Right rail: Alerts + Insights guardados ───────── */}
         <aside className="space-y-4">
-          <AiTodayCard
-            today={today_}
+          <AiAlertsCard
+            alerts={alerts}
+            revisedAlerts={revisedAlerts}
             loading={todayData.isLoading}
-            onReloadBrief={() => refreshBrief.mutate()}
-            reloading={refreshBrief.isPending}
-            briefError={refreshBrief.error?.message}
+            onAskQuestion={(q) => submitMessage(q)}
           />
-          <AiAlertsCard alerts={alerts} loading={todayData.isLoading} />
           <AiHistoryCard rows={historyRows} loading={history.isLoading} />
         </aside>
       </div>
@@ -2741,12 +2804,14 @@ function AiDegradedBanner({ status }: { status: AiStatusResponse }) {
 
 function AiRailCard({
   title,
+  subtitle,
   rail,
   action,
   children,
   className = '',
 }: {
   title: string
+  subtitle?: string
   rail: string
   action?: React.ReactNode
   children: React.ReactNode
@@ -2754,10 +2819,13 @@ function AiRailCard({
 }) {
   return (
     <div className={`tl-panel overflow-hidden ${className}`.trim()}>
-      <div className="flex items-center justify-between gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`h-[18px] w-[3px] rounded-full bg-gradient-to-b ${rail}`} />
-          <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{title}</h3>
+      <div className="flex items-start justify-between gap-2.5 border-b border-border-soft bg-ink-50/60 px-5 py-3.5">
+        <div className="flex items-start gap-2.5">
+          <span className={`mt-1 h-[18px] w-[3px] rounded-full bg-gradient-to-b ${rail}`} />
+          <div className="min-w-0">
+            <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{title}</h3>
+            {subtitle && <p className="mt-0.5 text-[11px] text-ink-500">{subtitle}</p>}
+          </div>
         </div>
         {action}
       </div>
@@ -2767,6 +2835,287 @@ function AiRailCard({
 }
 
 // ── Today / Brief rail card ─────────────────────────────────────
+// ── Featured brief hero ─────────────────────────────────────────
+// Dark gradient full-width "BRIEF DEL DÍA" rail at the top of /ai. Pulls KPIs
+// from `today.summary` and the day's narrative from `today.brief.summary`. The
+// 3 follow-up question chips on the bottom-left submit straight into the chat
+// composer via `onAskQuestion`.
+// Build a data-driven headline that mirrors the design exactly:
+//   "Día {tone}: {N} carros contra promedio de {X}. Ingresos {±Y%} vs. ayer."
+// Numbers are embedded as colored spans up-front so there's no regex
+// post-processing to mangle dates or stray digits in AI-generated text.
+function buildBriefHeadline(opts: {
+  cars: number
+  recentAvgCars: number | null
+  revDelta: number | null
+}): JSX.Element {
+  const { cars, recentAvgCars, revDelta } = opts
+  const num = (s: string | number, color: string) => (
+    <span className="tabular-nums" style={{ color, fontWeight: 800 }}>
+      {s}
+    </span>
+  )
+  const tone =
+    cars === 0
+      ? 'sin actividad'
+      : recentAvgCars != null && cars < recentAvgCars * 0.5
+        ? 'tranquilo'
+        : recentAvgCars != null && cars > recentAvgCars * 1.25
+          ? 'fuerte'
+          : 'estable'
+  return (
+    <>
+      Día {tone}: {num(`${cars} carro${cars === 1 ? '' : 's'}`, '#86efac')}
+      {recentAvgCars != null && (
+        <>{' '}contra promedio de {num(Math.round(recentAvgCars), '#fcd34d')}</>
+      )}
+      .
+      {revDelta != null && (
+        <>
+          {' '}Ingresos {num(
+            `${revDelta < 0 ? '−' : '+'}${Math.abs(revDelta)}%`,
+            revDelta < 0 ? '#fca5a5' : '#86efac',
+          )} vs. ayer.
+        </>
+      )}
+    </>
+  )
+}
+
+// Pull "promedio reciente de X" out of the AI brief bullets so the headline can
+// reference the real 30-day average rather than just yesterday's number.
+function parseRecentAverage(summary: string | undefined): number | null {
+  if (!summary) return null
+  const m = summary.match(/promedio reciente de\s+\$?([\d,]+\.?\d*)/i)
+  if (!m) return null
+  const n = Number(m[1].replace(/,/g, ''))
+  return Number.isFinite(n) ? n : null
+}
+
+function AiBriefHero({
+  today,
+  loading,
+  onReloadBrief,
+  reloading,
+  briefError,
+  onAskQuestion,
+}: {
+  today?: TodayResponse
+  loading: boolean
+  onReloadBrief: () => void
+  reloading: boolean
+  briefError?: string
+  onAskQuestion: (q: string) => void
+}) {
+  const summaryLines = today?.brief ? aiSummaryLines(today.brief.summary) : []
+  const updatedAt = today?.brief?.createdAt
+    ? new Date(today.brief.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : null
+
+  const cars = today?.summary?.carsWashed ?? 0
+  const revenue = today?.summary?.ticketRevenue ?? 0
+  const result = today?.summary?.result ?? 0
+  const variance = today?.summary?.cashVariance ?? null
+  const pct = (curr: number, prev: number | undefined | null) =>
+    prev == null || prev === 0 ? null : Math.round(((curr - prev) / Math.abs(prev)) * 100)
+  const carsDelta = pct(cars, today?.previousDay?.carsWashed)
+  const revDelta = pct(revenue, today?.previousDay?.ticketRevenue)
+  const resDelta = pct(result, today?.previousDay?.result)
+
+  // Headline: built from data so date strings and AI title lines never sneak
+  // into the colorizer. Falls back to yesterday's number when the AI brief
+  // hasn't surfaced a recent average yet.
+  const recentAvgCars =
+    parseRecentAverage(today?.brief?.summary) ?? today?.previousDay?.carsWashed ?? null
+  const headlineNode = buildBriefHeadline({ cars, recentAvgCars, revDelta })
+
+  // Fallback bullets used when AI brief is unavailable — keeps the hero populated
+  // with the same narrative density the design shows.
+  const fallbackBullets: Array<[string, string]> = [
+    ['Carros lavados', `${cars} contra promedio reciente${today?.previousDay ? ` de ${today.previousDay.carsWashed}` : ''}`],
+    ['Ingresos autos', `${money(revenue, 'MXN')}${today?.previousDay ? ` contra ${money(today.previousDay.ticketRevenue, 'MXN')}` : ''}`],
+    ['Resultado', `${money(result, 'MXN')}${result < 0 ? ' · día en rojo' : ''}`],
+    ['Diferencia caja', variance == null ? 'Pendiente de corte' : `${money(variance, 'MXN')} ${variance >= 0 ? 'sobrante' : 'faltante'}`],
+  ]
+
+  // Suggested questions — static for now; designs show 3 chips.
+  const followUps = [
+    '¿Por qué bajaron los ingresos hoy?',
+    '¿Qué turno rindió mejor?',
+    'Compara con el mismo día la semana pasada',
+  ]
+
+  return (
+    <div
+      className="relative overflow-hidden border border-white/[0.06] px-8 py-7 text-white"
+      style={{
+        borderRadius: 20,
+        background:
+          'radial-gradient(120% 100% at 100% 0%, rgba(34,197,94,0.18), transparent 55%), linear-gradient(135deg, #0f0820 0%, #1a0f2e 40%, #1f3a2e 100%)',
+        boxShadow: '0 24px 48px -20px rgba(15,23,42,0.45)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute select-none uppercase"
+        style={{
+          right: 28,
+          bottom: 18,
+          fontFamily: 'var(--font-display)',
+          fontWeight: 900,
+          fontSize: 88,
+          letterSpacing: '-0.04em',
+          lineHeight: 1,
+          color: 'rgba(255,255,255,0.06)',
+        }}
+      >
+        BRIEF
+      </span>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          opacity: 0.06,
+          backgroundImage: 'radial-gradient(rgba(255,255,255,0.85) 1px, transparent 1px)',
+          backgroundSize: '22px 22px',
+        }}
+      />
+      <div
+        className="absolute flex items-center text-[10.5px] font-bold uppercase"
+        style={{ top: 22, right: 28, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.32)' }}
+      >
+        <span>BRIEF</span>
+        <span className="mx-1.5 opacity-50">·</span>
+        <span>DEL DÍA</span>
+      </div>
+
+      <div className="relative grid items-start gap-7 lg:grid-cols-[1fr_320px]">
+        {/* LEFT — status + headline + bullets + chips */}
+        <div>
+          <div className="flex flex-wrap items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/55">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(74,222,128,0.7)]" />
+            </span>
+            {loading && !today
+              ? 'GENERANDO BRIEF…'
+              : updatedAt
+                ? `NUEVO · ACTUALIZADO ${updatedAt}`
+                : 'BRIEF EN ESPERA'}
+            <button
+              type="button"
+              onClick={onReloadBrief}
+              disabled={reloading}
+              className="ml-2 inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white/70 transition hover:bg-white/10 disabled:opacity-50"
+            >
+              {reloading ? 'Generando…' : '↻ Recargar'}
+            </button>
+          </div>
+
+          <h2
+            className="mt-3 text-white"
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 26,
+              fontWeight: 800,
+              lineHeight: 1.15,
+              letterSpacing: '-0.025em',
+              maxWidth: 560,
+            }}
+          >
+            {headlineNode}
+          </h2>
+
+          <ul className="mt-4 space-y-1.5 text-[12.5px] leading-relaxed text-white/80">
+            {(summaryLines.length > 0
+              ? summaryLines.slice(0, 4).map((line) => {
+                  const idx = line.indexOf('·')
+                  return idx > 0
+                    ? ([line.slice(0, idx).trim(), line.slice(idx + 1).trim()] as [string, string])
+                    : (['', line] as [string, string])
+                })
+              : fallbackBullets
+            ).map(([head, tail], i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <span className="mt-2 inline-block h-1 w-1 flex-none rounded-full bg-white/45" />
+                <span>
+                  {head && (
+                    <>
+                      <b className="text-white">{head}</b>
+                      <span className="text-white/55"> · </span>
+                    </>
+                  )}
+                  <span className="text-white/75">{tail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {followUps.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => onAskQuestion(q)}
+                className="rounded-full border border-white/15 bg-white/[0.08] px-3 py-1 text-[11.5px] font-semibold text-white transition hover:bg-white/15"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+
+          {briefError && (
+            <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-[11.5px] text-rose-200">
+              {briefError}
+            </p>
+          )}
+        </div>
+
+        {/* RIGHT — KPI rows */}
+        <div className="flex flex-col gap-2.5">
+          {[
+            { lbl: 'CARROS', val: String(cars), delta: carsDelta },
+            { lbl: 'INGRESOS', val: money(revenue, 'MXN'), delta: revDelta },
+            { lbl: 'RESULTADO', val: money(result, 'MXN'), delta: resDelta, valueColor: result >= 0 ? '#86efac' : '#fda4af' },
+            {
+              lbl: 'DIF. CAJA',
+              val: variance == null ? 'Pendiente' : money(variance, 'MXN'),
+              delta: null as number | null,
+              valueColor: variance == null ? 'rgba(255,255,255,0.55)' : variance >= 0 ? '#86efac' : '#fda4af',
+            },
+          ].map((r) => (
+            <div
+              key={r.lbl}
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-3.5 py-2.5"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-[9.5px] font-bold uppercase tracking-[0.11em] text-white/55">{r.lbl}</div>
+                <div
+                  className="font-display mt-0.5 text-[17px] font-extrabold tabular-nums tracking-[-0.02em]"
+                  style={{ color: r.valueColor ?? '#fff' }}
+                >
+                  {r.val}
+                </div>
+              </div>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums ${
+                  r.delta == null
+                    ? 'bg-white/[0.08] text-white/55'
+                    : r.delta >= 0
+                      ? 'bg-emerald-500/20 text-emerald-200'
+                      : 'bg-rose-400/20 text-rose-200'
+                }`}
+              >
+                {r.delta == null ? '—' : `${r.delta >= 0 ? '↑' : '↓'} ${Math.abs(r.delta)}%`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AiTodayCard({
   today,
   loading,
@@ -2871,10 +3220,41 @@ function AiTodayCard({
 }
 
 // ── Alerts rail card ───────────────────────────────────────────
-function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boolean }) {
-  const [filter, setFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL')
-  if (loading && alerts.length === 0) return null
-  if (!loading && alerts.length === 0) {
+// Renders NEW + REVISED (acknowledged/dismissed) alerts behind a 4-tab filter
+// (Todas / Críticas / Avisos / Revisadas) with tonal-gradient item cards.
+// Each item has acknowledge/dismiss icon buttons and a "Preguntar al
+// asistente →" link that pipes the alert title into the chat composer.
+function AiAlertsCard({
+  alerts,
+  revisedAlerts,
+  loading,
+  onAskQuestion,
+}: {
+  alerts: AiInsight[]
+  revisedAlerts: AiInsight[]
+  loading: boolean
+  onAskQuestion?: (q: string) => void
+}) {
+  const [filter, setFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING' | 'REVISED'>('ALL')
+
+  if (loading && alerts.length === 0 && revisedAlerts.length === 0) return null
+
+  const newSorted = [...alerts].sort((a, b) => {
+    const order = { CRITICAL: 0, WARNING: 1, INFO: 2 }
+    return order[a.severity] - order[b.severity]
+  })
+  const counts = {
+    ALL: newSorted.length,
+    CRITICAL: newSorted.filter((a) => a.severity === 'CRITICAL').length,
+    WARNING: newSorted.filter((a) => a.severity === 'WARNING').length,
+    REVISED: revisedAlerts.length,
+  }
+  const visible: AiInsight[] =
+    filter === 'ALL' ? newSorted
+    : filter === 'REVISED' ? revisedAlerts
+    : newSorted.filter((a) => a.severity === filter)
+
+  if (!loading && counts.ALL === 0 && counts.REVISED === 0) {
     return (
       <AiRailCard title="Alertas" rail="from-emerald-400 to-emerald-600">
         <div className="p-4 flex items-center gap-2 text-[12.5px] text-good-700">
@@ -2884,73 +3264,219 @@ function AiAlertsCard({ alerts, loading }: { alerts: AiInsight[]; loading: boole
       </AiRailCard>
     )
   }
-  const sorted = [...alerts].sort((a, b) => {
-    const order = { CRITICAL: 0, WARNING: 1, INFO: 2 }
-    return order[a.severity] - order[b.severity]
-  })
-  const counts = {
-    ALL: sorted.length,
-    CRITICAL: sorted.filter((a) => a.severity === 'CRITICAL').length,
-    WARNING: sorted.filter((a) => a.severity === 'WARNING').length,
-  }
-  const visible = filter === 'ALL' ? sorted : sorted.filter((a) => a.severity === filter)
-  const topSeverity = sorted[0]?.severity
-  const colorMap = topSeverity === 'CRITICAL'
-    ? 'from-rose-400 to-rose-600'
-    : topSeverity === 'WARNING'
-    ? 'from-amber-400 to-amber-600'
-    : 'from-violet-400 to-violet-600'
+
   return (
     <AiRailCard
       title="Alertas"
-      rail={colorMap}
-      action={(
-        <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[10.5px] font-bold text-ink-700">
-          {visible.length}{filter !== 'ALL' && `/${counts.ALL}`}
-        </span>
-      )}
+      rail="from-rose-400 to-rose-600"
+      action={
+        counts.ALL > 0 ? (
+          <span className="inline-flex items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10.5px] font-bold text-white tabular-nums">
+            {counts.ALL}
+          </span>
+        ) : null
+      }
     >
-      {/* Severity filter tabs */}
-      <div className="flex items-center gap-1 border-b border-border-soft px-4 py-2">
+      {/* 4-tab filter: Todas / Críticas / Avisos / Revisadas */}
+      <div className="flex flex-wrap items-center gap-1 border-b border-border-soft px-4 py-2.5">
         {([
           { id: 'ALL' as const, label: 'Todas', count: counts.ALL },
           { id: 'CRITICAL' as const, label: 'Críticas', count: counts.CRITICAL },
           { id: 'WARNING' as const, label: 'Avisos', count: counts.WARNING },
+          { id: 'REVISED' as const, label: 'Revisadas', count: counts.REVISED },
         ]).map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setFilter(t.id)}
             disabled={t.count === 0 && t.id !== 'ALL'}
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
               filter === t.id
-                ? t.id === 'CRITICAL' ? 'bg-rose-600 text-white' : t.id === 'WARNING' ? 'bg-amber-600 text-white' : 'bg-ink-900 text-white'
-                : 'text-ink-500 hover:bg-ink-100 disabled:opacity-40 disabled:hover:bg-transparent'
+                ? 'bg-ink-900 text-white'
+                : 'bg-ink-50 text-ink-600 border border-border-soft hover:bg-ink-100 disabled:opacity-40 disabled:hover:bg-ink-50'
             }`}
           >
             {t.label}
-            <span className={`text-[9.5px] font-bold ${filter === t.id ? 'opacity-80' : 'opacity-60'}`}>{t.count}</span>
+            <span className={`text-[10px] font-bold ${filter === t.id ? 'opacity-65' : 'opacity-60'}`}>{t.count}</span>
           </button>
         ))}
       </div>
-      <div className="p-4 space-y-2 max-h-[420px] overflow-y-auto">
-        {visible.map((a) => <AiInsightCard key={a.id} insight={a} compact />)}
+      <div className="p-3 space-y-2 max-h-[460px] overflow-y-auto">
+        {visible.map((a) => (
+          <AiAlertItem key={a.id} insight={a} onAskQuestion={onAskQuestion} />
+        ))}
         {visible.length === 0 && (
-          <p className="text-[12px] text-ink-400 text-center py-4">Sin alertas de este tipo.</p>
+          <p className="px-2 py-6 text-center text-[12px] text-ink-400">
+            {filter === 'REVISED' ? 'Aún no hay alertas revisadas.' : 'Sin alertas de este tipo.'}
+          </p>
         )}
       </div>
     </AiRailCard>
   )
 }
 
-// ── History rail card ──────────────────────────────────────────
+// Compact alert item with severity-tonal gradient, tag, title, summary, and the
+// trio of actions: acknowledge (✓), dismiss (×), ask-the-assistant link. Used
+// inside AiAlertsCard only.
+function AiAlertItem({ insight, onAskQuestion }: { insight: AiInsight; onAskQuestion?: (q: string) => void }) {
+  const queryClient = useQueryClient()
+  const acknowledge = useMutation({
+    mutationFn: () => api<AiInsight>(`/api/v1/ai/insights/${insight.id}/acknowledge`, { method: 'POST' }),
+    onSuccess: () => invalidateAi(queryClient),
+  })
+  const dismiss = useMutation({
+    mutationFn: () => api<AiInsight>(`/api/v1/ai/insights/${insight.id}/dismiss`, { method: 'POST' }),
+    onSuccess: () => invalidateAi(queryClient),
+  })
+
+  const summaryLines = aiSummaryLines(insight.summary)
+  const firstLine = summaryLines[0] ?? ''
+  const busy = acknowledge.isPending || dismiss.isPending
+  const isRevised = insight.status !== 'NEW'
+
+  const tone =
+    insight.severity === 'CRITICAL' ? 'crit' :
+    insight.severity === 'WARNING' ? 'warn' :
+    'info'
+  const toneStyles: Record<'crit' | 'warn' | 'info', { bg: string; border: string; tagBg: string; tagText: string }> = {
+    crit: {
+      bg: 'linear-gradient(180deg, rgba(254,226,226,0.55), #fff 72%)',
+      border: 'var(--bad-100, #fecaca)',
+      tagBg: 'transparent',
+      tagText: 'var(--bad-700, #b91c1c)',
+    },
+    warn: {
+      bg: 'linear-gradient(180deg, rgba(254,243,199,0.55), #fff 72%)',
+      border: 'var(--warn-100, #fde68a)',
+      tagBg: 'transparent',
+      tagText: 'var(--warn-700, #b45309)',
+    },
+    info: {
+      bg: 'linear-gradient(180deg, rgba(219,234,254,0.55), #fff 72%)',
+      border: 'var(--info-100, #bfdbfe)',
+      tagBg: 'transparent',
+      tagText: 'var(--info-700, #1d4ed8)',
+    },
+  }
+  const s = toneStyles[tone]
+
+  return (
+    <article
+      className="relative rounded-xl px-3.5 py-3"
+      style={{ background: s.bg, border: `1px solid ${s.border}` }}
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span
+          className="text-[9.5px] font-bold uppercase tracking-[0.11em]"
+          style={{ color: s.tagText }}
+        >
+          {featureLabel(insight.featureType)}
+          {isRevised && <span className="ml-1 opacity-60">· {statusLabel(insight.status).toUpperCase()}</span>}
+          {!isRevised && <span className="ml-1 opacity-60">· NUEVO</span>}
+        </span>
+        {!isRevised && (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => acknowledge.mutate()}
+              disabled={busy}
+              title="Marcar como revisada"
+              aria-label="Marcar como revisada"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-40"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => dismiss.mutate()}
+              disabled={busy}
+              title="Descartar"
+              aria-label="Descartar"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-white hover:text-rose-700 disabled:opacity-40"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+      <h4 className="font-display text-[13px] font-extrabold tracking-[-0.01em] text-ink-900 leading-snug">
+        {insight.title}
+      </h4>
+      {firstLine && (
+        <p className="mt-1 text-[11.5px] leading-snug text-ink-700">{firstLine}</p>
+      )}
+      {onAskQuestion && (
+        <button
+          type="button"
+          onClick={() => onAskQuestion(`Explícame esta alerta: ${insight.title}`)}
+          className="mt-1.5 inline-flex items-center bg-transparent p-0 text-[11px] font-bold text-primary-700 transition-colors hover:text-primary-800"
+        >
+          Preguntar al asistente →
+        </button>
+      )}
+      {(acknowledge.error || dismiss.error) && (
+        <p className="mt-2 rounded bg-bad-50 px-2 py-1 text-[11px] text-bad-700">
+          {(acknowledge.error || dismiss.error)!.message}
+        </p>
+      )}
+    </article>
+  )
+}
+
+// ── Insights guardados rail card ───────────────────────────────
+// Replaces the prior "Bitácora reciente". Shows recent non-alert insights with
+// a mono date badge + title + meta + star toggle, separated by dashed rules.
 function AiHistoryCard({ rows, loading }: { rows: AiInsight[]; loading: boolean }) {
   if (loading || rows.length === 0) return null
+  const items = rows.slice(0, 8)
   return (
-    <AiRailCard title="Bitácora reciente" rail="from-ink-400 to-ink-600">
-      <div className="p-4 space-y-2 max-h-[360px] overflow-y-auto">
-        {rows.slice(0, 8).map((insight) => <AiInsightCard key={insight.id} insight={insight} compact />)}
-      </div>
+    <AiRailCard
+      title="Insights guardados"
+      subtitle="Briefs y respuestas marcadas para revisar luego"
+      rail="from-emerald-400 to-emerald-600"
+      action={
+        <span className="inline-flex items-center justify-center rounded-full bg-ink-100 px-1.5 py-0.5 text-[10.5px] font-bold text-ink-700 tabular-nums">
+          {items.length}
+        </span>
+      }
+    >
+      <ul className="px-4 py-2">
+        {items.map((insight, i) => {
+          const d = new Date(insight.createdAt)
+          const day = String(d.getDate()).padStart(2, '0')
+          const month = d.toLocaleString('es-MX', { month: 'short' }).replace('.', '').toUpperCase()
+          const summaryFirst = aiSummaryLines(insight.summary)[0] ?? ''
+          return (
+            <li
+              key={insight.id}
+              className="flex items-start gap-3 py-2.5"
+              style={{ borderBottom: i === items.length - 1 ? 'none' : '1px dashed var(--border-soft)' }}
+            >
+              <span className="font-mono tabular-nums shrink-0 text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-500" style={{ width: 48 }}>
+                {day} {month}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-bold leading-snug text-ink-900">{insight.title}</p>
+                {summaryFirst && (
+                  <p className="mt-0.5 truncate text-[11px] text-ink-500">{summaryFirst}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                title="Destacar"
+                aria-label="Destacar insight"
+                className="shrink-0 bg-transparent text-[13px] text-ink-400 transition-colors hover:text-amber-500"
+              >
+                ★
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </AiRailCard>
   )
 }
@@ -5888,7 +6414,9 @@ function ShiftCloseScreen() {
   )
 }
 
-// ─── Vigilancia (owner-only theft prevention) ─────────────────────────────────
+// ─── Operación y personal (gerente + dueño risk monitoring) ─────────────────
+// Formerly "Vigilancia". Route stays /vigilancia for bookmark stability; nav
+// label, page title, and h2 use the new editorial copy.
 function VigilanciaScreen() {
   const [from, setFrom] = useState(() => {
     const d = new Date()
@@ -5929,11 +6457,15 @@ function VigilanciaScreen() {
       {/* Editorial header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-            Solo dueño · {from} → {to}
-          </p>
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-500">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'var(--brand-green-bright)', boxShadow: '0 0 6px rgba(34,197,94,0.55)' }}
+            />
+            Gestión · {from} → {to}
+          </div>
           <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">
-            Vigilancia
+            Operación y personal
           </h2>
           <p className="mt-1 max-w-xl text-[12.5px] text-ink-500">
             Patrones que ayudan a detectar irregularidades: cortesías, cancelaciones, ediciones rápidas,
@@ -6491,8 +7023,10 @@ function AuditScreen() {
 
 /**
  * Multi-bar chart strip — paired daily bars for ingresos (purple) + carros×$200
- * reference (emerald). No charting lib so we don't ship one for a single panel.
- * Last bar renders at full opacity to highlight the most recent day.
+ * reference line (emerald), rendered without a charting lib so we don't ship one
+ * just for this. Matches the design-kit "tl2-chart-strip" treatment: dot-legend,
+ * big sub headline, last bar at full opacity. Day labels are the DD slice of
+ * each date so the axis stays tight.
  */
 function ReportsChartStrip({ days, total }: { days: DailySummary[]; total?: number }) {
   if (!days || days.length === 0) {
@@ -6642,9 +7176,8 @@ function ReportsScreen() {
         }
       />
 
-      {/* Full-width chart strip — daily ingresos (purple) + carros×$200 ref
-          (emerald) for the selected range. Matches the design-kit chart-strip
-          pattern: dot legend, mono day labels, last day at full opacity. */}
+      {/* Full-width chart strip — daily ingresos (purple) + carros×$200 ref (emerald)
+          for the selected range. Matches the design-kit "tl2-chart-strip" pattern. */}
       <ReportsChartStrip days={range?.days ?? []} total={range?.ticketRevenue} />
 
       <Panel title="Rango">
@@ -6952,6 +7485,116 @@ function ReportsScreen() {
   )
 }
 
+// Stock thresholds — design uses per-product `min`; backend doesn't expose
+// one yet so we hardcode 5 (matches InventorySnapshotTool LOW_THRESHOLD on
+// the backend) with crit at 50% of min. Move to per-product when the
+// schema gains a min_stock column.
+const INV_MIN_STOCK = 5
+const INV_CRIT_STOCK = INV_MIN_STOCK * 0.5
+
+function inventoryTone(quantity: number): 'crit' | 'low' | 'ok' {
+  if (quantity <= INV_CRIT_STOCK) return 'crit'
+  if (quantity <= INV_MIN_STOCK) return 'low'
+  return 'ok'
+}
+
+function InventoryStockBar({ quantity }: { quantity: number }) {
+  const range = Math.max(quantity, INV_MIN_STOCK * 3, 1)
+  const pct = Math.max(0, Math.min(1, quantity / range))
+  const minPct = INV_MIN_STOCK / range
+  const tone = inventoryTone(quantity)
+  return (
+    <div>
+      <div className="tl2-stock">
+        <div
+          className={`tl2-stock__fill ${tone === 'crit' ? 'crit' : tone === 'low' ? 'low' : ''}`}
+          style={{ width: `${pct * 100}%` }}
+        >
+          {pct > 0.18 && <span>{quantity.toFixed(0)}</span>}
+        </div>
+        <div className="tl2-stock__min" style={{ left: `calc(${minPct * 100}% - 1px)` }} />
+      </div>
+      <div className="tl2-stock__legend">
+        <span>0</span>
+        <span>{Math.round(range)}</span>
+      </div>
+    </div>
+  )
+}
+
+function InventoryCardV2({
+  row, onEdit, onSale, onPurchase, onAdjustment,
+}: {
+  row: ProductSnapshot
+  onEdit: () => void
+  onSale: () => void
+  onPurchase: () => void
+  onAdjustment: () => void
+}) {
+  const tone = row.product.trackInventory ? inventoryTone(row.quantityOnHand) : 'ok'
+  const latest = row.recentMovements[0]
+  const lastDir = latest && (latest.movementType === 'PURCHASE' || (latest.quantity > 0 && latest.movementType === 'ADJUSTMENT')) ? 'in' : 'out'
+  return (
+    <div className={`tl2-inv-card ${tone === 'crit' ? 'crit' : tone === 'low' ? 'low' : ''}`}>
+      <div className="tl2-inv-card__head">
+        <div className="min-w-0 flex-1">
+          <div className="nm">{row.product.name}</div>
+          <div className="mt-0.5 flex items-center gap-2">
+            <span className="sku">{row.product.sku || '—'}</span>
+            {tone === 'crit' && <Pill tone="bad">Crítico</Pill>}
+            {tone === 'low' && <Pill tone="warn">Bajo</Pill>}
+          </div>
+        </div>
+        <div className="tl2-inv-card__price">
+          <span className="cur">$</span>
+          <span className="v">{row.product.currentUnitPrice.toFixed(0)}</span>
+        </div>
+      </div>
+      {row.product.trackInventory ? (
+        <InventoryStockBar quantity={row.quantityOnHand} />
+      ) : (
+        <p className="rounded-md bg-ink-50 px-2 py-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+          Sin seguimiento de stock
+        </p>
+      )}
+      <div className="tl2-inv-card__foot">
+        <div className="tl2-inv-card__last">
+          {latest ? (
+            <>
+              <span className={`arrow ${lastDir === 'out' ? 'out' : ''}`}>{lastDir === 'in' ? '↑' : '↓'}</span>
+              <span>{Math.abs(latest.quantity).toFixed(0)} · {movementLabel(latest.movementType)}</span>
+            </>
+          ) : (
+            <span>Sin movimientos</span>
+          )}
+        </div>
+        <div className="tl2-inv-card__actions">
+          <button type="button" className="tl2-inv-card__btn t-good" title="Compra (+)" onClick={onPurchase}>+</button>
+          <button type="button" className="tl2-inv-card__btn t-info" title="Venta (−)" onClick={onSale}>−</button>
+          <button type="button" className="tl2-inv-card__btn" title="Ajuste" onClick={onAdjustment}>⋯</button>
+          <button type="button" className="tl2-inv-card__btn" title="Editar producto" onClick={onEdit}>✎</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InventoryCategoryHeader({
+  name, sub, count, mono, gradient,
+}: { name: string; sub: string; count: number; mono: string; gradient: string }) {
+  return (
+    <div className="tl2-inv-cat">
+      <div className="tl2-inv-cat__mono" style={{ background: gradient }}>{mono}</div>
+      <div>
+        <div className="tl2-inv-cat__name">{name}</div>
+        <div className="tl2-inv-cat__sub">{sub}</div>
+      </div>
+      <div className="tl2-inv-cat__sep" />
+      <div className="tl2-inv-cat__count">{count} SKU</div>
+    </div>
+  )
+}
+
 function InventoryScreen() {
   const [asOf, setAsOf] = useState('')
   const [modal, setModal] = useState<'product' | 'sale' | 'purchase' | 'adjustment' | null>(null)
@@ -6972,17 +7615,30 @@ function InventoryScreen() {
 
   const rows = snapshot.data?.products ?? []
   const totalValue = rows.reduce((sum, row) => sum + row.quantityOnHand * row.product.currentUnitPrice, 0)
-  const lowCount = rows.filter((row) => row.product.trackInventory && row.quantityOnHand <= 5).length
-
+  const totalUnits = rows.reduce((sum, row) => sum + row.quantityOnHand, 0)
+  const trackedRows = rows.filter((row) => row.product.trackInventory)
+  const lowRows = trackedRows.filter((row) => row.quantityOnHand <= INV_MIN_STOCK)
+  const critRows = trackedRows.filter((row) => row.quantityOnHand <= INV_CRIT_STOCK)
   const totalProducts = products.data?.length ?? 0
+
+  const recentMovements = rows
+    .flatMap((row) =>
+      row.recentMovements.map((m) => ({ ...m, productName: m.productName || row.product.name }))
+    )
+    .sort((a, b) => b.movementDate.localeCompare(a.movementDate))
+    .slice(0, 15)
 
   return (
     <section className="space-y-5">
-      {/* ─── Editorial header ─────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Misceláneas · stock vivo</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
+            STOCK VIVO · {new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).toUpperCase()}
+          </p>
           <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Inventario</h2>
+          <p className="mt-1 max-w-2xl text-[12.5px] text-ink-500">
+            Misceláneas, snacks y aromas. La línea oscura en cada barra marca el mínimo recomendado ({INV_MIN_STOCK} unidades).
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="tl-btn tl-btn-primary" onClick={() => setModal('product')}>+ Producto</button>
@@ -6994,107 +7650,145 @@ function InventoryScreen() {
 
       {(products.error || snapshot.error) && <ErrorMessage message={(products.error || snapshot.error)!.message} />}
 
-      {/* ─── Hero stats ──────────────────────────────────────────── */}
-      <div className="tl-stagger grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {lowRows.length > 0 && (
+        <div className="tl2-inv-alert">
+          <div className="tl2-inv-alert__icon">!</div>
+          <div style={{ position: 'relative' }}>
+            <div className="tl2-inv-alert__title">
+              {lowRows.length} producto{lowRows.length === 1 ? '' : 's'} requiere{lowRows.length === 1 ? '' : 'n'} compra
+            </div>
+            <div className="tl2-inv-alert__sub">
+              {critRows.length > 0 ? `${critRows.length} en estado crítico · ` : ''}
+              Considera reabastecer antes del próximo turno.
+            </div>
+            <div className="tl2-inv-alert__items">
+              {lowRows.slice(0, 8).map((row) => (
+                <span key={row.product.id} className="tl2-inv-alert__chip">
+                  {row.product.name} <span className="v">· {row.quantityOnHand.toFixed(0)}/{INV_MIN_STOCK}</span>
+                </span>
+              ))}
+              {lowRows.length > 8 && (
+                <span className="tl2-inv-alert__chip">+{lowRows.length - 8} más</span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal('purchase')}
+            style={{ background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.30)', color: '#fff', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
+          >
+            Registrar compra →
+          </button>
+        </div>
+      )}
+
+      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-violet-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Productos activos</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{totalProducts}</p>
+          <p className="mt-1 text-[10.5px] text-ink-500">{totalUnits.toFixed(0)} unidades en piso</p>
         </div>
         <div className="tl-lift rounded-2xl border border-border-soft bg-gradient-to-br from-emerald-50/60 to-white px-4 py-3.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">Valor estimado</p>
           <p className="font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink-900 tabular-nums">{money(totalValue, 'MXN')}</p>
+          <p className="mt-1 text-[10.5px] text-ink-500">precio × stock</p>
         </div>
-        <div className={`rounded-2xl border px-4 py-3.5 ${lowCount > 0 ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-white' : 'border-border-soft bg-white'}`}>
-          <p className={`text-[10.5px] font-semibold uppercase tracking-[0.12em] ${lowCount > 0 ? 'text-rose-700' : 'text-ink-400'}`}>Stock bajo</p>
-          <p className={`font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums ${lowCount > 0 ? 'text-rose-700' : 'text-ink-900'}`}>{lowCount}</p>
+        <div className={`rounded-2xl border px-4 py-3.5 ${lowRows.length > 0 ? 'border-amber-200 bg-gradient-to-br from-amber-50/80 to-white' : 'border-border-soft bg-white'}`}>
+          <p className={`text-[10.5px] font-semibold uppercase tracking-[0.12em] ${lowRows.length > 0 ? 'text-amber-700' : 'text-ink-400'}`}>Stock bajo</p>
+          <p className={`font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums ${lowRows.length > 0 ? 'text-amber-700' : 'text-ink-900'}`}>{lowRows.length}</p>
+          <p className="mt-1 text-[10.5px] text-ink-500">{lowRows.length ? 'al o bajo mínimo' : 'todo en orden'}</p>
+        </div>
+        <div className={`rounded-2xl border px-4 py-3.5 ${critRows.length > 0 ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-white' : 'border-border-soft bg-white'}`}>
+          <p className={`text-[10.5px] font-semibold uppercase tracking-[0.12em] ${critRows.length > 0 ? 'text-rose-700' : 'text-ink-400'}`}>Crítico</p>
+          <p className={`font-display mt-1 text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums ${critRows.length > 0 ? 'text-rose-700' : 'text-ink-900'}`}>{critRows.length}</p>
+          <p className="mt-1 text-[10.5px] text-ink-500">{critRows.length ? 'requiere compra hoy' : 'sin urgencias'}</p>
         </div>
       </div>
 
-      {/* ─── Snapshot date control ────────────────────────────────── */}
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border-soft bg-white p-3">
-        <TextField label="Ver inventario hasta">
-          <input type="datetime-local" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
-        </TextField>
-        <p className="pb-2 text-[12px] text-ink-400">{asOf ? '' : 'Si lo dejas vacío, usa la hora actual.'}</p>
-      </div>
-
-      {/* ─── Category panels ──────────────────────────────────────── */}
-      {(['AROMA', 'SNACK', 'OTRO'] as ProductCategory[]).map((cat) => {
-        const catRows = rows.filter((row) => (row.product.category ?? 'OTRO') === cat)
-        if (catRows.length === 0) return null
-        const catMeta = cat === 'AROMA'
-          ? { label: 'Aromas', icon: '🌿', color: 'bg-gradient-to-b from-emerald-400 to-emerald-600', tint: 'bg-emerald-50/40' }
-          : cat === 'SNACK'
-          ? { label: 'Snacks', icon: '🍫', color: 'bg-gradient-to-b from-amber-400 to-amber-600', tint: 'bg-amber-50/40' }
-          : { label: 'Otros', icon: '📦', color: 'bg-gradient-to-b from-ink-500 to-ink-700', tint: 'bg-ink-50/40' }
-        const catValue = catRows.reduce((sum, r) => sum + r.quantityOnHand * r.product.currentUnitPrice, 0)
-        return (
-          <div key={cat} className="tl-panel overflow-hidden">
-            <div className={`flex items-center justify-between border-b border-border-soft px-5 py-3.5 ${catMeta.tint}`}>
-              <div className="flex items-center gap-3">
-                <span className={`flex h-7 w-7 items-center justify-center rounded-md text-[14px] text-white shadow-sm ${catMeta.color}`}>
-                  {catMeta.icon}
-                </span>
-                <div>
-                  <h3 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink-900">{catMeta.label}</h3>
-                  <p className="text-[10.5px] text-ink-500">{catRows.length} producto{catRows.length === 1 ? '' : 's'} · {money(catValue, 'MXN')}</p>
+      <div className="grid gap-4 xl:grid-cols-[1fr_320px] xl:items-start">
+        <div className="space-y-3.5">
+          {(['AROMA', 'SNACK', 'OTRO'] as ProductCategory[]).map((cat) => {
+            const catRows = rows.filter((row) => (row.product.category ?? 'OTRO') === cat)
+            if (catRows.length === 0) return null
+            const meta = cat === 'AROMA'
+              ? { name: 'Aromas', sub: 'Esencias para vehículo', mono: 'A', gradient: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }
+              : cat === 'SNACK'
+              ? { name: 'Snacks', sub: 'Misceláneos de mostrador', mono: 'S', gradient: 'linear-gradient(135deg, #fbbf24, #d97706)' }
+              : { name: 'Otros', sub: 'Equipamiento y consumibles', mono: 'O', gradient: 'linear-gradient(135deg, #34d399, #059669)' }
+            return (
+              <div key={cat}>
+                <InventoryCategoryHeader name={meta.name} sub={meta.sub} count={catRows.length} mono={meta.mono} gradient={meta.gradient} />
+                <div className="tl2-inv-grid">
+                  {catRows.map((row) => (
+                    <InventoryCardV2
+                      key={row.product.id}
+                      row={row}
+                      onEdit={() => {
+                        setEditingProduct(row.product)
+                        setModal('product')
+                      }}
+                      onSale={() => setModal('sale')}
+                      onPurchase={() => setModal('purchase')}
+                      onAdjustment={() => setModal('adjustment')}
+                    />
+                  ))}
                 </div>
               </div>
+            )
+          })}
+        </div>
+
+        <aside className="space-y-3.5 xl:sticky xl:top-4">
+          <div className="overflow-hidden rounded-2xl border border-border-soft bg-white shadow-xs">
+            <div className="border-b border-border-soft bg-ink-900 px-4 py-3 text-white">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white/60">Movimientos recientes</p>
+              <p className="mt-0.5 text-[13px] font-semibold">Entradas y salidas</p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="tl-tbl zebra">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>SKU</th>
-                    <th className="r">Stock</th>
-                    <th className="r">Precio</th>
-                    <th>Último movimiento</th>
-                    <th>Indicador</th>
-                    <th className="r">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {catRows.map((row) => {
-                    const latest = row.recentMovements[0]
-                    const lowStock = row.product.trackInventory && row.quantityOnHand <= 5
-                    return (
-                      <tr key={row.product.id}>
-                        <td className="font-semibold">{row.product.name}</td>
-                        <td className="font-mono text-[12px] text-ink-500">{row.product.sku || '-'}</td>
-                        <td className="r tabular-nums font-semibold">{row.quantityOnHand.toFixed(2)}</td>
-                        <td className="r tabular-nums">{money(row.product.currentUnitPrice, 'MXN')}</td>
-                        <td className="text-[12.5px] text-ink-500">
-                          {latest ? `${movementLabel(latest.movementType)} / ${latest.quantity}` : 'Sin movimientos'}
-                        </td>
-                        <td>
-                          <InventoryStatusPill lowStock={lowStock} tracked={row.product.trackInventory} />
-                        </td>
-                        <td className="r">
-                          <button
-                            type="button"
-                            title="Editar"
-                            onClick={() => {
-                              setEditingProduct(row.product)
-                              setModal('product')
-                            }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
-                          >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {recentMovements.length === 0 ? (
+              <p className="px-4 py-6 text-center text-[12px] text-ink-400">Sin movimientos todavía.</p>
+            ) : (
+              <div className="tl2-mov">
+                {recentMovements.map((m) => {
+                  const isIn = m.movementType === 'PURCHASE' || (m.movementType === 'ADJUSTMENT' && m.quantity > 0)
+                  const time = (() => {
+                    try {
+                      return new Date(m.movementDate).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
+                    } catch { return '--:--' }
+                  })()
+                  return (
+                    <div key={m.id} className="tl2-mov__row">
+                      <div className="tl2-mov__t">{time}</div>
+                      <div className="tl2-mov__body">
+                        <div className="nm">{m.productName}</div>
+                        <div className="sub">{movementLabel(m.movementType)}{m.employeeName ? ` · ${m.employeeName}` : ''}</div>
+                      </div>
+                      <div className={`tl2-mov__qty ${isIn ? 'in' : 'out'}`}>
+                        {isIn ? '+' : '−'}{Math.abs(m.quantity).toFixed(0)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        )
-      })}
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-amber-800">Ver inventario hasta</p>
+            <div className="mt-2">
+              <input
+                type="datetime-local"
+                value={asOf}
+                onChange={(event) => setAsOf(event.target.value)}
+                className="w-full"
+              />
+            </div>
+            <p className="mt-2 text-[10.5px] text-amber-700/80">
+              {asOf ? 'Mostrando snapshot histórico.' : 'Vacío = hora actual.'}
+            </p>
+          </div>
+        </aside>
+      </div>
+
       {!snapshot.isLoading && rows.length === 0 && (
         <div className="rounded-2xl border border-border-soft bg-white p-10 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-ink-50">
@@ -9308,6 +10002,331 @@ function formatLocalTime(isoString?: string | null): string {
   })
 }
 
+/**
+ * Reporte de personal — gerente+dueño analytics view of today's attendance.
+ * Pulls the same /api/v1/attendance data the operator AttendanceScreen writes
+ * and renders the design-kit timeline + roster cards + leaderboard + alerts.
+ */
+const STAFF_TARGET_HOUR = 7.5
+const STAFF_AXIS_START = 6
+const STAFF_AXIS_END = 20
+
+function staffToFractionalHours(iso?: string | null): number | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return d.getHours() + d.getMinutes() / 60
+}
+
+function staffFormatDuration(h: number): string {
+  const hh = Math.floor(h)
+  const mm = Math.round((h - hh) * 60)
+  return `${hh}h ${String(mm).padStart(2, '0')}m`
+}
+
+function staffTrackPct(h: number): number {
+  return ((h - STAFF_AXIS_START) / (STAFF_AXIS_END - STAFF_AXIS_START)) * 100
+}
+
+function staffHashTone(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) | 0
+  const palette = ['#7c3aed', '#059669', '#dc2626', '#d97706', '#1d4ed8', '#0891b2', '#be123c']
+  return palette[Math.abs(h) % palette.length]
+}
+
+function staffNameInitials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function StaffReportScreen() {
+  const [date, setDate] = useState(today)
+  const records = useQuery({
+    queryKey: ['attendance', date],
+    queryFn: () => api<AttendanceRecord[]>(`/api/v1/attendance?date=${date}`),
+  })
+
+  const rows = records.data ?? []
+  const now = new Date()
+  const nowFrac = now.toISOString().slice(0, 10) === date
+    ? now.getHours() + now.getMinutes() / 60
+    : STAFF_AXIS_END
+
+  const enriched = rows.map((r) => {
+    const inH = staffToFractionalHours(r.clockIn)
+    const outH = staffToFractionalHours(r.clockOut)
+    const isAbsent = r.absence
+    const isActive = !isAbsent && inH != null && outH == null
+    const isComplete = !isAbsent && inH != null && outH != null
+    const effectiveOut = outH ?? (isActive ? Math.min(nowFrac, STAFF_AXIS_END) : null)
+    const duration = inH != null && effectiveOut != null ? Math.max(0, effectiveOut - inH) : 0
+    const late = inH != null && inH - STAFF_TARGET_HOUR > 5 / 60
+    const lateMin = late ? Math.round((inH - STAFF_TARGET_HOUR) * 60) : 0
+    return { r, inH, outH, effectiveOut, isAbsent, isActive, isComplete, duration, late, lateMin }
+  })
+
+  const onShift = enriched.filter((e) => e.isActive).length
+  const completed = enriched.filter((e) => e.isComplete).length
+  const absent = enriched.filter((e) => e.isAbsent).length
+  const lateCount = enriched.filter((e) => e.late).length
+  const totalHours = enriched.reduce((s, e) => s + e.duration, 0)
+  const avgInH = (() => {
+    const ins = enriched.map((e) => e.inH).filter((h): h is number => h != null)
+    if (!ins.length) return null
+    return ins.reduce((a, b) => a + b, 0) / ins.length
+  })()
+  const avgInStr = avgInH == null
+    ? '—'
+    : `${String(Math.floor(avgInH)).padStart(2, '0')}:${String(Math.round((avgInH - Math.floor(avgInH)) * 60)).padStart(2, '0')}`
+
+  const ticks = ['06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20']
+  const sortedByDuration = [...enriched].sort((a, b) => b.duration - a.duration)
+  const alerts = enriched.filter((e) => e.isAbsent || e.late)
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-soft pb-4">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-500">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'var(--brand-green-bright)', boxShadow: '0 0 6px rgba(34,197,94,0.55)' }}
+            />
+            Personal · {date}
+          </div>
+          <h1 className="mt-1 font-display text-[26px] font-extrabold leading-[1.05] tracking-[-0.025em] text-ink-900">
+            Reporte de personal
+          </h1>
+          <p className="mt-1.5 max-w-xl text-[13.5px] text-ink-500">
+            Entradas, salidas y faltas del día. Compara entradas contra la hora objetivo de 07:30.
+          </p>
+        </div>
+        <div className="flex items-end gap-3">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Fecha</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="tl-input" style={{ width: 160 }} />
+          </label>
+          <NavLink to="/asistencia" className="tl-btn">Marcar entrada / salida →</NavLink>
+        </div>
+      </div>
+
+      <div className="tl-stagger grid grid-cols-2 gap-3 md:grid-cols-5">
+        <Metric tone="good" label="En turno" value={onShift} sub="con entrada activa" />
+        <Metric tone="info" label="Completos" value={completed} sub="entrada y salida" />
+        <Metric tone="bad" label="Faltas" value={absent} sub="sin marcar" />
+        <Metric tone="warn" label="Llegadas tarde" value={lateCount} sub="vs objetivo 07:30" />
+        <Metric label="Horas trabajadas" value={staffFormatDuration(totalHours)} sub={`prom. entrada ${avgInStr}`} />
+      </div>
+
+      <Panel title="Línea del día" subtitle="Cada barra es un turno. La línea morada marca la hora objetivo de entrada (07:30).">
+        {enriched.length === 0 ? (
+          <EmptyState
+            icon={<ICalendar size={20} />}
+            title="Sin registros para esta fecha"
+            description="Los operadores marcan entradas y salidas desde la pantalla Asistencia."
+            tone="info"
+          />
+        ) : (
+          <div>
+            <div className="grid items-center gap-2" style={{ gridTemplateColumns: '180px 1fr 100px' }}>
+              <div />
+              <div className="relative flex justify-between font-mono text-[10px] font-bold text-ink-400">
+                {ticks.slice(0, -1).map((t) => <span key={t}>{t}</span>)}
+              </div>
+              <div className="text-right font-mono text-[10px] font-bold text-ink-400">HORAS</div>
+            </div>
+            {enriched.map((e) => {
+              const tone = e.isActive ? 'bg-emerald-500 text-white' : e.isComplete ? 'bg-ink-700 text-white' : 'bg-bad-100 text-bad-700'
+              const left = e.inH != null ? staffTrackPct(e.inH) : 8
+              const right = e.effectiveOut != null ? staffTrackPct(e.effectiveOut) : (e.isAbsent ? 92 : staffTrackPct(e.inH ?? STAFF_AXIS_START) + 5)
+              const width = Math.max(right - left, 6)
+              return (
+                <div
+                  key={e.r.id}
+                  className="grid items-center gap-2 border-b border-dashed border-border-soft py-2 last:border-0"
+                  style={{ gridTemplateColumns: '180px 1fr 100px' }}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-[10.5px] font-bold text-white"
+                      style={{ background: staffHashTone(e.r.employeeName) }}
+                    >{staffNameInitials(e.r.employeeName)}</span>
+                    <span className="truncate text-[12.5px] font-semibold text-ink-900">{e.r.employeeName}</span>
+                  </div>
+                  <div className="relative h-7 rounded-md bg-ink-50">
+                    <div
+                      className="absolute bottom-0 top-0 w-px bg-violet-500/60"
+                      style={{ left: `calc(${staffTrackPct(STAFF_TARGET_HOUR)}% - 0.5px)` }}
+                    />
+                    {!e.isAbsent && e.inH != null && (
+                      <div
+                        className={`absolute bottom-0.5 top-0.5 flex items-center justify-between rounded-md px-2 text-[10.5px] font-bold ${tone}`}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      >
+                        <span>{e.r.clockIn ? formatLocalTime(e.r.clockIn) : '—'}</span>
+                        {e.isActive ? <span className="opacity-75">AHORA</span> : <span>{e.r.clockOut ? formatLocalTime(e.r.clockOut) : ''}</span>}
+                      </div>
+                    )}
+                    {e.isAbsent && (
+                      <div className="absolute inset-0.5 flex items-center justify-center rounded-md border border-dashed border-bad-300 bg-bad-50 text-[10.5px] font-bold uppercase tracking-[0.1em] text-bad-700">
+                        FALTA
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-[12.5px] font-bold tabular-nums text-ink-900">
+                      {e.isAbsent ? <span className="text-bad-700">—</span> : staffFormatDuration(e.duration)}
+                    </div>
+                    <div className="text-[10.5px]">
+                      {e.isAbsent
+                        ? <span className="text-bad-600">sin marcar</span>
+                        : e.late
+                          ? <span className="font-semibold text-amber-700">+{e.lateMin} min tarde</span>
+                          : <span className="text-emerald-700">a tiempo</span>}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Panel title="Roster del día" subtitle={`${enriched.length} personas · ${onShift} activas ahora`}>
+          {enriched.length === 0 ? (
+            <p className="text-[12.5px] text-ink-400">Sin actividad para esta fecha.</p>
+          ) : (
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {enriched.map((e) => {
+                const tone: 'good' | 'bad' | 'gray' = e.isActive ? 'good' : e.isAbsent ? 'bad' : 'gray'
+                return (
+                  <div
+                    key={e.r.id}
+                    className={`relative rounded-xl border bg-white p-3 ${
+                      e.isActive ? 'border-emerald-300/70 bg-gradient-to-b from-emerald-50/60 to-white'
+                      : e.isAbsent ? 'border-bad-200 bg-bad-50/30'
+                      : 'border-border-soft'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-[12px] font-bold text-white"
+                        style={{ background: staffHashTone(e.r.employeeName) }}
+                      >{staffNameInitials(e.r.employeeName)}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-ink-900">{e.r.employeeName}</p>
+                        <p className="truncate text-[10.5px] text-ink-500">Lavador</p>
+                      </div>
+                      <Pill tone={tone}>{e.isActive ? 'En turno' : e.isAbsent ? 'Falta' : 'Completo'}</Pill>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="rounded-md bg-ink-50/70 px-2.5 py-1.5">
+                        <p className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-ink-500">Entrada</p>
+                        <p className="font-mono text-[12.5px] font-bold tabular-nums text-ink-900">{e.r.clockIn ? formatLocalTime(e.r.clockIn) : '—'}</p>
+                      </div>
+                      <div className="rounded-md bg-ink-50/70 px-2.5 py-1.5">
+                        <p className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-ink-500">Salida</p>
+                        <p className="font-mono text-[12.5px] font-bold tabular-nums text-ink-900">
+                          {e.r.clockOut ? formatLocalTime(e.r.clockOut) : (e.isActive ? 'activo' : '—')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[10.5px] text-ink-500">
+                        Duración: <span className="font-mono font-bold tabular-nums text-ink-800">{e.isAbsent ? '—' : staffFormatDuration(e.duration)}</span>
+                      </span>
+                      {!e.isAbsent && (
+                        <span className={`text-[9.5px] font-bold uppercase tracking-[0.06em] ${e.late ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {e.late ? `+${e.lateMin}m tarde` : 'A TIEMPO'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Panel>
+
+        <div className="space-y-4">
+          <Panel title="Ranking · horas hoy" subtitle="Ordenado por horas trabajadas en el día seleccionado.">
+            {sortedByDuration.filter((e) => !e.isAbsent && e.duration > 0).length === 0 ? (
+              <p className="text-[12.5px] text-ink-400">Aún no hay tiempo trabajado.</p>
+            ) : (
+              <div className="space-y-2">
+                {sortedByDuration.filter((e) => !e.isAbsent && e.duration > 0).slice(0, 8).map((e, i) => {
+                  const maxH = sortedByDuration[0]?.duration || 1
+                  const pct = Math.round((e.duration / maxH) * 100)
+                  return (
+                    <div key={e.r.id} className="grid items-center gap-2" style={{ gridTemplateColumns: '20px 28px 1fr 60px' }}>
+                      <span className="text-center font-display text-[13px] font-bold text-ink-400">{i + 1}</span>
+                      <span
+                        className="flex h-7 w-7 items-center justify-center rounded-md font-display text-[10.5px] font-bold text-white"
+                        style={{ background: staffHashTone(e.r.employeeName) }}
+                      >{staffNameInitials(e.r.employeeName)}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-baseline justify-between">
+                          <span className="truncate text-[12px] font-semibold text-ink-900">{e.r.employeeName}</span>
+                          <span className="font-mono text-[10.5px] font-bold text-ink-500">{pct}%</span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-100">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${pct}%`, background: pct >= 90 ? 'var(--good-500)' : pct >= 60 ? 'var(--warn-500)' : 'var(--bad-500)' }}
+                          />
+                        </div>
+                      </div>
+                      <span className="text-right font-mono text-[12px] font-bold tabular-nums text-ink-900">{staffFormatDuration(e.duration)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Por revisar" subtitle="Eventos para confirmar antes del corte.">
+            {alerts.length === 0 ? (
+              <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2.5 text-[12.5px] text-emerald-800">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12l5 5L20 7" />
+                  </svg>
+                </span>
+                Todo en orden hoy.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {alerts.map((e) => (
+                  <div
+                    key={e.r.id}
+                    className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${
+                      e.isAbsent ? 'border-bad-100 bg-bad-50' : 'border-warn-100 bg-warn-50'
+                    }`}
+                  >
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${
+                        e.isAbsent ? 'bg-bad-500' : 'bg-warn-500'
+                      }`}
+                    >{e.isAbsent ? '!' : '?'}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12.5px] font-bold text-ink-900">
+                        {e.r.employeeName} · {e.isAbsent ? 'falta sin justificar' : `entrada ${formatLocalTime(e.r.clockIn)}`}
+                      </p>
+                      <p className="text-[10.5px] text-ink-500">
+                        {e.isAbsent ? 'Considerar contacto con el lavador.' : `${e.lateMin} min tarde respecto al objetivo 07:30.`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function AttendanceScreen() {
   const queryClient = useQueryClient()
   const [date, setDate] = useState(today)
@@ -9333,11 +10352,6 @@ function AttendanceScreen() {
   const attendedIds = new Set((records.data ?? []).map((r) => r.employeeId))
   const activeEmployees = (employees.data ?? []).filter((e) => e.active)
   const notRecorded = activeEmployees.filter((e) => !attendedIds.has(e.id))
-  const recList = records.data ?? []
-  const onShiftCount = recList.filter((r) => !r.absence && !r.clockOut).length
-  const completedCount = recList.filter((r) => !r.absence && r.clockOut).length
-  const absentCount = recList.filter((r) => r.absence).length
-
   const clockIn = useMutation({
     mutationFn: (employeeId: number) =>
       api<AttendanceRecord>('/api/v1/attendance', {
@@ -9391,13 +10405,31 @@ function AttendanceScreen() {
     clockOut.mutate({ id: clockOutId, clockOutIso: d.toISOString() })
   }
 
+  const { hasRole } = useAuth()
+
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Personal · {date}</p>
-          <h2 className="font-display mt-1 text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900">Asistencia</h2>
-          <p className="mt-1 text-[12.5px] text-ink-500">Entradas, salidas y faltas del personal.</p>
+    <section className="space-y-5">
+      {/* v2 PageHeader — eyebrow with pulse dot + display title + subtitle */}
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-soft pb-4">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-500">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'var(--brand-green-bright)', boxShadow: '0 0 6px rgba(34,197,94,0.55)' }}
+            />
+            Personal · {date}
+          </div>
+          <h1 className="mt-1 font-display text-[26px] font-extrabold leading-[1.05] tracking-[-0.025em] text-ink-900">
+            Asistencia
+          </h1>
+          <p className="mt-1.5 text-[13.5px] text-ink-500">
+            Marca entradas, salidas y faltas. Los reportes y rankings viven en
+            {' '}
+            {hasRole('GERENTE')
+              ? <NavLink to="/reporte-personal" className="font-semibold text-violet-600 no-underline hover:text-violet-700">Reporte de personal →</NavLink>
+              : <span className="font-medium text-ink-700">Reporte de personal</span>}
+            .
+          </p>
         </div>
         <label className="block">
           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-400">Fecha</span>
@@ -9406,13 +10438,6 @@ function AttendanceScreen() {
       </div>
 
       {records.error && <ErrorMessage message={records.error.message} />}
-
-      <div className="tl-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatStrip tone="good" label="En turno" value={String(onShiftCount)} sub="con entrada sin salida" />
-        <StatStrip tone="info" label="Completos" value={String(completedCount)} sub="entrada y salida hoy" />
-        <StatStrip tone="bad" label="Faltas" value={String(absentCount)} sub="falta registrada" pulse={absentCount > 0} />
-        <StatStrip tone="warn" label="Sin registrar" value={String(notRecorded.length)} sub="activos sin marcar" />
-      </div>
 
       <Panel title="Registros del día">
         <div className="overflow-hidden rounded-xl border border-border-soft">
