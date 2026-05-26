@@ -11,7 +11,7 @@ test('DUENO can navigate to owner screens', async ({ page }) => {
   await loginAsDueno(page)
 
   await page.getByTestId('nav-ai').click()
-  await expect(page.getByText('AI Command Center')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Análisis IA' })).toBeVisible({ timeout: 8_000 })
 
   await page.getByTestId('nav-reportes').click()
   await expect(page.getByRole('heading', { name: 'Reportes' })).toBeVisible({ timeout: 8_000 })
