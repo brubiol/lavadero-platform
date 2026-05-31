@@ -28,6 +28,11 @@ lavadero:
       username: ${LAVADERO_BOOTSTRAP_USERNAME:dueno}
       password: ${LAVADERO_BOOTSTRAP_PASSWORD:cambia-esto-123}
       full-name: ${LAVADERO_BOOTSTRAP_FULL_NAME:Dueno Lavadero}
+    bootstrap-admin:
+      enabled: ${LAVADERO_ADMIN_ENABLED:true}
+      username: ${LAVADERO_ADMIN_USERNAME:brandon}
+      password: ${LAVADERO_ADMIN_PASSWORD:cambia-esto-123}
+      full-name: ${LAVADERO_ADMIN_FULL_NAME:Brandon Rubio}
   ai:
     enabled: ${LAVADERO_AI_ENABLED:true}
     provider: ${LAVADERO_AI_PROVIDER:deterministic-local}

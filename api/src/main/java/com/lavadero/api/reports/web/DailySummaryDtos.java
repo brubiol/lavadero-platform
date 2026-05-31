@@ -12,27 +12,33 @@ public final class DailySummaryDtos {
 
     public record DailySummaryResponse(LocalDate date, long carsWashed, BigDecimal ticketRevenue,
             BigDecimal cashRevenue, BigDecimal cardRevenue, BigDecimal transferRevenue,
-            BigDecimal inventorySalesRevenue, BigDecimal expensesTotal, BigDecimal result,
-            long courtesyCount, long voidedCount, List<TicketResponse> recentTickets, BigDecimal cashVariance) {
+            BigDecimal inventorySalesRevenue, BigDecimal prepaidSalesRevenue, BigDecimal inventoryPurchaseCost,
+            BigDecimal expensesTotal, BigDecimal withdrawalsTotal, BigDecimal advancesTotal,
+            BigDecimal result, long courtesyCount, long voidedCount, List<TicketResponse> recentTickets,
+            BigDecimal cashVariance) {
         public static DailySummaryResponse from(LocalDate date, long carsWashed, BigDecimal ticketRevenue,
                 BigDecimal cashRevenue, BigDecimal cardRevenue, BigDecimal transferRevenue,
-                BigDecimal inventorySalesRevenue, BigDecimal expensesTotal, BigDecimal result,
-                long courtesyCount, long voidedCount, List<Ticket> recentTickets, BigDecimal cashVariance) {
+                BigDecimal inventorySalesRevenue, BigDecimal prepaidSalesRevenue, BigDecimal inventoryPurchaseCost,
+                BigDecimal expensesTotal, BigDecimal withdrawalsTotal, BigDecimal advancesTotal,
+                BigDecimal result, long courtesyCount, long voidedCount, List<Ticket> recentTickets,
+                BigDecimal cashVariance) {
             return new DailySummaryResponse(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue, transferRevenue,
-                    inventorySalesRevenue, expensesTotal, result,
-                    courtesyCount, voidedCount, recentTickets.stream().map(TicketResponse::from).toList(),
-                    cashVariance);
+                    inventorySalesRevenue, prepaidSalesRevenue, inventoryPurchaseCost, expensesTotal, withdrawalsTotal,
+                    advancesTotal, result, courtesyCount, voidedCount,
+                    recentTickets.stream().map(TicketResponse::from).toList(), cashVariance);
         }
     }
 
     public record DailySummaryRangeResponse(LocalDate from, LocalDate to, long carsWashed,
-            BigDecimal ticketRevenue, BigDecimal expensesTotal, BigDecimal withdrawalsTotal,
+            BigDecimal ticketRevenue, BigDecimal inventorySalesRevenue, BigDecimal prepaidSalesRevenue,
+            BigDecimal inventoryPurchaseCost, BigDecimal expensesTotal, BigDecimal withdrawalsTotal,
             BigDecimal advancesTotal, BigDecimal result, long courtesyCount, long voidedCount,
             BigDecimal cashVariance, List<DailySummaryResponse> days) {
     }
 
     public record MonthlySummaryResponse(int year, int month, LocalDate from, LocalDate to, long carsWashed,
-            BigDecimal ticketRevenue, BigDecimal expensesTotal, BigDecimal withdrawalsTotal,
+            BigDecimal ticketRevenue, BigDecimal inventorySalesRevenue, BigDecimal prepaidSalesRevenue,
+            BigDecimal inventoryPurchaseCost, BigDecimal expensesTotal, BigDecimal withdrawalsTotal,
             BigDecimal advancesTotal, BigDecimal result, long courtesyCount, long voidedCount,
             BigDecimal cashVariance, List<DailySummaryResponse> days) {
     }

@@ -22,6 +22,13 @@ public final class ExpenseDtos {
             @Size(max = 500) String description) {
     }
 
+    public record UpdateExpenseRequest(
+            LocalDate expenseDate,
+            ExpenseCategory category,
+            @DecimalMin(value = "0.01") BigDecimal amount,
+            @Size(max = 500) String description) {
+    }
+
     public record ExpenseResponse(Long id, Long businessDayId, Long shiftId, LocalDate expenseDate,
             ExpenseCategory category, BigDecimal amount, String description, Instant createdAt, Instant updatedAt) {
         public static ExpenseResponse from(Expense expense) {

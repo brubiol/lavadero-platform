@@ -520,7 +520,7 @@ class RbacSecurityIntegrationTest extends AbstractIntegrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Reports — DUENO only
+    // Reports — daily-summary OPERADOR+, historical GERENTE+, everything else DUENO
     // -------------------------------------------------------------------------
 
     @Nested
@@ -534,16 +534,30 @@ class RbacSecurityIntegrationTest extends AbstractIntegrationTest {
         }
 
         @Test
-        void should_return_403_when_gerente_gets_daily_summary() throws Exception {
+        void should_allow_operador_to_get_daily_summary() throws Exception {
             mvc.perform(get("/api/v1/reports/daily-summary?date=2025-12-01")
+                            .header("Authorization", operadorToken))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void should_allow_gerente_to_get_historical() throws Exception {
+            mvc.perform(get("/api/v1/reports/historical?from=2025-12-01&to=2025-12-01")
                             .header("Authorization", gerenteToken))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void should_return_403_when_operador_gets_historical() throws Exception {
+            mvc.perform(get("/api/v1/reports/historical?from=2025-12-01&to=2025-12-01")
+                            .header("Authorization", operadorToken))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        void should_return_403_when_operador_gets_daily_summary() throws Exception {
-            mvc.perform(get("/api/v1/reports/daily-summary?date=2025-12-01")
-                            .header("Authorization", operadorToken))
+        void should_return_403_when_gerente_gets_employee_performance() throws Exception {
+            mvc.perform(get("/api/v1/reports/employee-performance?from=2025-12-01&to=2025-12-01")
+                            .header("Authorization", gerenteToken))
                     .andExpect(status().isForbidden());
         }
     }

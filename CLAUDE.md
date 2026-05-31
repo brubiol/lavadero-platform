@@ -120,9 +120,20 @@ SELECT * FROM flyway_schema_history ORDER BY installed_rank;
 # Check API
 curl http://localhost:8080/actuator/health
 open http://localhost:8080/swagger-ui.html
+
+# Seed today's activity on local (idempotent; uses real 6-digit nota sequence)
+./scripts/seed-local-today.sh
+
+# Run Playwright E2E against an ISOLATED stack (postgres-e2e:5433 + api-e2e:8090)
+# so test residue never lands in the dev DB. See docker-compose.test.yml.
+./scripts/e2e.sh                  # one-shot run
+./scripts/e2e.sh -- --grep @smoke # forward args to playwright
+./scripts/e2e.sh --down           # tear down the test stack after run
 ```
 
 Always run `./mvnw verify` before calling a task done. Fix failing tests — never skip or disable them.
+
+**Never run `npm run test:e2e` directly against the dev stack.** The Playwright suite generates prefixed catalog rows (`E2E_PAY_*`, `DISC_*`, …) and tickets that pollute the dev DB. Always use `./scripts/e2e.sh` which targets the isolated test stack on alternate ports.
 
 ---
 

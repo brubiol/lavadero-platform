@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   IDashboard, ITicketNew, ITickets, IMoney, ICut, IPayroll, IInventory, ICatalog,
-  IReports, IAi, IAudit, IShield, ICalendar, ISearch, ILogout, IPlus,
+  IReports, IAi, IAudit, IShield, ICalendar, ISearch, ILogout, IPlus, ILock, IReceipt, IClients,
 } from './icons'
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@ import {
    quick action, live stats strip, gradient sidebar.
    ───────────────────────────────────────────────────────────────────── */
 
-export type NavRole = 'OPERADOR' | 'GERENTE' | 'DUENO'
+export type NavRole = 'OPERADOR' | 'GERENTE' | 'DUENO' | 'ADMIN'
 
 type NavItem = {
   id: string
@@ -23,34 +23,41 @@ type NavItem = {
 
 const NAV_OPS: NavItem[] = [
   { id: 'dashboard', to: '/',              label: 'Dashboard',     icon: <IDashboard />, roles: ['OPERADOR','GERENTE','DUENO'] },
+  { id: 'new',       to: '/tickets/nuevo', label: 'Nuevo ticket',  icon: <IPlus />,      roles: ['OPERADOR','GERENTE','DUENO'] },
   { id: 'tickets',   to: '/tickets',       label: 'Tickets',       icon: <ITickets />,   roles: ['OPERADOR','GERENTE','DUENO'] },
-  { id: 'gastos',    to: '/gastos',        label: 'Gastos',        icon: <IMoney />,     roles: ['OPERADOR','GERENTE','DUENO'] },
-  { id: 'cierre',    to: '/cierre-dia',    label: 'Cierre del día',icon: <ICut />,       roles: ['OPERADOR','GERENTE','DUENO'] },
+  { id: 'clientes',  to: '/clientes',      label: 'Clientes',      icon: <IClients />,   roles: ['OPERADOR','GERENTE','DUENO'] },
+  { id: 'gastos',    to: '/gastos',        label: 'Gastos',        icon: <IReceipt />,   roles: ['OPERADOR','GERENTE','DUENO'] },
+  { id: 'cierre',    to: '/cierre-dia',    label: 'Cierre del día',icon: <ILock />,      roles: ['OPERADOR','GERENTE','DUENO'] },
   { id: 'corte',     to: '/corte',         label: 'Corte',         icon: <ICut />,       roles: ['OPERADOR','GERENTE','DUENO'] },
-  { id: 'paquetes',  to: '/paquetes',      label: 'Paquetes',      icon: <IMoney />,     roles: ['OPERADOR','GERENTE','DUENO'] },
 ]
 
 const NAV_MGMT: NavItem[] = [
-  { id: 'nomina',          to: '/nomina',           label: 'Nómina',              icon: <IPayroll />,   roles: ['GERENTE','DUENO'] },
-  { id: 'inventario',      to: '/inventario',       label: 'Inventario',          icon: <IInventory />, roles: ['GERENTE','DUENO'] },
-  { id: 'catalogos',       to: '/catalogos',        label: 'Catálogos',           icon: <ICatalog />,   roles: ['GERENTE','DUENO'] },
-  { id: 'asistencia',      to: '/asistencia',       label: 'Asistencia',          icon: <ICalendar />,  roles: ['OPERADOR','GERENTE','DUENO'] },
-  { id: 'reporte-personal',to: '/reporte-personal', label: 'Reporte de personal', icon: <IReports />,   roles: ['GERENTE','DUENO'] },
-  { id: 'vigilancia',      to: '/vigilancia',       label: 'Operación y personal',icon: <IShield />,    roles: ['GERENTE','DUENO'] },
+  { id: 'nomina',     to: '/nomina',     label: 'Nómina',     icon: <IPayroll />,   roles: ['GERENTE','DUENO'] },
+  { id: 'inventario', to: '/inventario', label: 'Inventario', icon: <IInventory />, roles: ['GERENTE','DUENO'] },
+  { id: 'catalogos',  to: '/catalogos',  label: 'Catálogos',  icon: <ICatalog />,   roles: ['GERENTE','DUENO'] },
+  { id: 'lealtad',    to: '/lealtad',    label: 'Lealtad',    icon: <IClients />,   roles: ['GERENTE','DUENO'] },
+  { id: 'asistencia', to: '/asistencia', label: 'Asistencia', icon: <ICalendar />,  roles: ['OPERADOR','GERENTE','DUENO'] },
+  { id: 'reportes',   to: '/reportes',   label: 'Reportes',   icon: <IReports />,   roles: ['GERENTE','DUENO'] },
 ]
 
 const NAV_OWNER: NavItem[] = [
-  { id: 'reportes',   to: '/reportes',   label: 'Reportes',            icon: <IReports />, roles: ['DUENO'] },
-  { id: 'ai',         to: '/ai',         label: 'AI',                  icon: <IAi />,      roles: ['DUENO'] },
-  { id: 'auditoria',  to: '/auditoria',  label: 'Auditoría',           icon: <IAudit />,   roles: ['DUENO'] },
+  { id: 'ai',         to: '/ai',         label: 'AI',         icon: <IAi />,    roles: ['DUENO'] },
+  { id: 'vigilancia', to: '/vigilancia', label: 'Vigilancia', icon: <IShield />,roles: ['DUENO'] },
 ]
 
+const ROLE_RANK: Record<NavRole, number> = { OPERADOR: 1, GERENTE: 2, DUENO: 3, ADMIN: 4 }
+
+// Hierarchy-aware: a higher role sees everything its juniors can.
 function inRole(role: NavRole, allowed: NavRole[]) {
-  return allowed.includes(role)
+  const min = Math.min(...allowed.map(r => ROLE_RANK[r]))
+  return ROLE_RANK[role] >= min
 }
 
 function roleDisplay(role: NavRole) {
-  return role === 'DUENO' ? 'Dueño' : role === 'GERENTE' ? 'Gerente' : 'Operador'
+  return role === 'ADMIN' ? 'Admin'
+    : role === 'DUENO' ? 'Dueño'
+    : role === 'GERENTE' ? 'Gerente'
+    : 'Operador'
 }
 
 function initialsOf(name: string) {

@@ -15,10 +15,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "expenses")
+@SQLRestriction("deleted_at IS NULL")
 public class Expense extends AuditedEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,17 +48,31 @@ public class Expense extends AuditedEntity {
     @Column(length = 500)
     private String description;
 
+    // Set only on nomina expenses auto-generated from a payroll period, so they
+    // can be replaced on recompute. Null for manually-entered gastos.
+    @Column(name = "payroll_period_id")
+    private Long payrollPeriodId;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     protected Expense() {
     }
 
     public Expense(BusinessDay businessDay, Shift shift, LocalDate expenseDate, ExpenseCategory category,
             BigDecimal amount, String description) {
+        this(businessDay, shift, expenseDate, category, amount, description, null);
+    }
+
+    public Expense(BusinessDay businessDay, Shift shift, LocalDate expenseDate, ExpenseCategory category,
+            BigDecimal amount, String description, Long payrollPeriodId) {
         this.businessDay = businessDay;
         this.shift = shift;
         this.expenseDate = expenseDate;
         this.category = category;
         this.amount = amount;
         this.description = description;
+        this.payrollPeriodId = payrollPeriodId;
     }
 
     public Long getId() {
@@ -84,5 +101,37 @@ public class Expense extends AuditedEntity {
 
     public String getDescription() {
         return description;
+    }
+
+    public Long getPayrollPeriodId() {
+        return payrollPeriodId;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void update(LocalDate expenseDate, ExpenseCategory category, BigDecimal amount, String description) {
+        if (expenseDate != null) {
+            this.expenseDate = expenseDate;
+        }
+        if (category != null) {
+            this.category = category;
+        }
+        if (amount != null) {
+            this.amount = amount;
+        }
+        // Description is nullable — caller passes empty string to clear it,
+        // or null to leave it alone. Empty string normalizes to null.
+        if (description != null) {
+            String trimmed = description.trim();
+            this.description = trimmed.isEmpty() ? null : trimmed;
+        }
+    }
+
+    public void softDelete() {
+        if (this.deletedAt == null) {
+            this.deletedAt = Instant.now();
+        }
     }
 }

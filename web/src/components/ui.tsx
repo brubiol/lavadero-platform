@@ -353,21 +353,34 @@ export function PageHead({
   title,
   subtitle,
   actions,
+  eyebrow,
+  eyebrowDot = true,
   tone = 'default',
 }: {
   title: ReactNode
   subtitle?: ReactNode
   actions?: ReactNode
+  eyebrow?: ReactNode
+  eyebrowDot?: boolean
   tone?: PageHeadTone
 }) {
-  const toneCls = tone !== 'default' ? tone : ''
+  // v2: kit-aligned `tl2-page-header` chrome — eyebrow + display title +
+  // subtitle on the left, optional actions on the right. `tone` is kept on the
+  // outer wrapper for legacy class hooks but the v2 visuals win.
+  const toneCls = tone !== 'default' ? `tl-page-head ${tone}` : ''
   return (
-    <div className={`tl-page-head ${toneCls}`.trim()}>
-      <div className="tl-page-title">
-        <h1>{title}</h1>
-        {subtitle && <p>{subtitle}</p>}
+    <div className={`tl2-page-header ${toneCls}`.trim()}>
+      <div className="tl2-page-header__left">
+        {eyebrow && (
+          <div className="tl2-page-header__eyebrow">
+            {eyebrowDot && <span className="dot" />}
+            {eyebrow}
+          </div>
+        )}
+        <h1 className="tl2-page-header__title">{title}</h1>
+        {subtitle && <p className="tl2-page-header__subtitle">{subtitle}</p>}
       </div>
-      {actions && <div className="tl-page-head-actions">{actions}</div>}
+      {actions && <div className="tl2-page-header__right">{actions}</div>}
     </div>
   )
 }

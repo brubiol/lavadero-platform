@@ -33,6 +33,8 @@ services:
       LAVADERO_AI_API_KEY: ${LAVADERO_AI_API_KEY:-}
       LAVADERO_AI_MODEL: ${LAVADERO_AI_MODEL:-local}
       LAVADERO_AI_TIMEOUT_SECONDS: ${LAVADERO_AI_TIMEOUT_SECONDS:-20}
+      LAVADERO_FORECAST_PROVIDER: ${LAVADERO_FORECAST_PROVIDER:-python}
+      LAVADERO_FORECAST_PYTHON_URL: ${LAVADERO_FORECAST_PYTHON_URL:-http://lavadero-forecast:8081}
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,16 +48,15 @@ services:
     depends_on:
       - api
 
-  # Optional Python forecast sidecar. The API does NOT depends_on this service
-  # because the Java path is the default and the Python path falls back to Java
-  # on any client error. Bring it up explicitly with `docker compose up forecast`
-  # and set LAVADERO_FORECAST_PROVIDER=python on the api to route to it.
+  # Python forecast sidecar. The API does NOT depends_on this service because the
+  # Java path is the safe fallback on any client error; the local default points
+  # to this container so `/ai` forecast cards exercise the LightGBM model.
   forecast:
     build:
       context: ./forecast-python
     container_name: lavadero-forecast
-    expose:
-      - "8081"
+    ports:
+      - "8081:8081"
 
 volumes:
   postgres_data:

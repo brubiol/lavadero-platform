@@ -35,6 +35,21 @@ public class DebtLedgerService {
                 advance.getAmount(), advance, null, advance.getReason()));
     }
 
+    /**
+     * Drops the ADVANCE ledger entry for a given advance and re-records it with
+     * the current amount/date — used when the advance is edited or soft-deleted
+     * so the running debt balance stays in sync. Pass a deleted advance to drop
+     * the entry without recording a replacement.
+     */
+    @Transactional
+    public void replayAdvance(EmployeeAdvance advance) {
+        debtLedger.deleteByEmployeeAdvanceIdAndType(advance.getId(), DebtLedgerType.ADVANCE);
+        if (advance.getDeletedAt() == null) {
+            debtLedger.save(new DebtLedgerEntry(advance.getEmployee(), advance.getAdvanceDate(), DebtLedgerType.ADVANCE,
+                    advance.getAmount(), advance, null, advance.getReason()));
+        }
+    }
+
     @Transactional
     public void recordPayrollDeduction(Employee employee, PayrollPeriod period, BigDecimal amount) {
         if (amount.signum() <= 0) {

@@ -4,6 +4,8 @@ import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.common.domain.AuditedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -38,17 +40,23 @@ public class AttendanceRecord extends AuditedEntity {
     @Column(nullable = false)
     private boolean absence = false;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AttendanceStatus status = AttendanceStatus.PRESENT;
+
     @Column(length = 500)
     private String note;
 
     protected AttendanceRecord() {
     }
 
-    public AttendanceRecord(Employee employee, LocalDate workDate, Instant clockIn, boolean absence, String note) {
+    public AttendanceRecord(Employee employee, LocalDate workDate, Instant clockIn,
+                            AttendanceStatus status, String note) {
         this.employee = employee;
         this.workDate = workDate;
         this.clockIn = clockIn;
-        this.absence = absence;
+        this.status = status == null ? AttendanceStatus.PRESENT : status;
+        this.absence = this.status.countsAsAbsence();
         this.note = note;
     }
 
@@ -58,16 +66,20 @@ public class AttendanceRecord extends AuditedEntity {
     public Instant getClockIn() { return clockIn; }
     public Instant getClockOut() { return clockOut; }
     public boolean isAbsence() { return absence; }
+    public AttendanceStatus getStatus() { return status; }
     public String getNote() { return note; }
 
     public void clockOut(Instant clockOut) {
         this.clockOut = clockOut;
     }
 
-    public void update(Instant clockIn, Instant clockOut, boolean absence, String note) {
+    public void update(Instant clockIn, Instant clockOut, AttendanceStatus status, String note) {
         if (clockIn != null) this.clockIn = clockIn;
         if (clockOut != null) this.clockOut = clockOut;
-        this.absence = absence;
+        if (status != null) {
+            this.status = status;
+            this.absence = status.countsAsAbsence();
+        }
         if (note != null) this.note = note.isBlank() ? null : note.trim();
     }
 }

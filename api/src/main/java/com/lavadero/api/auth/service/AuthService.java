@@ -121,4 +121,17 @@ public class AuthService {
             }
         };
     }
+
+    @Bean
+    ApplicationRunner bootstrapAdmin(AppUserRepository repository, PasswordEncoder encoder,
+            @Value("${lavadero.auth.bootstrap-admin.enabled:true}") boolean enabled,
+            @Value("${lavadero.auth.bootstrap-admin.username:brandon}") String username,
+            @Value("${lavadero.auth.bootstrap-admin.password:cambia-esto-123}") String password,
+            @Value("${lavadero.auth.bootstrap-admin.full-name:Brandon Rubio}") String fullName) {
+        return args -> {
+            if (enabled && !repository.existsByUsernameIgnoreCase(username)) {
+                repository.save(new AppUser(username, encoder.encode(password), fullName, AuthRole.ADMIN));
+            }
+        };
+    }
 }

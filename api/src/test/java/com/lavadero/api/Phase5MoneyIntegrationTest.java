@@ -117,19 +117,25 @@ class Phase5MoneyIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_subtract_expense_withdrawal_and_advance_from_daily_dashboard_result() throws Exception {
+    void should_subtract_gastos_from_result_and_track_retiros_and_prestamos_separately() throws Exception {
         Fixture fixture = fixture("P5C", LocalDate.of(2026, 9, 5));
         createTicket(fixture);
         createExpense(fixture, "MATERIAL", "25.00");
         createWithdrawal(fixture, "30.00");
         createAdvance(fixture, "15.00");
 
+        // Resultado is true operating profit: revenue − gastos (incl. nomina) − COGS.
+        // Retiros are cash moves and prestamos are loans, so they are reported
+        // separately but do NOT reduce the result.
         mvc.perform(get("/api/v1/reports/daily-summary?date=2026-09-05"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.carsWashed").value(1))
                 .andExpect(jsonPath("$.ticketRevenue").value(200.00))
-                .andExpect(jsonPath("$.expensesTotal").value(70.00))
-                .andExpect(jsonPath("$.result").value(130.00));
+                .andExpect(jsonPath("$.expensesTotal").value(25.00))
+                .andExpect(jsonPath("$.withdrawalsTotal").value(30.00))
+                .andExpect(jsonPath("$.advancesTotal").value(15.00))
+                .andExpect(jsonPath("$.inventoryPurchaseCost").value(0))
+                .andExpect(jsonPath("$.result").value(175.00));
     }
 
     private Fixture fixture(String prefix, LocalDate businessDate) throws Exception {

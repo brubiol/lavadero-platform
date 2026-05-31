@@ -7,6 +7,7 @@ import com.lavadero.api.money.domain.EmployeeAdvance;
 import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
 import com.lavadero.api.money.service.BusinessContextResolver.Context;
 import com.lavadero.api.money.web.EmployeeAdvanceDtos.CreateEmployeeAdvanceRequest;
+import com.lavadero.api.money.web.EmployeeAdvanceDtos.UpdateEmployeeAdvanceRequest;
 import com.lavadero.api.payroll.service.DebtLedgerService;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
@@ -76,6 +77,39 @@ public class EmployeeAdvanceService {
             return advances.findByAdvanceDateBetweenOrderByAdvanceDateDescCreatedAtDesc(from, to);
         }
         return advances.findByEmployeeIdAndAdvanceDateBetweenOrderByAdvanceDateDescCreatedAtDesc(employeeId, from, to);
+    }
+
+    @Transactional
+    public EmployeeAdvance update(Long id, UpdateEmployeeAdvanceRequest request) {
+        EmployeeAdvance advance = advances.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Advance not found"));
+        Employee employee = request.employeeId() == null
+                ? null
+                : employees.findById(request.employeeId())
+                        .orElseThrow(() -> new EntityNotFoundException("Employee not found"));
+        if (employee != null && !employee.isActive()) {
+            throw new IllegalArgumentException("Employee must be active");
+        }
+        advance.update(employee, request.advanceDate(), request.amount(), request.reason());
+        // Edit can change employee, amount, or date — easier to drop and re-insert
+        // the debt ledger entry than try to patch it. replayAdvance handles that.
+        debtLedger.replayAdvance(advance);
+        audit.record("ADVANCE_EDITED", "EMPLOYEE_ADVANCE", advance.getId(), advance.getReason(),
+                advance.getEmployee().getFullName() + " " + advance.getAmount());
+        return advance;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        EmployeeAdvance advance = advances.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Advance not found"));
+        advance.softDelete();
+        // Wipe the debt ledger entry so the employee's running balance stops
+        // including this advance immediately. replayAdvance no-ops on a deleted
+        // advance after the delete, so the entry doesn't come back.
+        debtLedger.replayAdvance(advance);
+        audit.record("ADVANCE_DELETED", "EMPLOYEE_ADVANCE", advance.getId(), advance.getReason(),
+                advance.getEmployee().getFullName() + " " + advance.getAmount());
     }
 
     private void validateRange(LocalDate from, LocalDate to) {

@@ -37,10 +37,21 @@ public final class CustomerDtos {
             LoyaltyStatus loyaltyStatus,
             boolean active,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            int loyaltyProgress,
+            int loyaltyRewardsEarned) {
+        /** Lightweight factory — loyalty fields default to 0. Use {@link #from(Customer, long)} on the list/profile path. */
         public static CustomerResponse from(Customer c) {
             return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), c.getNotes(),
-                    c.getLoyaltyStatus(), c.isActive(), c.getCreatedAt(), c.getUpdatedAt());
+                    c.getLoyaltyStatus(), c.isActive(), c.getCreatedAt(), c.getUpdatedAt(), 0, 0);
+        }
+
+        /** Computes punch-card progress ({@code visits % 10}) and rewards ({@code visits / 10}). */
+        public static CustomerResponse from(Customer c, long totalVisits) {
+            int progress = (int) (totalVisits % 10);
+            int rewards = (int) (totalVisits / 10);
+            return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), c.getNotes(),
+                    c.getLoyaltyStatus(), c.isActive(), c.getCreatedAt(), c.getUpdatedAt(), progress, rewards);
         }
     }
 

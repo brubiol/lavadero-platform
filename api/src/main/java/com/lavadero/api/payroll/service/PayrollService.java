@@ -6,7 +6,10 @@ import com.lavadero.api.catalog.domain.Employee;
 import com.lavadero.api.catalog.domain.PayrollType;
 import com.lavadero.api.catalog.repository.EmployeeRepository;
 import com.lavadero.api.money.domain.EmployeeAdvance;
+import com.lavadero.api.money.domain.Expense;
+import com.lavadero.api.money.domain.ExpenseCategory;
 import com.lavadero.api.money.repository.EmployeeAdvanceRepository;
+import com.lavadero.api.money.repository.ExpenseRepository;
 import com.lavadero.api.operations.domain.TicketAssignment;
 import com.lavadero.api.operations.repository.TicketAssignmentRepository;
 import com.lavadero.api.payroll.domain.DebtLedgerType;
@@ -58,6 +61,7 @@ public class PayrollService {
     private final DebtLedgerRepository debtLedger;
     private final EmployeeRepository employees;
     private final EmployeeAdvanceRepository advances;
+    private final ExpenseRepository expenses;
     private final TicketAssignmentRepository ticketAssignments;
     private final AttendanceRepository attendance;
     private final DebtLedgerService debtLedgerService;
@@ -65,7 +69,7 @@ public class PayrollService {
 
     public PayrollService(PayrollPeriodRepository periods, PayrollEntryRepository entries, PayrollDayRepository days,
             PayrollAdjustmentRepository adjustments, DebtLedgerRepository debtLedger, EmployeeRepository employees,
-            EmployeeAdvanceRepository advances, TicketAssignmentRepository ticketAssignments,
+            EmployeeAdvanceRepository advances, ExpenseRepository expenses, TicketAssignmentRepository ticketAssignments,
             AttendanceRepository attendance, DebtLedgerService debtLedgerService, AuditService audit) {
         this.periods = periods;
         this.entries = entries;
@@ -74,6 +78,7 @@ public class PayrollService {
         this.debtLedger = debtLedger;
         this.employees = employees;
         this.advances = advances;
+        this.expenses = expenses;
         this.ticketAssignments = ticketAssignments;
         this.attendance = attendance;
         this.debtLedgerService = debtLedgerService;
@@ -157,6 +162,7 @@ public class PayrollService {
             days.save(new PayrollDay(period, day.employee, day.workDate, money(day.carsWashed), money(day.ticketRevenue)));
         }
 
+        BigDecimal totalGross = ZERO;
         for (EmployeeAccumulator accumulator : byEmployee.values()) {
             Employee employee = accumulator.employee;
             BigDecimal carsWashed = money(accumulator.inShiftCars.add(accumulator.outOfShiftCars));
@@ -195,6 +201,17 @@ public class PayrollService {
                     salary.absenceDeduction(), carsBonusRate, carsBonus, commissions, ZERO, manual.earnings,
                     manual.deductions, advancesDeducted, grossPay, netPay));
             debtLedgerService.recordPayrollDeduction(employee, period, advancesDeducted);
+            totalGross = totalGross.add(grossPay);
+        }
+
+        // Recognize labor as a real NOMINA expense so it lands in the operating
+        // result. Replace any prior auto-generated row for this period (recompute
+        // keeps it in sync); manual NOMINA gastos have a null period and are left
+        // alone. amount > 0 is enforced by a DB check, so skip empty periods.
+        expenses.deleteByPayrollPeriodId(period.getId());
+        if (totalGross.signum() > 0) {
+            expenses.save(new Expense(null, null, period.getEndDate(), ExpenseCategory.NOMINA, totalGross,
+                    "Nomina " + period.getStartDate() + " al " + period.getEndDate(), period.getId()));
         }
 
         period.markComputed();

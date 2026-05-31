@@ -102,7 +102,7 @@ public class TicketService {
         BigDecimal originalPriceAmount = resolved[1];
         BigDecimal surcharge = surchargeOf(courtesy, request.surchargeAmount());
         BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
-                && request.priceOverride().compareTo(ZERO) > 0)
+                && request.priceOverride().compareTo(ZERO) >= 0)
                 ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
                 : resolved[0].add(surcharge).setScale(2, RoundingMode.HALF_UP);
 
@@ -117,13 +117,20 @@ public class TicketService {
         if (request.internalRef() != null && !request.internalRef().isBlank()) {
             ticket.setInternalRef(request.internalRef().trim());
         }
-        if (request.priceOverride() != null && request.priceOverride().compareTo(ZERO) > 0) {
+        if (!courtesy && request.priceOverride() != null && request.priceOverride().compareTo(ZERO) >= 0) {
             ticket.setPriceOverride(request.priceOverride().setScale(2, RoundingMode.HALF_UP));
         }
         ticket.setSurchargeAmount(surcharge);
         ticket.setSurchargeReason(normalizeSurchargeReason(courtesy, request.surchargeReason()));
         ticket.setDiscountReason(normalizeDiscountReason(courtesy, discount, request.discountReason()));
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
+        if (request.customerId() != null) {
+            // Optional at-creation customer link (loyalty punch advances automatically
+            // via CustomerService.getProfile() which counts active tickets per customer).
+            Customer customer = customers.findByIdAndActiveTrue(request.customerId())
+                    .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Customer not found"));
+            ticket.attachCustomer(customer);
+        }
         Ticket saved = tickets.save(ticket);
         String actor = currentActor();
         audit.record("TICKET_CREATED", "TICKET", saved.getId(), null, saved.getNotaNumber());
@@ -245,11 +252,11 @@ public class TicketService {
                 : (request.surchargeAmount() != null ? request.surchargeAmount().setScale(2, RoundingMode.HALF_UP)
                         : ticket.getSurchargeAmount());
         BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
-                && request.priceOverride().compareTo(ZERO) > 0)
+                && request.priceOverride().compareTo(ZERO) >= 0)
                 ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
                 : resolved[0].add(surcharge).setScale(2, RoundingMode.HALF_UP);
         BigDecimal override = (!courtesy && request.priceOverride() != null
-                && request.priceOverride().compareTo(ZERO) > 0)
+                && request.priceOverride().compareTo(ZERO) >= 0)
                 ? request.priceOverride().setScale(2, RoundingMode.HALF_UP) : ticket.getPriceOverride();
         ticket.update(serviceType, vehicleSize, vehicleDescription, priceAmount, discount, originalPriceAmount,
                 currency, paymentMethod, courtesy, courtesyReason, request.occurredAt(), request.internalRef(),
@@ -346,11 +353,13 @@ public class TicketService {
     /** Discount reason is required whenever the cashier applies a real discount.
      *  Courtesy zeros the discount out and skips the reason entirely. */
     private String normalizeDiscountReason(boolean courtesy, BigDecimal discount, String raw) {
-        if (courtesy || discount == null || discount.signum() <= 0) {
+        if (courtesy) {
             return null;
         }
+        // A reason may accompany a zero-discount ticket (e.g. a Prepago redemption
+        // marker). Only require one when an actual discount percent is applied.
         validateDiscountReason(courtesy, discount, raw);
-        return raw.trim();
+        return raw == null || raw.isBlank() ? null : raw.trim();
     }
 
     private void validateDiscountReason(boolean courtesy, BigDecimal discount, String reason) {

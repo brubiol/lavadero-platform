@@ -20,6 +20,12 @@ public final class WithdrawalDtos {
             @Size(max = 500) String reason) {
     }
 
+    public record UpdateWithdrawalRequest(
+            LocalDate withdrawalDate,
+            @DecimalMin(value = "0.01") BigDecimal amount,
+            @Size(max = 500) String reason) {
+    }
+
     public record WithdrawalResponse(Long id, Long businessDayId, Long shiftId, LocalDate withdrawalDate,
             BigDecimal amount, String reason, Instant createdAt, Instant updatedAt) {
         public static WithdrawalResponse from(Withdrawal withdrawal) {

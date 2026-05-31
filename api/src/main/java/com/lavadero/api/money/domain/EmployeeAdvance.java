@@ -14,10 +14,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "employee_advances")
+@SQLRestriction("deleted_at IS NULL")
 public class EmployeeAdvance extends AuditedEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,6 +46,9 @@ public class EmployeeAdvance extends AuditedEntity {
 
     @Column(length = 500)
     private String reason;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     protected EmployeeAdvance() {
     }
@@ -83,5 +89,31 @@ public class EmployeeAdvance extends AuditedEntity {
 
     public String getReason() {
         return reason;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void update(Employee employee, LocalDate advanceDate, BigDecimal amount, String reason) {
+        if (employee != null) {
+            this.employee = employee;
+        }
+        if (advanceDate != null) {
+            this.advanceDate = advanceDate;
+        }
+        if (amount != null) {
+            this.amount = amount;
+        }
+        if (reason != null) {
+            String trimmed = reason.trim();
+            this.reason = trimmed.isEmpty() ? null : trimmed;
+        }
+    }
+
+    public void softDelete() {
+        if (this.deletedAt == null) {
+            this.deletedAt = Instant.now();
+        }
     }
 }

@@ -5,6 +5,8 @@ import com.lavadero.api.money.domain.Withdrawal;
 import com.lavadero.api.money.repository.WithdrawalRepository;
 import com.lavadero.api.money.service.BusinessContextResolver.Context;
 import com.lavadero.api.money.web.WithdrawalDtos.CreateWithdrawalRequest;
+import com.lavadero.api.money.web.WithdrawalDtos.UpdateWithdrawalRequest;
+import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -59,6 +61,25 @@ public class WithdrawalService {
     public List<Withdrawal> list(LocalDate from, LocalDate to) {
         validateRange(from, to);
         return withdrawals.findByWithdrawalDateBetweenOrderByWithdrawalDateDescCreatedAtDesc(from, to);
+    }
+
+    @Transactional
+    public Withdrawal update(Long id, UpdateWithdrawalRequest request) {
+        Withdrawal withdrawal = withdrawals.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Withdrawal not found"));
+        withdrawal.update(request.withdrawalDate(), request.amount(), request.reason());
+        audit.record("WITHDRAWAL_EDITED", "WITHDRAWAL", withdrawal.getId(), withdrawal.getReason(),
+                withdrawal.getAmount().toString());
+        return withdrawal;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Withdrawal withdrawal = withdrawals.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Withdrawal not found"));
+        withdrawal.softDelete();
+        audit.record("WITHDRAWAL_DELETED", "WITHDRAWAL", withdrawal.getId(), withdrawal.getReason(),
+                withdrawal.getAmount().toString());
     }
 
     private void validateRange(LocalDate from, LocalDate to) {

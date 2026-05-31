@@ -37,7 +37,9 @@ public class CustomerController {
 
     @GetMapping
     public List<CustomerResponse> list(@RequestParam(required = false) String q) {
-        return customerService.list(q).stream().map(CustomerResponse::from).toList();
+        // Each row carries loyaltyProgress + loyaltyRewardsEarned so the
+        // Clientes directory and Lealtad screen render the 10-dot card directly.
+        return customerService.listWithLoyalty(q);
     }
 
     @GetMapping("/{id}")

@@ -13,10 +13,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "withdrawals")
+@SQLRestriction("deleted_at IS NULL")
 public class Withdrawal extends AuditedEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,6 +41,9 @@ public class Withdrawal extends AuditedEntity {
 
     @Column(length = 500)
     private String reason;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     protected Withdrawal() {
     }
@@ -72,5 +78,28 @@ public class Withdrawal extends AuditedEntity {
 
     public String getReason() {
         return reason;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void update(LocalDate withdrawalDate, BigDecimal amount, String reason) {
+        if (withdrawalDate != null) {
+            this.withdrawalDate = withdrawalDate;
+        }
+        if (amount != null) {
+            this.amount = amount;
+        }
+        if (reason != null) {
+            String trimmed = reason.trim();
+            this.reason = trimmed.isEmpty() ? null : trimmed;
+        }
+    }
+
+    public void softDelete() {
+        if (this.deletedAt == null) {
+            this.deletedAt = Instant.now();
+        }
     }
 }

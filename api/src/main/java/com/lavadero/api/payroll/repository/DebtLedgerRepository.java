@@ -11,4 +11,6 @@ public interface DebtLedgerRepository extends JpaRepository<DebtLedgerEntry, Lon
     List<DebtLedgerEntry> findByEmployeeIdOrderByEntryDateAscCreatedAtAsc(Long employeeId);
 
     void deleteByPayrollPeriodIdAndType(Long payrollPeriodId, DebtLedgerType type);
+
+    void deleteByEmployeeAdvanceIdAndType(Long employeeAdvanceId, DebtLedgerType type);
 }

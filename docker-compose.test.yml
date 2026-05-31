@@ -1,0 +1,52 @@
+# Isolated stack for Playwright E2E so test residue never lands in the dev DB.
+#
+# Brings up a second Postgres (5433) + API (8090) with their own volume. The
+# Playwright suite already reads the override env vars set by scripts/e2e.sh:
+#   PLAYWRIGHT_BASE_URL=http://localhost:5174    (vite dev server, ran locally)
+#   VITE_API_PROXY_TARGET=http://localhost:8090
+#   E2E_CLEANUP_CONTAINER=lavadero-postgres-e2e
+#
+# Usage:
+#   ./scripts/e2e.sh              # one-shot: up → run tests → down
+#   docker compose -f docker-compose.test.yml up -d   # leave the stack up
+services:
+  postgres-e2e:
+    image: postgres:16
+    container_name: lavadero-postgres-e2e
+    environment:
+      POSTGRES_USER: lavadero
+      POSTGRES_PASSWORD: lavadero
+      POSTGRES_DB: lavadero
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_e2e_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lavadero -d lavadero"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  api-e2e:
+    build:
+      context: ./api
+    container_name: lavadero-api-e2e
+    ports:
+      - "8090:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/lavadero
+      LAVADERO_JWT_SECRET: e2e-only-secret-32-bytes-minimum-padding
+      LAVADERO_BOOTSTRAP_USERNAME: dueno
+      LAVADERO_BOOTSTRAP_PASSWORD: cambia-esto-123
+      # AI + forecast are off in the test stack — tests don't exercise them and
+      # the deterministic-local provider keeps things quiet.
+      LAVADERO_AI_ENABLED: "false"
+      LAVADERO_AI_PROVIDER: deterministic-local
+      LAVADERO_FORECAST_PROVIDER: java
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+
+volumes:
+  postgres_e2e_data:

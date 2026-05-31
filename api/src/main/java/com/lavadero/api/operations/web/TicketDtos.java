@@ -32,11 +32,12 @@ public final class TicketDtos {
             @NotEmpty List<@NotNull Long> employeeIds,
             Instant occurredAt,
             @Size(max = 40) String internalRef,
-            @DecimalMin("0.01") BigDecimal priceOverride,
+            @DecimalMin("0") BigDecimal priceOverride,
             @DecimalMin("0") BigDecimal surchargeAmount,
             @Size(max = 120) String surchargeReason,
             @Size(max = 120) String discountReason,
-            @Size(max = 500) String notes) {
+            @Size(max = 500) String notes,
+            Long customerId) {
     }
 
     public record UpdateTicketRequest(
@@ -51,7 +52,7 @@ public final class TicketDtos {
             List<@NotNull Long> employeeIds,
             Instant occurredAt,
             @Size(max = 40) String internalRef,
-            @DecimalMin("0.01") BigDecimal priceOverride,
+            @DecimalMin("0") BigDecimal priceOverride,
             @DecimalMin("0") BigDecimal surchargeAmount,
             @Size(max = 120) String surchargeReason,
             @Size(max = 120) String discountReason,

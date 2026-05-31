@@ -20,7 +20,8 @@ read -rp "RDS endpoint (e.g. lavadero-db.xxxx.us-east-1.rds.amazonaws.com): " RD
 read -rp "RDS password: " -s RDS_PASSWORD; echo ""
 read -rp "JWT secret (leave blank to generate): " JWT_SECRET
 [[ -z "$JWT_SECRET" ]] && JWT_SECRET=$(openssl rand -hex 32)
-read -rp "Bootstrap owner password: " -s BOOTSTRAP_PASSWORD; echo ""
+read -rp "Bootstrap owner (DUENO / Eric) password: " -s BOOTSTRAP_PASSWORD; echo ""
+read -rp "Admin (ADMIN / Brandon) password: " -s ADMIN_PASSWORD; echo ""
 read -rp "OpenAI API key (required for live AI; leave blank only for the deterministic fallback): " -s OPENAI_API_KEY; echo ""
 
 # Non-secret AI config (provider, base URL, model, timeout) is pinned in
@@ -35,7 +36,11 @@ LAVADERO_JWT_SECRET=$JWT_SECRET
 
 LAVADERO_BOOTSTRAP_USERNAME=dueno
 LAVADERO_BOOTSTRAP_PASSWORD=$BOOTSTRAP_PASSWORD
-LAVADERO_BOOTSTRAP_FULL_NAME=Brandon Rubio
+LAVADERO_BOOTSTRAP_FULL_NAME=Eric Rubio
+
+LAVADERO_ADMIN_USERNAME=brandon
+LAVADERO_ADMIN_PASSWORD=$ADMIN_PASSWORD
+LAVADERO_ADMIN_FULL_NAME=Brandon Rubio
 
 LAVADERO_AI_API_KEY=$OPENAI_API_KEY
 EOF

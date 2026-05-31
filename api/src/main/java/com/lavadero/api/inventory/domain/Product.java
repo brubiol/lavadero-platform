@@ -37,6 +37,14 @@ public class Product extends AuditedEntity {
     @Column(nullable = false, length = 30)
     private ProductCategory category = ProductCategory.OTRO;
 
+    // Per-product low-stock thresholds. NULL on either field means the caller
+    // (frontend) falls back to its global default — see V58 migration notes.
+    @Column(name = "min_stock", precision = 10, scale = 2)
+    private BigDecimal minStock;
+
+    @Column(name = "crit_stock", precision = 10, scale = 2)
+    private BigDecimal critStock;
+
     protected Product() {
     }
 
@@ -76,7 +84,16 @@ public class Product extends AuditedEntity {
         return category;
     }
 
-    public void update(String name, String sku, BigDecimal currentUnitPrice, Boolean trackInventory, Boolean active, ProductCategory category) {
+    public BigDecimal getMinStock() {
+        return minStock;
+    }
+
+    public BigDecimal getCritStock() {
+        return critStock;
+    }
+
+    public void update(String name, String sku, BigDecimal currentUnitPrice, Boolean trackInventory, Boolean active,
+                       ProductCategory category, BigDecimal minStock, BigDecimal critStock) {
         if (name != null) {
             this.name = name;
         }
@@ -94,6 +111,14 @@ public class Product extends AuditedEntity {
         }
         if (category != null) {
             this.category = category;
+        }
+        // Pass minStock/critStock as null to leave them untouched. Set them to
+        // -1 explicitly (out-of-band sentinel) to clear back to NULL.
+        if (minStock != null) {
+            this.minStock = minStock.signum() < 0 ? null : minStock;
+        }
+        if (critStock != null) {
+            this.critStock = critStock.signum() < 0 ? null : critStock;
         }
     }
 }

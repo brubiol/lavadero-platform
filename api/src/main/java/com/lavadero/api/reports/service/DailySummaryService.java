@@ -11,6 +11,7 @@ import com.lavadero.api.money.repository.WithdrawalRepository;
 import com.lavadero.api.operations.domain.Ticket;
 import com.lavadero.api.operations.domain.TicketAssignment;
 import com.lavadero.api.operations.domain.TicketStatus;
+import com.lavadero.api.operations.repository.PrepaidPackageRepository;
 import com.lavadero.api.operations.repository.TicketAssignmentRepository;
 import com.lavadero.api.operations.repository.TicketRepository;
 import com.lavadero.api.payroll.domain.PayrollPeriod;
@@ -57,11 +58,13 @@ public class DailySummaryService {
     private final ProductMovementRepository inventoryMovements;
     private final PayrollPeriodRepository payrollPeriods;
     private final HistoricalDailySnapshotRepository historicalSnapshots;
+    private final PrepaidPackageRepository prepaidPackages;
 
     public DailySummaryService(TicketRepository tickets, ExpenseRepository expenses, WithdrawalRepository withdrawals,
             EmployeeAdvanceRepository advances, ShiftCloseSummaryRepository closeSummaries,
             TicketAssignmentRepository assignments, ProductMovementRepository inventoryMovements,
-            PayrollPeriodRepository payrollPeriods, HistoricalDailySnapshotRepository historicalSnapshots) {
+            PayrollPeriodRepository payrollPeriods, HistoricalDailySnapshotRepository historicalSnapshots,
+            PrepaidPackageRepository prepaidPackages) {
         this.tickets = tickets;
         this.expenses = expenses;
         this.withdrawals = withdrawals;
@@ -71,6 +74,7 @@ public class DailySummaryService {
         this.inventoryMovements = inventoryMovements;
         this.payrollPeriods = payrollPeriods;
         this.historicalSnapshots = historicalSnapshots;
+        this.prepaidPackages = prepaidPackages;
     }
 
     @Transactional(readOnly = true)
@@ -104,11 +108,23 @@ public class DailySummaryService {
                 .map(Ticket::getPriceAmount).reduce(ZERO, BigDecimal::add);
         BigDecimal inventorySalesRevenue = inventoryMovements.sumTotalAmountByTypeAndDateBetween(
                 MovementType.SALE, startInstant(date), endInstant(date));
+        // Cost of goods (cash-basis): what we paid to restock. Netted against
+        // miscelanea sales so the result shows real margin, not gross sales.
+        BigDecimal inventoryPurchaseCost = inventoryMovements.sumTotalAmountByTypeAndDateBetween(
+                MovementType.PURCHASE, startInstant(date), endInstant(date));
+        // Prepaid package income is recognized at point of sale (cash-basis): the
+        // money lands in this day's cash, redemption washes are recorded at $0.
+        BigDecimal prepaidSalesRevenue = prepaidPackages.sumForDate(date);
 
-        BigDecimal expensesTotal = expenses.sumForDate(date)
-                .add(withdrawals.sumForDate(date))
-                .add(advances.sumForDate(date));
-        BigDecimal result = ticketRevenue.add(inventorySalesRevenue).subtract(expensesTotal);
+        // Operating result = revenue - real operating costs. Gastos (now including
+        // auto-logged nomina) and cost of goods are the costs. Retiros (cash moves)
+        // and prestamos (loans) are NOT costs; they're reported separately and left
+        // out of the result.
+        BigDecimal expensesTotal = expenses.sumForDate(date);
+        BigDecimal withdrawalsTotal = withdrawals.sumForDate(date);
+        BigDecimal advancesTotal = advances.sumForDate(date);
+        BigDecimal result = ticketRevenue.add(inventorySalesRevenue).add(prepaidSalesRevenue)
+                .subtract(expensesTotal).subtract(inventoryPurchaseCost);
         List<Ticket> recentTickets = dailyTickets.stream().limit(10).toList();
         List<ShiftCloseSummary> closes = closeSummaries.findByShiftBusinessDayBusinessDate(date);
         BigDecimal cashVariance = closes.isEmpty()
@@ -116,8 +132,8 @@ public class DailySummaryService {
                 : closes.stream().map(ShiftCloseSummary::getVariance).reduce(ZERO, BigDecimal::add);
 
         return DailySummaryResponse.from(date, carsWashed, ticketRevenue, cashRevenue, cardRevenue, transferRevenue,
-                inventorySalesRevenue, expensesTotal, result, courtesyCount, voidedCount, recentTickets,
-                cashVariance);
+                inventorySalesRevenue, prepaidSalesRevenue, inventoryPurchaseCost, expensesTotal, withdrawalsTotal,
+                advancesTotal, result, courtesyCount, voidedCount, recentTickets, cashVariance);
     }
 
     @Transactional(readOnly = true)
@@ -130,16 +146,23 @@ public class DailySummaryService {
         long courtesyCount = days.stream().mapToLong(DailySummaryResponse::courtesyCount).sum();
         long voidedCount = days.stream().mapToLong(DailySummaryResponse::voidedCount).sum();
         BigDecimal ticketRevenue = sum(days.stream().map(DailySummaryResponse::ticketRevenue).toList());
-        BigDecimal moneyOut = sum(days.stream().map(DailySummaryResponse::expensesTotal).toList());
+        BigDecimal inventorySalesRevenue = sum(days.stream().map(DailySummaryResponse::inventorySalesRevenue).toList());
+        BigDecimal prepaidSalesRevenue = sum(days.stream().map(DailySummaryResponse::prepaidSalesRevenue).toList());
+        BigDecimal inventoryPurchaseCost = sum(days.stream().map(DailySummaryResponse::inventoryPurchaseCost).toList());
+        // expensesTotal is gastos-only (incl. auto-logged nomina); retiros/prestamos
+        // are tracked separately below and excluded from the operating result.
+        BigDecimal expensesTotal = sum(days.stream().map(DailySummaryResponse::expensesTotal).toList());
         BigDecimal withdrawalsTotal = sum(withdrawals.findByWithdrawalDateBetweenOrderByWithdrawalDateDescCreatedAtDesc(from, to)
                 .stream().map(item -> item.getAmount()).toList());
         BigDecimal advancesTotal = sum(advances.findByAdvanceDateBetween(from, to)
                 .stream().map(item -> item.getAmount()).toList());
         BigDecimal cashVariance = sumNullable(days.stream().map(DailySummaryResponse::cashVariance).toList());
+        // Range result = sum of the per-day results so it ties out to the daily rows.
+        BigDecimal result = sum(days.stream().map(DailySummaryResponse::result).toList());
 
-        return new DailySummaryRangeResponse(from, to, carsWashed, ticketRevenue, moneyOut,
-                withdrawalsTotal, advancesTotal, ticketRevenue.subtract(moneyOut), courtesyCount,
-                voidedCount, cashVariance, days);
+        return new DailySummaryRangeResponse(from, to, carsWashed, ticketRevenue, inventorySalesRevenue,
+                prepaidSalesRevenue, inventoryPurchaseCost, expensesTotal, withdrawalsTotal, advancesTotal, result,
+                courtesyCount, voidedCount, cashVariance, days);
     }
 
     @Transactional(readOnly = true)
@@ -147,7 +170,8 @@ public class DailySummaryService {
         YearMonth yearMonth = YearMonth.of(year, month);
         DailySummaryRangeResponse range = getRange(yearMonth.atDay(1), yearMonth.atEndOfMonth());
         return new MonthlySummaryResponse(year, month, range.from(), range.to(), range.carsWashed(),
-                range.ticketRevenue(), range.expensesTotal(), range.withdrawalsTotal(), range.advancesTotal(),
+                range.ticketRevenue(), range.inventorySalesRevenue(), range.prepaidSalesRevenue(),
+                range.inventoryPurchaseCost(), range.expensesTotal(), range.withdrawalsTotal(), range.advancesTotal(),
                 range.result(), range.courtesyCount(), range.voidedCount(), range.cashVariance(), range.days());
     }
 

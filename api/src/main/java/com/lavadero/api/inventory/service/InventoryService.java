@@ -63,15 +63,22 @@ public class InventoryService {
     public Product createProduct(CreateProductRequest request) {
         boolean trackInventory = request.trackInventory() == null || request.trackInventory();
         ProductCategory category = request.category() != null ? request.category() : ProductCategory.OTRO;
-        return products.save(new Product(request.name().trim(), request.sku().trim().toUpperCase(),
-                money(request.currentUnitPrice()), trackInventory, category));
+        Product product = new Product(request.name().trim(), request.sku().trim().toUpperCase(),
+                money(request.currentUnitPrice()), trackInventory, category);
+        // Apply thresholds via update so the entity logic stays in one place.
+        if (request.minStock() != null || request.critStock() != null) {
+            product.update(null, null, null, null, null, null,
+                    request.minStock(), request.critStock());
+        }
+        return products.save(product);
     }
 
     @Transactional
     public Product updateProduct(Long id, UpdateProductRequest request) {
         Product product = getProduct(id);
         product.update(trim(request.name()), trimUpper(request.sku()), moneyOrNull(request.currentUnitPrice()),
-                request.trackInventory(), request.active(), request.category());
+                request.trackInventory(), request.active(), request.category(),
+                request.minStock(), request.critStock());
         return product;
     }
 

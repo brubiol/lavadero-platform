@@ -22,7 +22,9 @@ public final class InventoryDtos {
             @NotBlank @Size(max = 60) String sku,
             @NotNull @DecimalMin("0.00") BigDecimal currentUnitPrice,
             Boolean trackInventory,
-            ProductCategory category) {
+            ProductCategory category,
+            @DecimalMin("0.00") BigDecimal minStock,
+            @DecimalMin("0.00") BigDecimal critStock) {
     }
 
     public record UpdateProductRequest(
@@ -31,15 +33,21 @@ public final class InventoryDtos {
             @DecimalMin("0.00") BigDecimal currentUnitPrice,
             Boolean trackInventory,
             Boolean active,
-            ProductCategory category) {
+            ProductCategory category,
+            BigDecimal minStock,
+            BigDecimal critStock) {
     }
 
     public record ProductResponse(Long id, String name, String sku, BigDecimal currentUnitPrice,
-            boolean trackInventory, boolean active, ProductCategory category, Instant createdAt, Instant updatedAt) {
+            boolean trackInventory, boolean active, ProductCategory category,
+            BigDecimal minStock, BigDecimal critStock,
+            Instant createdAt, Instant updatedAt) {
         public static ProductResponse from(Product product) {
             return new ProductResponse(product.getId(), product.getName(), product.getSku(),
                     product.getCurrentUnitPrice(), product.isTrackInventory(), product.isActive(),
-                    product.getCategory(), product.getCreatedAt(), product.getUpdatedAt());
+                    product.getCategory(),
+                    product.getMinStock(), product.getCritStock(),
+                    product.getCreatedAt(), product.getUpdatedAt());
         }
     }
 

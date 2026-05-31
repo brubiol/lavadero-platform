@@ -51,6 +51,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("DUENO")
                         .requestMatchers("/api/v1/ai/**").hasRole("DUENO")
                         .requestMatchers("/api/v1/audit-events/**", "/api/v1/corrections/**", "/api/v1/oversight/**").hasRole("DUENO")
+                        // Day-level summary is visible to the cashier; month/historical to managers.
+                        // These must precede the broad reports rule below (first match wins).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reports/daily-summary").hasRole("OPERADOR")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reports/historical").hasRole("GERENTE")
                         .requestMatchers(HttpMethod.GET, "/api/v1/reports/**").hasRole("DUENO")
                         .requestMatchers("/api/v1/payroll/**").hasRole("PAYROLL_ACCESS")
                         .requestMatchers("/api/v1/products/**", "/api/v1/inventory/**").hasRole("GERENTE")
@@ -112,7 +116,13 @@ public class SecurityConfig {
     private Collection<GrantedAuthority> authoritiesFor(com.lavadero.api.auth.domain.AppUser user) {
         String role = user.getRole().name();
         java.util.List<GrantedAuthority> authorities = new java.util.ArrayList<>();
-        if ("DUENO".equals(role)) {
+        if ("ADMIN".equals(role)) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_DUENO"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_GERENTE"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_OPERADOR"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_PAYROLL_ACCESS"));
+        } else if ("DUENO".equals(role)) {
             authorities.add(new SimpleGrantedAuthority("ROLE_DUENO"));
             authorities.add(new SimpleGrantedAuthority("ROLE_GERENTE"));
             authorities.add(new SimpleGrantedAuthority("ROLE_OPERADOR"));
@@ -132,6 +142,7 @@ public class SecurityConfig {
     @Bean
     RoleHierarchy roleHierarchy() {
         return RoleHierarchyImpl.fromHierarchy("""
+                ROLE_ADMIN > ROLE_DUENO
                 ROLE_DUENO > ROLE_GERENTE
                 ROLE_GERENTE > ROLE_OPERADOR
                 """);

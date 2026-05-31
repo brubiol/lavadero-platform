@@ -308,6 +308,80 @@ class Phase12CrmIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("should advance the punch card when a courtesy ticket is a loyalty redemption")
+    void should_count_loyalty_courtesy_toward_progress() throws Exception {
+        Long customerId = createCustomer("Mariana Aguilar Cantu", "899-500-6600",
+                "Cliente con tarjeta llena, redime el 10mo");
+
+        // 9 paid washes — customer is one away from the free wash.
+        for (int i = 0; i < 9; i++) {
+            TicketFixture fix = ticketFixture("C12I-" + i, LocalDate.of(2027, 2, 1 + i), "MXN", "150.00");
+            attachCustomer(createTicket(fix), customerId);
+        }
+
+        mvc.perform(get("/api/v1/customers/{id}/profile", customerId))
+                .andExpect(jsonPath("$.totalVisits").value(9))
+                .andExpect(jsonPath("$.loyaltyProgress").value(9))
+                .andExpect(jsonPath("$.loyaltyRewardsEarned").value(0));
+
+        // 10th visit is the redemption — courtesy with a "Lealtad:" reason MUST advance the card.
+        TicketFixture redemption = ticketFixture("C12I-redeem", LocalDate.of(2027, 2, 11), "MXN", "150.00");
+        Long redemptionId = createCourtesyTicket(redemption, "Lealtad: lavado 10/10");
+        attachCustomer(redemptionId, customerId);
+
+        mvc.perform(get("/api/v1/customers/{id}/profile", customerId))
+                .andExpect(jsonPath("$.totalVisits").value(10))
+                .andExpect(jsonPath("$.loyaltyProgress").value(0))
+                .andExpect(jsonPath("$.loyaltyRewardsEarned").value(1));
+    }
+
+    @Test
+    @DisplayName("should accept customerId at ticket creation and attach in one call")
+    void should_attach_customer_at_ticket_creation() throws Exception {
+        Long customerId = createCustomer("Tony Vargas Mendoza", "899-600-7700", null);
+        TicketFixture fix = ticketFixture("C12J", LocalDate.of(2027, 7, 1), "MXN", "150.00");
+
+        mvc.perform(post("/api/v1/tickets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessDayId": %d,
+                                  "shiftId": %d,
+                                  "serviceTypeId": %d,
+                                  "vehicleSizeId": %d,
+                                  "currency": "%s",
+                                  "vehicleDescription": "Auto cliente",
+                                  "courtesy": false,
+                                  "employeeIds": [%d],
+                                  "customerId": %d
+                                }
+                                """.formatted(fix.businessDayId(), fix.shiftId(), fix.serviceTypeId(),
+                                fix.vehicleSizeId(), fix.currency(), fix.employeeId(), customerId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerId").value(customerId));
+
+        mvc.perform(get("/api/v1/customers/{id}/profile", customerId))
+                .andExpect(jsonPath("$.totalVisits").value(1))
+                .andExpect(jsonPath("$.loyaltyProgress").value(1));
+    }
+
+    @Test
+    @DisplayName("should expose loyaltyProgress + loyaltyRewardsEarned on the list endpoint")
+    void should_include_loyalty_progress_on_customers_list() throws Exception {
+        Long customerId = createCustomer("Karla Quintero Vela", "899-700-8800", null);
+        for (int i = 0; i < 6; i++) {
+            TicketFixture fix = ticketFixture("C12K-" + i, LocalDate.of(2027, 4, 1 + i), "MXN", "150.00");
+            attachCustomer(createTicket(fix), customerId);
+        }
+
+        mvc.perform(get("/api/v1/customers").param("q", "Karla Quintero"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Karla Quintero Vela"))
+                .andExpect(jsonPath("$[0].loyaltyProgress").value(6))
+                .andExpect(jsonPath("$[0].loyaltyRewardsEarned").value(0));
+    }
+
+    @Test
     @DisplayName("should show empty profile metrics when customer has no tickets")
     void should_return_zero_metrics_when_customer_has_no_tickets() throws Exception {
         Long id = createCustomer("Cliente Nuevo Sin Historial", "899-000-9999", null);

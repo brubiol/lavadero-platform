@@ -83,3 +83,12 @@ export const ICar = (p: IconProps) => (
 export const ICash = (p: IconProps) => (
   <svg {...base(p)}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
 )
+export const ILock = (p: IconProps) => (
+  <svg {...base(p)}><rect x="4.5" y="11" width="15" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+)
+export const IReceipt = (p: IconProps) => (
+  <svg {...base(p)}><path d="M6 3h12v18l-2.5-1.6L13 21l-2.5-1.6L8 21l-2-1.6V3z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+)
+export const IClients = (p: IconProps) => (
+  <svg {...base(p)}><circle cx="9" cy="9" r="3.2"/><path d="M2.5 20.5c0-3.2 2.9-5.5 6.5-5.5s6.5 2.3 6.5 5.5"/><circle cx="17" cy="8" r="2.5"/><path d="M16 14c2.8 0 5 1.8 5.5 4"/></svg>
+)

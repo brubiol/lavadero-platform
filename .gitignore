@@ -35,6 +35,11 @@ build/
 
 ### Claude Code ###
 .claude/
+.agents/
+.playwright-mcp/
+**/.playwright-mcp/
+scratch/
+skills-lock.json
 
 ### Frontend ###
 web/node_modules/

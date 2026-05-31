@@ -72,6 +72,110 @@ class Phase8PayrollIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void should_auto_log_nomina_expense_on_compute_and_replace_it_on_recompute() throws Exception {
+        LocalDate sunday = LocalDate.of(2026, 11, 22);
+        LocalDate periodEnd = sunday.plusDays(6);
+        Fixture fixture = fixture("P8D", sunday.plusDays(1));
+        setBaseSalary(fixture.employeeOneId(), "1000.00");
+        createTicket(fixture, fixture.employeeOneId());
+
+        Long periodId = createPeriod(sunday);
+        MvcResult computed = mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId))
+                .andExpect(status().isOk())
+                .andReturn();
+        java.math.BigDecimal expectedTotal = sumGrossPay(computed);
+
+        org.junit.jupiter.api.Assertions.assertEquals(1L, countNominaExpenses(periodEnd),
+                "compute should auto-log exactly one NOMINA expense");
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+                expectedTotal.compareTo(sumNominaExpenses(periodEnd)),
+                "NOMINA expense amount should equal total gross pay for the period");
+
+        // Recompute must replace the auto NOMINA, not duplicate it.
+        mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId))
+                .andExpect(status().isOk());
+
+        org.junit.jupiter.api.Assertions.assertEquals(1L, countNominaExpenses(periodEnd),
+                "recompute should replace, not duplicate, the auto NOMINA expense");
+    }
+
+    @Test
+    void should_not_delete_manual_nomina_expenses_on_payroll_recompute() throws Exception {
+        LocalDate sunday = LocalDate.of(2026, 11, 29);
+        LocalDate periodEnd = sunday.plusDays(6);
+        Fixture fixture = fixture("P8E", sunday.plusDays(1));
+        setBaseSalary(fixture.employeeOneId(), "1000.00");
+        createTicket(fixture, fixture.employeeOneId());
+
+        // Manual NOMINA gasto entered by the cashier. No businessDayId/shiftId so
+        // BusinessContextResolver uses our expenseDate directly (otherwise it
+        // would snap the date to the linked businessDay's date).
+        mvc.perform(post("/api/v1/expenses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "expenseDate": "%s",
+                                  "category": "NOMINA",
+                                  "amount": 42.00,
+                                  "description": "manual nomina entry"
+                                }
+                                """.formatted(periodEnd)))
+                .andExpect(status().isCreated());
+
+        long before = countNominaExpenses(periodEnd);
+
+        Long periodId = createPeriod(sunday);
+        mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/v1/payroll/periods/{id}/compute", periodId))
+                .andExpect(status().isOk());
+
+        // After two computes there should be exactly one MORE NOMINA row than we
+        // started with: the manual entry survives, the auto row is replaced (not
+        // duplicated) on recompute.
+        org.junit.jupiter.api.Assertions.assertEquals(before + 1L, countNominaExpenses(periodEnd),
+                "manual NOMINA expense should be preserved across payroll recomputes");
+    }
+
+    private java.math.BigDecimal sumGrossPay(MvcResult result) throws Exception {
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        for (JsonNode entry : body.path("entries")) {
+            total = total.add(new java.math.BigDecimal(entry.path("grossPay").asText("0")));
+        }
+        return total;
+    }
+
+    private long countNominaExpenses(LocalDate date) throws Exception {
+        JsonNode list = readExpenses(date);
+        long n = 0;
+        for (JsonNode e : list) {
+            if ("NOMINA".equals(e.path("category").asText())) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private java.math.BigDecimal sumNominaExpenses(LocalDate date) throws Exception {
+        JsonNode list = readExpenses(date);
+        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        for (JsonNode e : list) {
+            if ("NOMINA".equals(e.path("category").asText())) {
+                total = total.add(new java.math.BigDecimal(e.path("amount").asText()));
+            }
+        }
+        return total;
+    }
+
+    private JsonNode readExpenses(LocalDate date) throws Exception {
+        MvcResult result = mvc.perform(get("/api/v1/expenses?from={d}&to={d}", date, date))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    @Test
     void should_reject_non_sunday_payroll_period() throws Exception {
         mvc.perform(post("/api/v1/payroll/periods")
                         .contentType(MediaType.APPLICATION_JSON)

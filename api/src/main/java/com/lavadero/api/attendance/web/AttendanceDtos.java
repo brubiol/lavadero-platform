@@ -1,6 +1,7 @@
 package com.lavadero.api.attendance.web;
 
 import com.lavadero.api.attendance.domain.AttendanceRecord;
+import com.lavadero.api.attendance.domain.AttendanceStatus;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -14,7 +15,10 @@ public final class AttendanceDtos {
             @NotNull Long employeeId,
             @NotNull LocalDate workDate,
             Instant clockIn,
-            boolean absence,
+            // Legacy: callers may still send `absence: true` and we map it to ABSENT.
+            // Prefer `status` for new integrations.
+            Boolean absence,
+            AttendanceStatus status,
             @Size(max = 500) String note) {
     }
 
@@ -22,16 +26,18 @@ public final class AttendanceDtos {
             Instant clockIn,
             Instant clockOut,
             Boolean absence,
+            AttendanceStatus status,
             @Size(max = 500) String note) {
     }
 
     public record AttendanceResponse(Long id, Long employeeId, String employeeName, LocalDate workDate,
-            Instant clockIn, Instant clockOut, boolean absence, String note,
+            Instant clockIn, Instant clockOut, boolean absence, AttendanceStatus status, String note,
             Instant createdAt, Instant updatedAt) {
         public static AttendanceResponse from(AttendanceRecord record) {
             return new AttendanceResponse(record.getId(), record.getEmployee().getId(),
                     record.getEmployee().getFullName(), record.getWorkDate(),
-                    record.getClockIn(), record.getClockOut(), record.isAbsence(), record.getNote(),
+                    record.getClockIn(), record.getClockOut(), record.isAbsence(),
+                    record.getStatus(), record.getNote(),
                     record.getCreatedAt(), record.getUpdatedAt());
         }
     }

@@ -5,6 +5,7 @@ import com.lavadero.api.customers.domain.LoyaltyStatus;
 import com.lavadero.api.customers.repository.CustomerRepository;
 import com.lavadero.api.customers.web.CustomerDtos.CreateCustomerRequest;
 import com.lavadero.api.customers.web.CustomerDtos.CustomerProfileResponse;
+import com.lavadero.api.customers.web.CustomerDtos.CustomerResponse;
 import com.lavadero.api.customers.web.CustomerDtos.UpdateCustomerRequest;
 import com.lavadero.api.operations.domain.TicketCurrency;
 import com.lavadero.api.operations.domain.TicketStatus;
@@ -45,6 +46,23 @@ public class CustomerService {
             return customers.findByActiveTrueOrderByNameAsc();
         }
         return customers.searchActive(q.trim());
+    }
+
+    /**
+     * Same as {@link #list(String)} but each row carries the loyalty punch
+     * progress and rewards earned, derived from active ticket counts.
+     * Used by the Clientes directory and the Lealtad screen so the UI can
+     * render the 10-dot card without a second roundtrip per customer.
+     */
+    @Transactional(readOnly = true)
+    public List<CustomerResponse> listWithLoyalty(String q) {
+        List<Customer> rows = list(q);
+        return rows.stream()
+                .map((customer) -> {
+                    long visits = tickets.countByCustomerForLoyalty(customer.getId(), TicketStatus.ACTIVE);
+                    return CustomerResponse.from(customer, visits);
+                })
+                .toList();
     }
 
     @Transactional

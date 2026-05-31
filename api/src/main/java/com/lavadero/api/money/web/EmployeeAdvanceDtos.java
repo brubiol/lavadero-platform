@@ -21,6 +21,13 @@ public final class EmployeeAdvanceDtos {
             @Size(max = 500) String reason) {
     }
 
+    public record UpdateEmployeeAdvanceRequest(
+            Long employeeId,
+            LocalDate advanceDate,
+            @DecimalMin(value = "0.01") BigDecimal amount,
+            @Size(max = 500) String reason) {
+    }
+
     public record EmployeeAdvanceResponse(Long id, Long businessDayId, Long shiftId, Long employeeId,
             String employeeName, LocalDate advanceDate, BigDecimal amount, String reason,
             Instant createdAt, Instant updatedAt) {

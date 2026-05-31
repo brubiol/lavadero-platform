@@ -64,11 +64,14 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
     })
     List<Ticket> findAll(Specification<Ticket> spec, Sort sort);
 
+    // Loyalty visit count: every PAID active ticket plus any active courtesy
+    // whose reason starts with "Lealtad:" (so the 10th redemption wash
+    // advances the punch card while generic cortesías don't pollute it).
     @Query("""
             SELECT COUNT(t) FROM Ticket t
             WHERE t.customer.id = :customerId
               AND t.status = :status
-              AND t.courtesy = false
+              AND (t.courtesy = false OR t.courtesyReason LIKE 'Lealtad:%')
             """)
     long countByCustomerForLoyalty(@Param("customerId") Long customerId, @Param("status") TicketStatus status);
 

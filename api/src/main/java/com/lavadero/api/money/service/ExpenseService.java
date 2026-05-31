@@ -6,6 +6,8 @@ import com.lavadero.api.money.domain.ExpenseCategory;
 import com.lavadero.api.money.repository.ExpenseRepository;
 import com.lavadero.api.money.service.BusinessContextResolver.Context;
 import com.lavadero.api.money.web.ExpenseDtos.CreateExpenseRequest;
+import com.lavadero.api.money.web.ExpenseDtos.UpdateExpenseRequest;
+import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -54,6 +56,34 @@ public class ExpenseService {
             return expenses.findByExpenseDateBetweenOrderByExpenseDateDescCreatedAtDesc(from, to);
         }
         return expenses.findByExpenseDateBetweenAndCategoryOrderByExpenseDateDescCreatedAtDesc(from, to, category);
+    }
+
+    @Transactional
+    public Expense update(Long id, UpdateExpenseRequest request) {
+        Expense expense = expenses.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Expense not found"));
+        // Nomina expenses are auto-generated from a payroll period and replaced
+        // on recompute. Editing them here would silently drift from the period
+        // and get clobbered next time payroll runs.
+        if (expense.getPayrollPeriodId() != null) {
+            throw new IllegalArgumentException("Los gastos de nómina se generan automáticamente al cerrar la semana — no se editan a mano.");
+        }
+        expense.update(request.expenseDate(), request.category(), request.amount(), request.description());
+        audit.record("EXPENSE_EDITED", "EXPENSE", expense.getId(), expense.getDescription(),
+                expense.getCategory() + " " + expense.getAmount());
+        return expense;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Expense expense = expenses.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Expense not found"));
+        if (expense.getPayrollPeriodId() != null) {
+            throw new IllegalArgumentException("Los gastos de nómina se generan automáticamente al cerrar la semana — no se eliminan a mano.");
+        }
+        expense.softDelete();
+        audit.record("EXPENSE_DELETED", "EXPENSE", expense.getId(), expense.getDescription(),
+                expense.getCategory() + " " + expense.getAmount());
     }
 
     private void validateRange(LocalDate from, LocalDate to) {
