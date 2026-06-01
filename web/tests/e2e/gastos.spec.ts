@@ -12,7 +12,7 @@ test('gastos screen renders filters, action buttons, and totals', async ({ page 
   await loginAsDueno(page)
   await page.getByTestId('nav-gastos').click()
 
-  await expect(page.locator('h2').filter({ hasText: 'Gastos' })).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Gastos', level: 1 })).toBeVisible({ timeout: 8_000 })
   await expect(page.getByTestId('panel-filtros')).toBeVisible()
   await expect(page.getByTestId('gastos-new-expense')).toBeVisible()
   await expect(page.getByTestId('gastos-new-withdrawal')).toBeVisible()
@@ -63,7 +63,7 @@ test('can create gasto, retiro, and prestamo from the UI', async ({ page }) => {
 test('category filter narrows the gastos table', async ({ page }) => {
   await loginAsDueno(page)
   await page.getByTestId('nav-gastos').click()
-  await expect(page.locator('h2').filter({ hasText: 'Gastos' })).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Gastos', level: 1 })).toBeVisible({ timeout: 8_000 })
 
   await page.getByLabel('Categoría').selectOption('CFE')
   await expect(page.locator('td').filter({ hasText: 'Material' })).toHaveCount(0, { timeout: 5_000 })

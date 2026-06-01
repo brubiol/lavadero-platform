@@ -10,8 +10,11 @@ export type Catalog = {
   sizeName: string
 }
 
+// Must match the app's notion of "today" (America/Monterrey, App.tsx) — a plain
+// toISOString() uses UTC, so in the 00:00–06:00 UTC window the test seeds a
+// day/shift for the wrong calendar date and the ticket form finds no open shift.
 export function todayIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date())
 }
 
 export function runId(): string {

@@ -29,18 +29,19 @@ test('daily reports show seeded totals for an isolated business date', async ({ 
 
   await loginAsDueno(page)
   await page.getByTestId('nav-reportes').click()
+  await page.getByRole('button', { name: 'Personalizar' }).click()
   await page.getByTestId('reports-from').fill(businessDate)
   await page.getByTestId('reports-to').fill(businessDate)
 
   const rangeMetrics = page.getByTestId('reports-range-metrics')
   await expect(rangeMetrics.getByTestId('metric-carros-value')).toHaveText('2')
   await expect(rangeMetrics.getByTestId('metric-ingresos-value')).toContainText('200')
-  await expect(rangeMetrics.getByTestId('metric-salidas-value')).toContainText('60')
-  await expect(rangeMetrics.getByTestId('metric-resultado-value')).toContainText('140')
+  await expect(rangeMetrics.getByTestId('metric-gastos-value')).toContainText('30')
+  await expect(rangeMetrics.getByTestId('metric-resultado-value')).toContainText('170')
 
-  const preview = page.getByTestId('panel-export-preview')
-  await expect(preview.getByTestId('summary-retiros-value')).toContainText('20')
-  await expect(preview.getByTestId('summary-prestamos-value')).toContainText('10')
+  // Retiros and prestamos don't reduce the result — surfaced as "no afectan" pills.
+  await expect(page.getByTestId('report-pill-retiros')).toContainText('20')
+  await expect(page.getByTestId('report-pill-prestamos')).toContainText('10')
 
   await expect(page.getByTestId('reports-cash-variance').getByTestId('metric-diferencia-value')).toContainText('0')
 })

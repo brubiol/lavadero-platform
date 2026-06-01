@@ -66,7 +66,9 @@ test('courtesy ticket is free and submits without a reason', async ({ page, requ
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
   await fillBaseTicket(page, fixture.catalog, `Courtesy E2E ${Date.now()}`)
-  await page.getByLabel('Marcar como cortesia').check()
+  // Promo modes live behind a "Promos" selector; open it, then pick Cortesía.
+  await page.getByRole('button', { name: 'Promos' }).click()
+  await page.getByRole('button', { name: 'Cortesía' }).click()
 
   await expect(page.getByTestId('summary-precio-preview-value')).toContainText('$0.00')
   await page.getByTestId('ticket-submit').click()

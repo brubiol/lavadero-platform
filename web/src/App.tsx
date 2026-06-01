@@ -2727,7 +2727,7 @@ function Dashboard() {
       )}
 
       {/* ─── Movements feed (replaces the old recent-tickets table) ── */}
-      <div className="tl2-card t-purple">
+      <div className="tl2-card t-purple" data-testid="panel-tickets-recientes">
         <div className="tl2-card__head">
           <div>
             <h3>Movimientos de hoy</h3>
@@ -5323,9 +5323,14 @@ function TicketWorkspace({
       const prepago = values.prepagoActive === true
       const prepagoNota = (values.internalRef ?? '').trim()
       const prepagoExtra = values.priceOverride !== '' && values.priceOverride != null ? Number(values.priceOverride) : 0
+      // An empty priceOverride coerces to 0 via the schema, so only a positive
+      // value counts as a real manual override. Normal tickets must omit it and
+      // keep the server-resolved price — a 0 override would force the ticket to
+      // $0.00 under the backend's `>= 0` guard. (Prepago intentionally sends 0.)
       const override = prepago
         ? prepagoExtra
-        : (values.priceOverride !== '' && values.priceOverride != null ? Number(values.priceOverride) : undefined)
+        : (values.priceOverride !== '' && values.priceOverride != null && Number(values.priceOverride) > 0
+            ? Number(values.priceOverride) : undefined)
       const surcharge = !values.courtesy && !prepago && values.surchargeAmount !== '' && values.surchargeAmount != null
         ? Number(values.surchargeAmount) : 0
       const baseDate = mode === 'edit' && ticket?.occurredAt
@@ -8687,9 +8692,10 @@ function RpChart({ days, metric, setMetric }: { days: DailySummary[]; metric: Rp
 
 // Kit v3 RpKpi — KPI tile with optional "featured" dark variant for Resultado.
 function RpKpi({ label, value, tone, featured }: { label: string; value: ReactNode; tone?: 'good' | 'bad' | 'purple' | 'gray'; featured?: boolean }) {
+  const slug = testidSlug(label)
   if (featured) {
     return (
-      <div style={{
+      <div data-testid={`metric-${slug}`} style={{
         borderRadius: 14, padding: '14px 16px',
         background: 'radial-gradient(120% 130% at 100% 0%, rgba(34,197,94,0.22), transparent 55%), linear-gradient(135deg, #0f0820, #1a0f2e 55%, #16281f)',
         color: '#fff',
@@ -8698,7 +8704,7 @@ function RpKpi({ label, value, tone, featured }: { label: string; value: ReactNo
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'rgba(255,255,255,0.6)' }}>
           <span style={{ width: 6, height: 6, borderRadius: 999, background: '#86efac' }} />{label}
         </div>
-        <div className="tl2-mono-display" style={{ marginTop: 8, fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>{value}</div>
+        <div data-testid={`metric-${slug}-value`} className="tl2-mono-display" style={{ marginTop: 8, fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>{value}</div>
       </div>
     )
   }
@@ -8710,7 +8716,7 @@ function RpKpi({ label, value, tone, featured }: { label: string; value: ReactNo
     bad: 'linear-gradient(180deg, var(--bad-50), #fff 70%)',
   }
   return (
-    <div style={{
+    <div data-testid={`metric-${slug}`} style={{
       borderRadius: 14, padding: '14px 16px',
       background: (tone && bgMap[tone]) || '#fff',
       border: '1px solid var(--border-soft)',
@@ -8719,7 +8725,7 @@ function RpKpi({ label, value, tone, featured }: { label: string; value: ReactNo
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'var(--ink-500)' }}>
         <span style={{ width: 6, height: 6, borderRadius: 999, background: tone ? dotColor[tone] : 'var(--ink-300)' }} />{label}
       </div>
-      <div className="tl2-mono-display" style={{ marginTop: 8, fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--ink-900)' }}>{value}</div>
+      <div data-testid={`metric-${slug}-value`} className="tl2-mono-display" style={{ marginTop: 8, fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--ink-900)' }}>{value}</div>
     </div>
   )
 }
@@ -8981,14 +8987,14 @@ function ReportsScreen() {
           No afectan el resultado
         </span>
         {[
-          ['Retiros', range ? money(range.withdrawalsTotal, 'MXN') : '—'],
-          ['Préstamos', range ? money(range.advancesTotal, 'MXN') : '—'],
-          ['Cortesías', range ? String(range.courtesyCount) : '—'],
-          ['Anulados', range ? String(range.voidedCount) : '—'],
-        ].map(([k, v]) => (
+          ['Retiros', range ? money(range.withdrawalsTotal, 'MXN') : '—', 'retiros'],
+          ['Préstamos', range ? money(range.advancesTotal, 'MXN') : '—', 'prestamos'],
+          ['Cortesías', range ? String(range.courtesyCount) : '—', 'cortesias'],
+          ['Anulados', range ? String(range.voidedCount) : '—', 'anulados'],
+        ].map(([k, v, tid]) => (
           <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--ink-600)' }}>
             <span style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--ink-300)' }} />
-            {k} <b className="tl2-mono-display" style={{ color: 'var(--ink-900)' }}>{v}</b>
+            {k} <b data-testid={`report-pill-${tid}`} className="tl2-mono-display" style={{ color: 'var(--ink-900)' }}>{v}</b>
           </span>
         ))}
       </div>
