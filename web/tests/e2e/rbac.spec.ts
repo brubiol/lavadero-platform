@@ -14,21 +14,22 @@ test('OPERADOR only sees daily operation navigation and is blocked from owner sc
   await expect(page.getByTestId('nav-gastos')).toBeVisible()
   await expect(page.getByTestId('nav-nomina')).not.toBeVisible()
   await expect(page.getByTestId('nav-reportes')).not.toBeVisible()
-  await expect(page.getByTestId('nav-auditoria')).not.toBeVisible()
+  await expect(page.getByTestId('nav-vigilancia')).not.toBeVisible()
 
   await page.goto('/reportes')
   await expect(page.getByText('Sin permiso')).toBeVisible()
 })
 
-test('GERENTE can access payroll but not DUENO-only reports and audit', async ({ page }) => {
+test('GERENTE can access payroll and reports but not DUENO-only audit', async ({ page }) => {
   await loginAs(page, 'e2e_gerente', 'e2egerente123')
 
   await expect(page.getByTestId('nav-nomina')).toBeVisible()
   await expect(page.getByTestId('nav-catalogos')).toBeVisible()
-  await expect(page.getByTestId('nav-reportes')).not.toBeVisible()
+  await expect(page.getByTestId('nav-reportes')).toBeVisible()
+  await expect(page.getByTestId('nav-vigilancia')).not.toBeVisible()
 
   await page.getByTestId('nav-nomina').click()
-  await expect(page.getByRole('heading', { name: 'Nómina' })).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByRole('heading', { name: 'Nómina', exact: true })).toBeVisible({ timeout: 8_000 })
 
   await page.goto('/auditoria')
   await expect(page.getByText('Sin permiso')).toBeVisible()
@@ -38,7 +39,7 @@ test('DUENO can access owner screens', async ({ page }) => {
   await loginAs(page, 'dueno', 'cambia-esto-123')
 
   await expect(page.getByTestId('nav-reportes')).toBeVisible()
-  await expect(page.getByTestId('nav-auditoria')).toBeVisible()
+  await expect(page.getByTestId('nav-vigilancia')).toBeVisible()
   await page.getByTestId('nav-reportes').click()
   await expect(page.getByRole('heading', { name: 'Reportes' })).toBeVisible({ timeout: 8_000 })
 })

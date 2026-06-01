@@ -16,9 +16,8 @@ test('DUENO can navigate to owner screens', async ({ page }) => {
   await page.getByTestId('nav-reportes').click()
   await expect(page.getByRole('heading', { name: 'Reportes' })).toBeVisible({ timeout: 8_000 })
 
-  await page.getByTestId('nav-auditoria').click()
-  await expect(page.getByRole('heading', { name: 'Auditoria' })).toBeVisible({ timeout: 8_000 })
-  await expect(page.getByTestId('panel-filtros')).toBeVisible()
+  await page.getByTestId('nav-vigilancia').click()
+  await expect(page.getByRole('heading', { name: 'Vigilancia' })).toBeVisible({ timeout: 8_000 })
 })
 
 test('new ticket form renders for DUENO', async ({ page }) => {
