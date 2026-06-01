@@ -5569,7 +5569,15 @@ function TicketWorkspace({
                 setCortesia(on)
               } else if (m === 'oferta') {
                 if (ofertaMode !== 'none') clearOferta()
-                else setOfertaOpen(true)
+                else {
+                  // Entering Oferta selection must clear any other active mode
+                  // first — otherwise a previously-applied Cortesía keeps the
+                  // price comped to $0 while the cashier picks the tier.
+                  form.setValue('courtesy', false, { shouldValidate: true })
+                  form.setValue('courtesyReason', '')
+                  clearPrepagoFields()
+                  setOfertaOpen(true)
+                }
               } else {
                 if (watched.prepagoActive) clearPrepagoFields()
                 else activatePrepago()
