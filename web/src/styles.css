@@ -2308,3 +2308,31 @@ td .cat-pricecell { margin-left: auto; }
   font-size: 11px; font-weight: 700;
 }
 .pr-debt button:hover { background: var(--warn-100); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Accessibility & responsive hardening (review fixes)
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Reduced motion — neutralize decorative CSS animations/transitions for users
+   who request it. (Note: JS count-up animations also need a prefers-reduced-motion
+   guard in their requestAnimationFrame loop — see the anim* counters in App.tsx.) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Mobile dense tables — on narrow screens, tighten cell padding/size so columns
+   don't squish. For tables that still overflow, wrap them in <div class="tl-tbl-scroll">
+   to get horizontal scroll without breaking column alignment. */
+.tl-tbl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tl-tbl-scroll > .tl-tbl { min-width: 560px; }
+@media (max-width: 640px) {
+  .tl-tbl { font-size: 12px; }
+  .tl-tbl thead th, .tl-tbl tbody td { padding: 9px 8px; }
+  .tl-tbl thead th:first-child, .tl-tbl tbody td:first-child { padding-left: 12px; }
+  .tl-tbl thead th:last-child, .tl-tbl tbody td:last-child { padding-right: 12px; }
+}
