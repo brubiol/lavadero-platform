@@ -682,23 +682,23 @@ const expenseCategories: ExpenseCategory[] = [
 ]
 
 const ticketSchema = z.object({
-  businessDayId: z.coerce.number().positive('Abre un dia de trabajo primero'),
+  businessDayId: z.coerce.number().positive('Abre un día de trabajo primero'),
   shiftId: z.coerce.number().positive('Selecciona un turno abierto'),
   serviceTypeId: z.coerce.number().positive('Selecciona un servicio'),
   vehicleSizeId: z.coerce.number().positive('Selecciona un tamaño'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
-  vehicleDescription: z.string().max(160, 'Maximo 160 caracteres').optional(),
-  notes: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  vehicleDescription: z.string().max(160, 'Máximo 160 caracteres').optional(),
+  notes: z.string().max(500, 'Máximo 500 caracteres').optional(),
   courtesy: z.boolean().default(false),
-  courtesyReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
-  discountPercent: z.coerce.number().min(0, 'Minimo 0').max(100, 'Maximo 100').default(0),
+  courtesyReason: z.string().max(500, 'Máximo 500 caracteres').optional(),
+  discountPercent: z.coerce.number().min(0, 'Mínimo 0').max(100, 'Máximo 100').default(0),
   employeeIds: z.array(z.coerce.number()).min(1, 'Selecciona al menos un lavador'),
   occurredAt: z.string().optional(),
-  internalRef: z.string().max(40, 'Maximo 40 caracteres').optional(),
-  priceOverride: z.coerce.number().min(0, 'Minimo $0').optional().or(z.literal('')),
-  surchargeAmount: z.coerce.number().min(0, 'Minimo $0').optional().or(z.literal('')),
-  surchargeReason: z.string().max(120, 'Maximo 120 caracteres').optional(),
-  discountReason: z.string().max(120, 'Maximo 120 caracteres').optional(),
+  internalRef: z.string().max(40, 'Máximo 40 caracteres').optional(),
+  priceOverride: z.coerce.number().min(0, 'Mínimo $0').optional().or(z.literal('')),
+  surchargeAmount: z.coerce.number().min(0, 'Mínimo $0').optional().or(z.literal('')),
+  surchargeReason: z.string().max(120, 'Máximo 120 caracteres').optional(),
+  discountReason: z.string().max(120, 'Máximo 120 caracteres').optional(),
   // Prepago = redeeming a prepaid package nota. The base was already paid at
   // sale; we capture the nota (internalRef) and the extra to collect (priceOverride).
   prepagoActive: z.boolean().default(false),
@@ -715,31 +715,31 @@ const ticketSchema = z.object({
 type TicketFormValues = z.infer<typeof ticketSchema>
 
 const voidSchema = z.object({
-  reason: z.string().min(1, 'Escribe el motivo').max(500, 'Maximo 500 caracteres'),
+  reason: z.string().min(1, 'Escribe el motivo').max(500, 'Máximo 500 caracteres'),
 })
 
 type VoidFormValues = z.infer<typeof voidSchema>
 
 const codeSchema = z.string()
   .min(1, 'Escribe un codigo')
-  .max(40, 'Maximo 40 caracteres')
+  .max(40, 'Máximo 40 caracteres')
   .regex(/^[A-Z0-9_]+$/, 'Usa mayusculas, numeros o guion bajo')
 
 const employeeSchema = z.object({
-  fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
-  phone: z.string().max(40, 'Maximo 40 caracteres').optional(),
-  baseWeeklySalary: z.coerce.number().min(0, 'Minimo 0'),
+  fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
+  phone: z.string().max(40, 'Máximo 40 caracteres').optional(),
+  baseWeeklySalary: z.coerce.number().min(0, 'Mínimo 0'),
   payrollType: z.enum(['SALARY', 'COMMISSION']),
-  commissionRate: z.coerce.number().min(0, 'Minimo 0'),
-  productivityBonusRate: z.coerce.number().min(0, 'Minimo 0'),
+  commissionRate: z.coerce.number().min(0, 'Mínimo 0'),
+  productivityBonusRate: z.coerce.number().min(0, 'Mínimo 0'),
 })
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>
 
 const serviceTypeSchema = z.object({
   code: codeSchema,
-  name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
-  description: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  name: z.string().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
+  description: z.string().max(500, 'Máximo 500 caracteres').optional(),
   category: z.enum(['STANDARD', 'EXTRA']).default('STANDARD'),
 })
 
@@ -747,8 +747,8 @@ type ServiceTypeFormValues = z.infer<typeof serviceTypeSchema>
 
 const vehicleSizeSchema = z.object({
   code: codeSchema,
-  name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
-  sortOrder: z.coerce.number().int('Debe ser numero entero').min(0, 'Minimo 0'),
+  name: z.string().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
+  sortOrder: z.coerce.number().int('Debe ser número entero').min(0, 'Mínimo 0'),
   category: z.enum(['AUTO', 'MOTO', 'RAZR', 'PERSONAL']).default('AUTO'),
 })
 
@@ -776,7 +776,7 @@ const expenseSchema = z.object({
   shiftId: z.coerce.number().optional(),
   category: z.enum(expenseCategories),
   amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
-  description: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  description: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })
 
 type ExpenseFormValues = z.infer<typeof expenseSchema>
@@ -786,7 +786,7 @@ const withdrawalSchema = z.object({
   businessDayId: z.coerce.number().optional(),
   shiftId: z.coerce.number().optional(),
   amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
-  reason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })
 
 type WithdrawalFormValues = z.infer<typeof withdrawalSchema>
@@ -797,7 +797,7 @@ const advanceSchema = z.object({
   shiftId: z.coerce.number().optional(),
   employeeId: z.coerce.number().positive('Selecciona lavador'),
   amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
-  reason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  reason: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })
 
 type AdvanceFormValues = z.infer<typeof advanceSchema>
@@ -821,7 +821,7 @@ const cashCountSchema = z.object({
 type CashCountFormValues = z.infer<typeof cashCountSchema>
 
 const closeShiftSchema = z.object({
-  closingReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  closingReason: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })
 
 type CloseShiftFormValues = z.infer<typeof closeShiftSchema>
@@ -836,16 +836,16 @@ const payrollAdjustmentSchema = z.object({
   employeeId: z.coerce.number().positive('Selecciona lavador'),
   type: z.enum(['EARNING', 'DEDUCTION']),
   amount: z.coerce.number().positive('El monto debe ser mayor que 0'),
-  concept: z.string().min(1, 'Selecciona concepto').max(80, 'Maximo 80 caracteres'),
-  note: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  concept: z.string().min(1, 'Selecciona concepto').max(80, 'Máximo 80 caracteres'),
+  note: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })
 
 type PayrollAdjustmentFormValues = z.infer<typeof payrollAdjustmentSchema>
 
 const productSchema = z.object({
-  name: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
-  sku: z.string().max(60, 'Maximo 60 caracteres').optional(),
-  currentUnitPrice: z.coerce.number().min(0, 'Minimo 0'),
+  name: z.string().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
+  sku: z.string().max(60, 'Máximo 60 caracteres').optional(),
+  currentUnitPrice: z.coerce.number().min(0, 'Mínimo 0'),
   trackInventory: z.boolean().default(true),
   active: z.boolean().default(true),
   category: z.enum(['AROMA', 'SNACK', 'OTRO']).default('OTRO'),
@@ -868,7 +868,7 @@ type ProductFormValues = z.infer<typeof productSchema>
 const inventorySaleSchema = z.object({
   productId: z.coerce.number().positive('Selecciona producto'),
   quantity: z.coerce.number().positive('Cantidad mayor que 0'),
-  unitPrice: z.coerce.number().min(0, 'Minimo 0').optional(),
+  unitPrice: z.coerce.number().min(0, 'Mínimo 0').optional(),
   movementDate: z.string().optional(),
   fiado: z.boolean().default(false),
   employeeId: z.coerce.number().optional(),
@@ -879,7 +879,7 @@ type InventorySaleFormValues = z.infer<typeof inventorySaleSchema>
 const inventoryPurchaseSchema = z.object({
   productId: z.coerce.number().positive('Selecciona producto'),
   quantity: z.coerce.number().positive('Cantidad mayor que 0'),
-  unitPrice: z.coerce.number().min(0, 'Minimo 0').optional(),
+  unitPrice: z.coerce.number().min(0, 'Mínimo 0').optional(),
   movementDate: z.string().optional(),
 })
 
@@ -888,20 +888,20 @@ type InventoryPurchaseFormValues = z.infer<typeof inventoryPurchaseSchema>
 const inventoryAdjustmentSchema = z.object({
   productId: z.coerce.number().positive('Selecciona producto'),
   quantity: z.coerce.number().refine((value) => value !== 0, 'Cantidad no puede ser 0'),
-  reason: z.string().min(1, 'El ajuste requiere motivo').max(500, 'Maximo 500 caracteres'),
+  reason: z.string().min(1, 'El ajuste requiere motivo').max(500, 'Máximo 500 caracteres'),
   movementDate: z.string().optional(),
 })
 
 type InventoryAdjustmentFormValues = z.infer<typeof inventoryAdjustmentSchema>
 
 const analystChatSchema = z.object({
-  message: z.string().min(1, 'Escribe una pregunta').max(500, 'Maximo 500 caracteres'),
+  message: z.string().min(1, 'Escribe una pregunta').max(500, 'Máximo 500 caracteres'),
 })
 
 type AnalystChatFormValues = z.infer<typeof analystChatSchema>
 
 const investigationSchema = z.object({
-  question: z.string().min(1, 'Escribe que investigar').max(500, 'Maximo 500 caracteres'),
+  question: z.string().min(1, 'Escribe que investigar').max(500, 'Máximo 500 caracteres'),
 })
 
 type InvestigationFormValues = z.infer<typeof investigationSchema>
@@ -961,13 +961,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       })
     } else {
       writeStoredAuth(null)
-      throw new Error('Sesion expirada. Por favor vuelve a iniciar sesion.')
+      throw new Error('Sesión expirada. Por favor vuelve a iniciar sesión.')
     }
   }
   if (!response.ok) {
     if (response.status === 401) {
       writeStoredAuth(null)
-      throw new Error('Sesion expirada. Por favor vuelve a iniciar sesion.')
+      throw new Error('Sesión expirada. Por favor vuelve a iniciar sesión.')
     }
     const body = await response.json().catch(() => ({}))
     throw new Error(body.error || `Error ${response.status}`)
@@ -2919,18 +2919,24 @@ function EndOfDayScreen() {
         <div style={{ position: 'absolute', inset: 0, opacity: 0.06, pointerEvents: 'none', backgroundImage: 'radial-gradient(rgba(255,255,255,0.85) 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
         <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'rgba(255,255,255,0.55)' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'rgba(255,255,255,0.72)' }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--brand-green-bright)', boxShadow: '0 0 8px rgba(34,197,94,0.7)' }} />
               {data.currentBusinessDay ? 'EN OPERACIÓN' : 'SIN DÍA ABIERTO'} · {today}
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.72)', marginTop: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Resultado de hoy
             </div>
             <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              {daily && result != null && result < 0 && (
+                <span
+                  aria-hidden
+                  style={{ fontFamily: 'var(--font-display)', fontSize: 52, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: '#fda4af' }}
+                >−</span>
+              )}
               <span
                 style={{
                   fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700,
-                  color: result == null ? 'rgba(255,255,255,0.45)' : result >= 0 ? 'rgba(134,239,172,0.6)' : 'rgba(252,165,165,0.6)',
+                  color: result == null ? 'rgba(255,255,255,0.45)' : result >= 0 ? 'rgba(134,239,172,0.85)' : 'rgba(252,165,165,0.85)',
                 }}
               >$</span>
               <span
@@ -2943,6 +2949,21 @@ function EndOfDayScreen() {
               >
                 {daily ? Math.round(Math.abs(result ?? 0)).toLocaleString('es-MX') : '—'}
               </span>
+              {daily && result != null && (
+                <span
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'center', marginLeft: 8,
+                    padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 800,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: result >= 0 ? 'rgba(134,239,172,0.16)' : 'rgba(252,165,165,0.16)',
+                    border: `1px solid ${result >= 0 ? 'rgba(134,239,172,0.4)' : 'rgba(252,165,165,0.4)'}`,
+                    color: result >= 0 ? '#bbf7d0' : '#fecaca',
+                  }}
+                >
+                  <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>{result >= 0 ? '▲' : '▼'}</span>
+                  {result >= 0 ? 'Ganancia' : 'Pérdida'}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
@@ -2954,7 +2975,7 @@ function EndOfDayScreen() {
             ].map((s) => (
               <div key={s.k} style={{ textAlign: 'right' }}>
                 <div className="tl2-mono-display" style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: s.c }}>{s.v}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'rgba(255,255,255,0.45)' }}>{s.k}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'rgba(255,255,255,0.7)' }}>{s.k}</div>
               </div>
             ))}
           </div>
@@ -6527,18 +6548,18 @@ function TicketWorkspace({
 }
 
 const employeeEditSchema = z.object({
-  fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Maximo 120 caracteres'),
-  phone: z.string().max(40, 'Maximo 40 caracteres').optional(),
+  fullName: z.string().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
+  phone: z.string().max(40, 'Máximo 40 caracteres').optional(),
   active: z.boolean(),
-  baseWeeklySalary: z.coerce.number().min(0, 'Minimo 0'),
+  baseWeeklySalary: z.coerce.number().min(0, 'Mínimo 0'),
   payrollType: z.enum(['SALARY', 'COMMISSION']),
-  commissionRate: z.coerce.number().min(0, 'Minimo 0'),
-  productivityBonusRate: z.coerce.number().min(0, 'Minimo 0'),
-  deactivationReason: z.string().max(500, 'Maximo 500 caracteres').optional(),
+  commissionRate: z.coerce.number().min(0, 'Mínimo 0'),
+  productivityBonusRate: z.coerce.number().min(0, 'Mínimo 0'),
+  deactivationReason: z.string().max(500, 'Máximo 500 caracteres').optional(),
   primaryShift: z.enum(['MATUTINO', 'VESPERTINO', '']).optional(),
-  outOfShiftCommissionRate: z.coerce.number().min(0, 'Minimo 0'),
-  restDayPremium: z.coerce.number().min(0, 'Minimo 0'),
-  absenceDayPenalty: z.coerce.number().min(0, 'Minimo 0'),
+  outOfShiftCommissionRate: z.coerce.number().min(0, 'Mínimo 0'),
+  restDayPremium: z.coerce.number().min(0, 'Mínimo 0'),
+  absenceDayPenalty: z.coerce.number().min(0, 'Mínimo 0'),
 })
 type EmployeeEditFormValues = z.infer<typeof employeeEditSchema>
 
@@ -7866,18 +7887,18 @@ function ShiftCloseScreen() {
                   {closeMutation.isPending ? 'Cerrando...' : summary?.closed ? '✓ Turno cerrado' : 'Cerrar turno'}
                 </Button>
                 {hasRole('DUENO') && summary?.closed && (
-                  <Button
+                  <ReasonAction
                     kind="secondary"
                     size="lg"
                     block
-                    disabled={reopenMutation.isPending}
-                    onClick={() => {
-                      const reason = window.prompt('Motivo para reabrir el turno cerrado')
-                      if (reason?.trim()) reopenMutation.mutate(reason.trim())
-                    }}
-                  >
-                    {reopenMutation.isPending ? 'Reabriendo...' : 'Reabrir turno'}
-                  </Button>
+                    pending={reopenMutation.isPending}
+                    label="Reabrir turno"
+                    pendingLabel="Reabriendo..."
+                    title="Reabrir turno cerrado"
+                    prompt="Vas a reabrir un turno que ya estaba cerrado. La acción queda registrada en la bitácora con tu nombre y la hora."
+                    confirmLabel="Reabrir turno"
+                    onConfirm={(reason) => reopenMutation.mutate(reason)}
+                  />
                 )}
               </form>
             </div>
@@ -10291,9 +10312,17 @@ function PayrollScreen() {
                 <ILock size={14} /> Esta semana ya está cerrada y pagada
               </span>
               {hasRole('DUENO') && (
-                <Button kind="ghost" size="sm" disabled={unlock.isPending} onClick={() => { const reason = window.prompt('Motivo para reabrir la nómina'); if (reason?.trim()) unlock.mutate(reason.trim()) }}>
-                  Reabrir
-                </Button>
+                <ReasonAction
+                  kind="ghost"
+                  size="sm"
+                  pending={unlock.isPending}
+                  label="Reabrir"
+                  pendingLabel="Reabriendo…"
+                  title="Reabrir nómina cerrada"
+                  prompt="Vas a reabrir una semana de nómina que ya estaba cerrada y pagada. La acción queda registrada en la bitácora."
+                  confirmLabel="Reabrir nómina"
+                  onConfirm={(reason) => unlock.mutate(reason)}
+                />
               )}
             </div>
           )}
@@ -10706,8 +10735,8 @@ function calculateCashCount(values: CashCountFormValues) {
 
 const packageSchema = z.object({
   shiftId: z.coerce.number().positive('Selecciona un turno'),
-  washesIncluded: z.coerce.number().int().min(1, 'Minimo 1'),
-  amount: z.coerce.number().min(0.01, 'Minimo $0.01'),
+  washesIncluded: z.coerce.number().int().min(1, 'Mínimo 1'),
+  amount: z.coerce.number().min(0.01, 'Mínimo $0.01'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
   notes: z.string().max(500).optional(),
 })
@@ -11524,7 +11553,7 @@ function AdvanceModal({ data, onClose, editing }: { data: ReturnType<typeof useP
         <EditModalActions
           isEdit={isEdit}
           onClose={onClose}
-          submitLabel={mutation.isPending ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Guardar prestamo'}
+          submitLabel={mutation.isPending ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Guardar préstamo'}
           confirmDelete={confirmDelete}
           setConfirmDelete={setConfirmDelete}
           onDelete={() => deleteMutation.mutate()}
@@ -12130,6 +12159,55 @@ function Modal({ title, children, onClose, narrow = false }: { title: string; ch
       </div>
     </div>,
     document.body,
+  )
+}
+
+// Reusable "reabrir / confirmar con motivo" action. Replaces native window.prompt()
+// for sensitive, audited actions — styled modal + required reason, no parent state.
+function ReasonAction({
+  label, pendingLabel, pending, title, prompt, confirmLabel,
+  kind = 'secondary', size, block, onConfirm,
+}: {
+  label: string
+  pendingLabel: string
+  pending: boolean
+  title: string
+  prompt: string
+  confirmLabel: string
+  kind?: React.ComponentProps<typeof Button>['kind']
+  size?: React.ComponentProps<typeof Button>['size']
+  block?: boolean
+  onConfirm: (reason: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  return (
+    <>
+      <Button kind={kind} size={size} block={block} disabled={pending} onClick={() => { setReason(''); setOpen(true) }}>
+        {pending ? pendingLabel : label}
+      </Button>
+      {open && (
+        <Modal title={title} narrow onClose={() => setOpen(false)}>
+          <div className="space-y-4">
+            <p className="text-[13px] leading-relaxed text-ink-600">{prompt}</p>
+            <Field label="Motivo (queda en la bitácora)">
+              <textarea
+                className="tl-input"
+                rows={3}
+                autoFocus
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Escribe el motivo…"
+              />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button kind="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button kind="primary" disabled={!reason.trim()} onClick={() => { onConfirm(reason.trim()); setOpen(false) }}>{confirmLabel}</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   )
 }
 
