@@ -5104,12 +5104,14 @@ function KbdHint({ keys, label, sep }: { keys: string[]; label: string; sep?: st
 // page header actions area. Single button collapses into chip + three
 // reveal pills (Cortesía / Oferta / Prepago) with sliding animation.
 // ─────────────────────────────────────────────────────────────────────
-type TicketPromoMode = 'cortesia' | 'oferta' | 'prepago' | null
+// Header now mirrors the design: two top modes — Cortesía and the "Cliente
+// frecuente" umbrella. Oferta (notas) and Prepago (paquete) are chosen from a
+// nested 2-pill selector once Cliente frecuente is active, not as top pills.
+type TicketPromoMode = 'cortesia' | 'frecuente' | null
 
 const PROMO_OPTS: Array<{ id: NonNullable<TicketPromoMode>; label: string; dot: string; bg: string; tx: string; br: string }> = [
-  { id: 'cortesia', label: 'Cortesía', dot: '#f59e0b', bg: 'var(--warn-50)',    tx: 'var(--warn-700)',    br: '#f59e0b' },
-  { id: 'oferta',   label: 'Oferta',   dot: '#22c55e', bg: 'var(--good-50)',    tx: 'var(--good-700)',    br: '#22c55e' },
-  { id: 'prepago',  label: 'Prepago',  dot: '#8b5cf6', bg: 'var(--primary-50)', tx: 'var(--primary-700)', br: '#8b5cf6' },
+  { id: 'cortesia',  label: 'Cortesía',          dot: '#f59e0b', bg: 'var(--warn-50)',    tx: 'var(--warn-700)',    br: '#f59e0b' },
+  { id: 'frecuente', label: 'Cliente frecuente', dot: '#8b5cf6', bg: 'var(--primary-50)', tx: 'var(--primary-700)', br: '#8b5cf6' },
 ]
 
 function TicketPromoSelector({ active, onPick }: { active: TicketPromoMode; onPick: (m: NonNullable<TicketPromoMode>) => void }) {
@@ -5580,29 +5582,28 @@ function TicketWorkspace({
         <div className="tl2-page-header__right">
           <TicketPromoSelector
             active={
-              watched.courtesy && ofertaMode === 'none' && !watched.prepagoActive ? 'cortesia'
-                : ofertaMode !== 'none' ? 'oferta'
-                : watched.prepagoActive ? 'prepago'
+              watched.courtesy && ofertaMode === 'none' && !ofertaOpen && !watched.prepagoActive ? 'cortesia'
+                : ofertaOpen || ofertaMode !== 'none' || watched.prepagoActive ? 'frecuente'
                 : null
             }
             onPick={(m) => {
               if (m === 'cortesia') {
-                const on = !(watched.courtesy && ofertaMode === 'none' && !watched.prepagoActive)
-                setCortesia(on)
-              } else if (m === 'oferta') {
-                if (ofertaMode !== 'none') clearOferta()
-                else {
-                  // Entering Oferta selection must clear any other active mode
-                  // first — otherwise a previously-applied Cortesía keeps the
-                  // price comped to $0 while the cashier picks the tier.
+                const cortesiaOn = watched.courtesy && ofertaMode === 'none' && !ofertaOpen && !watched.prepagoActive
+                setCortesia(!cortesiaOn)
+              } else {
+                // Cliente frecuente — umbrella over Oferta (notas) + Prepago.
+                const frecuenteOn = ofertaOpen || ofertaMode !== 'none' || watched.prepagoActive
+                if (frecuenteOn) {
+                  clearOferta()
+                  clearPrepagoFields()
+                } else {
+                  // Default benefit is Oferta por notas; the nested selector
+                  // switches to Prepago. Clear any comped/prepago state first.
                   form.setValue('courtesy', false, { shouldValidate: true })
                   form.setValue('courtesyReason', '')
                   clearPrepagoFields()
                   setOfertaOpen(true)
                 }
-              } else {
-                if (watched.prepagoActive) clearPrepagoFields()
-                else activatePrepago()
               }
             }}
           />
@@ -5644,6 +5645,49 @@ function TicketWorkspace({
                   : undefined,
             }}
           >
+            {/* Cliente frecuente — nested benefit selector (Oferta por notas o Prepago).
+                Mirrors the design: two top modes (Cortesía / Cliente frecuente), and the
+                oferta-vs-prepago choice lives here once Cliente frecuente is active. */}
+            {(ofertaOpen || ofertaMode !== 'none' || watched.prepagoActive) && (
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-border-soft px-4 pt-3 pb-3" style={{ background: 'linear-gradient(180deg, rgba(237,233,254,0.5), #fff 85%)' }}>
+                <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-primary-500" />
+                <span className="text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-primary-700">Cliente frecuente</span>
+                <span className="text-[11px] text-ink-500">¿qué beneficio usa?</span>
+                <div className="ml-auto inline-flex gap-0.5 rounded-full border border-primary-100 bg-white p-[3px]">
+                  {([['oferta', 'Oferta por notas'], ['prepago', 'Prepago']] as const).map(([k, lbl]) => {
+                    const on = k === 'prepago' ? watched.prepagoActive : !watched.prepagoActive
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        className="tl2-press"
+                        onClick={() => {
+                          if (k === 'prepago') {
+                            if (!watched.prepagoActive) activatePrepago()
+                          } else if (watched.prepagoActive) {
+                            clearPrepagoFields()
+                            form.setValue('courtesy', false, { shouldValidate: true })
+                            form.setValue('courtesyReason', '')
+                            setOfertaOpen(true)
+                          }
+                        }}
+                        style={{
+                          padding: '5px 14px', borderRadius: 999, border: 0, cursor: 'pointer',
+                          fontFamily: 'inherit', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                          background: on ? 'var(--primary-600)' : 'transparent',
+                          color: on ? '#fff' : 'var(--primary-700)',
+                          boxShadow: on ? '0 4px 10px -4px rgba(124,58,237,0.5)' : 'none',
+                          transition: 'all .2s ease',
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Oferta selection popover — when user picks Oferta from PromoSelector
                 but hasn't chosen 5 vs 10 notas yet. Sits above the form. */}
             {ofertaOpen && ofertaMode === 'none' && (
