@@ -5196,6 +5196,7 @@ function TicketWorkspace({
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<string | null>(null)
   const [lavadorQuery, setLavadorQuery] = useState('')
+  const [washerFocus, setWasherFocus] = useState(false)
   // Oferta = loyalty stamp card. Customer brings back N previous nota
   // receipts; 5 notas = half wash off, 10 notas = full wash free. We store
   // the mode locally and translate to discount/courtesy on the underlying
@@ -6140,8 +6141,24 @@ function TicketWorkspace({
                       num={4}
                       text="LAVADORES"
                       accent="emerald"
-                      extra={selectedIds.length > 0 ? `· ${selectedIds.length} asignados` : '· tap para asignar'}
+                      extra={selectedIds.length > 0 ? `· ${selectedIds.length} asignados` : '· escribe para buscar'}
                     />
+                    {selectedIds.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {selectedIds.map((id) => {
+                          const emp = allLavadores.find((e) => e.id === id)
+                          if (!emp) return null
+                          return (
+                            <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-600 bg-emerald-50 py-1 pl-3 pr-1 text-[12px] font-bold text-emerald-700">
+                              {emp.fullName.split(' ').slice(0, 2).join(' ')}
+                              <button type="button" onClick={() => toggle(id)} title="Quitar" aria-label={`Quitar ${emp.fullName}`} className="grid h-4 w-4 place-items-center rounded-full border-0 bg-emerald-600 p-0 text-white">
+                                <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" /></svg>
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
                     <div className="mt-2 flex items-center gap-2 rounded-lg border border-border-soft bg-white px-3 py-1.5">
                       <svg className="h-3.5 w-3.5 text-ink-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <circle cx="11" cy="11" r="7" />
@@ -6151,7 +6168,9 @@ function TicketWorkspace({
                         type="text"
                         value={lavadorQuery}
                         onChange={(e) => setLavadorQuery(e.target.value)}
-                        placeholder="Buscar lavador…"
+                        onFocus={() => setWasherFocus(true)}
+                        onBlur={() => setTimeout(() => setWasherFocus(false), 150)}
+                        placeholder="Escribe un nombre para asignar lavador…"
                         data-testid="ticket-lavador-search"
                         className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] outline-none focus:ring-0"
                       />
@@ -6159,9 +6178,10 @@ function TicketWorkspace({
                         <button type="button" onClick={() => setLavadorQuery('')} className="text-[11px] text-ink-400 hover:text-ink-700">limpiar</button>
                       )}
                     </div>
-                    <div className="mt-2 overflow-hidden rounded-xl border border-border-soft bg-white" style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    {(washerFocus || lavadorQuery.trim()) && (
+                    <div className="mt-1.5 overflow-hidden rounded-xl border border-border-soft bg-white shadow-lg" style={{ maxHeight: 240, overflowY: 'auto' }}>
                       {filtered.length === 0 && (
-                        <div className="px-4 py-6 text-center text-[12px] text-ink-400">Sin lavadores activos</div>
+                        <div className="px-4 py-6 text-center text-[12px] text-ink-400">{lavadorQuery.trim() ? `Sin coincidencias para "${lavadorQuery.trim()}"` : 'Sin lavadores activos'}</div>
                       )}
                       {filtered.map((emp, i) => {
                         const on = selectedIds.includes(emp.id)
@@ -6170,6 +6190,7 @@ function TicketWorkspace({
                           <button
                             key={emp.id}
                             type="button"
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={() => toggle(emp.id)}
                             aria-pressed={on}
                             className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition-colors ${i === 0 ? '' : 'border-t border-ink-100'} ${
@@ -6202,6 +6223,7 @@ function TicketWorkspace({
                         )
                       })}
                     </div>
+                    )}
                     {form.formState.errors.employeeIds?.message && (
                       <p className="mt-1 text-xs text-red-600">{form.formState.errors.employeeIds.message}</p>
                     )}
