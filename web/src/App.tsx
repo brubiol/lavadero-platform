@@ -1133,7 +1133,7 @@ function AppShell() {
       />
       <MobileTopbar userName={auth.user.fullName} pageTitle={meta.title} />
 
-      <main className="tl-page px-4 pb-24 lg:px-6 lg:pb-8">
+      <main key={location.pathname} className="tl-page px-4 pb-24 lg:px-6 lg:pb-8">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/tickets/nuevo" element={<NewTicketScreen />} />
