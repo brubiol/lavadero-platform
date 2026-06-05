@@ -52,7 +52,7 @@ test('can create gasto, retiro, and prestamo from the UI', async ({ page }) => {
   await modal.getByLabel('Lavador').selectOption({ index: 1 })
   await modal.getByLabel('Monto').fill('60')
   await modal.getByLabel('Motivo').fill(advanceText)
-  await modal.getByRole('button', { name: 'Guardar prestamo' }).click()
+  await modal.getByRole('button', { name: 'Guardar préstamo' }).click()
   await expect(page.locator('tr').filter({ hasText: advanceText })).toBeVisible({ timeout: 8_000 })
 
   await expect(page.getByTestId('metric-gastos-value')).toBeVisible()
