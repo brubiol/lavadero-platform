@@ -38,9 +38,9 @@ Every claim below points to a real file in the repo. Click any of them to verify
 
 - **Correct domain modeling for money.** Append-only ledgers for advances, debt, and inventory movements — no `UPDATE` or `DELETE` on financial rows; corrections happen by inserting new entries. Effective-dated service prices snapshotted onto each ticket. Stock is *derived* from movements, never stored. See [api/src/main/java/com/lavadero/api/payroll/domain/DebtLedgerEntry.java](api/src/main/java/com/lavadero/api/payroll/domain/DebtLedgerEntry.java) and [api/src/main/java/com/lavadero/api/inventory/](api/src/main/java/com/lavadero/api/inventory/).
 
-- **Forward-only Flyway, never edited.** 44 migrations, all numbered, all immutable. New schema change = new file. See [api/src/main/resources/db/migration/](api/src/main/resources/db/migration/).
+- **Forward-only Flyway, never edited.** 62 migrations, all numbered, all immutable. New schema change = new file. See [api/src/main/resources/db/migration/](api/src/main/resources/db/migration/).
 
-- **Real test discipline.** 139 integration tests across 20 classes, all running against a real PostgreSQL via Testcontainers — no H2, no mocked repositories. See [api/src/test/java/com/lavadero/api/](api/src/test/java/com/lavadero/api/) and especially [ExcelOperationFlowsIntegrationTest.java](api/src/test/java/com/lavadero/api/ExcelOperationFlowsIntegrationTest.java).
+- **Real test discipline.** 192 integration tests across 31 classes, all running against a real PostgreSQL via Testcontainers — no H2, no mocked repositories. See [api/src/test/java/com/lavadero/api/](api/src/test/java/com/lavadero/api/) and especially [ExcelOperationFlowsIntegrationTest.java](api/src/test/java/com/lavadero/api/ExcelOperationFlowsIntegrationTest.java).
 
 - **AI features that aren't gimmicks.** The AI service is wired only to read-only report / cash / payroll / inventory services. There is no code path that lets it write to a financial table — enforced at the DI graph, not in prompt instructions. See [api/src/main/java/com/lavadero/api/ai/service/AiInsightService.java](api/src/main/java/com/lavadero/api/ai/service/AiInsightService.java).
 
@@ -58,7 +58,7 @@ Every claim below points to a real file in the repo. Click any of them to verify
 | Framework | Spring Boot 3.4 + Spring Web MVC | Package-by-feature monolith |
 | Security | Spring Security 6 + OAuth2 Resource Server | HMAC-SHA256 JWT, refresh-token rotation, `@PreAuthorize` hierarchy |
 | Persistence | Spring Data JPA + PostgreSQL 16 | Append-only ledgers, no denormalized totals |
-| Migrations | Flyway | 44 forward-only, never edited |
+| Migrations | Flyway | 62 forward-only, never edited |
 | Validation | Jakarta Bean Validation | `@NotNull`, `@DecimalMin`, `@Pattern` on every request DTO |
 | API docs | Springdoc OpenAPI | `/swagger-ui.html` |
 | Excel | Apache POI 5.3 | 8-sheet workbook exports, round-trip tested |
@@ -72,12 +72,12 @@ Every claim below points to a real file in the repo. Click any of them to verify
 
 ### By the numbers
 
-- **150 commits** in **~3 weeks** (May 2 → May 23, 2026), solo
-- **44 Flyway migrations** (V1 → V44, never edited after applied)
-- **139 integration tests** across **20 classes**, all on real Postgres
+- **Solo build**, shipped over ~5 weeks (May–June 2026) and still iterating against real daily use
+- **62 Flyway migrations** (V1 → V62, never edited after applied)
+- **192 integration tests** across **31 classes**, all on real Postgres
 - **18 bounded contexts** in the API (`ai/`, `attendance/`, `audit/`, `auth/`, `cash/`, `catalog/`, `corrections/`, `customers/`, `inventory/`, `money/`, `operations/`, `oversight/`, `payroll/`, `reports/`, `security/`, …)
-- **15 frontend routes**, **9 Playwright e2e specs**
-- **~8.1k LoC** in the frontend (single `App.tsx` + small `components/` set)
+- **16 frontend routes**, **9 Playwright e2e specs**
+- **~14k LoC** in the frontend (single `App.tsx` + small `components/` set)
 - **1 live production deployment**, **0 unresolved incidents**
 
 ---
@@ -152,6 +152,16 @@ Scripts I can speak to in a behavioral / technical screen. Each ends in a verifi
 
 **Result.** Tests green, copy correct, and the slugify change is now a guard rail for future Spanish-accent additions. See [`web/src/components/ui.tsx`](web/src/components/ui.tsx) (slugify).
 
+### 6. "I couldn't see how a ticket's price was built, or what the washer earned"
+
+**Situation.** Add-ons (Encerado, Lavado de Motor) were folded into a single price override with a text note, so the ticket view just showed one opaque "precio especial." The owner also couldn't see what a lavador earned from a given car — and assumed it was a percentage when it's actually a flat rate.
+
+**Task.** Make every ticket's price math fully legible, surface per-washer pay, and ship the customer-facing features the owner kept asking for — without breaking the corte/payroll math.
+
+**Action.** Persisted add-ons as structured, server-priced line items (`ticket_extras`, V61) so the ticket view reconstructs `base → + each extra → total`, robust to later catalog price changes. Exposed each assignment's estimated per-car pay by reading the real payroll model (a flat `$/car`, split by share, *not* a percent of the sale — verified against `PayrollService`, not a summary). Added customer **car-on-file** and **prepaid packages** (V62): a size-locked block of washes that decrements on each visit and warns + charges the difference when a bigger car shows up than the package was bought for. Plus a do-not-rehire flag so a washer who left on bad terms is remembered. All landed behind the 192-test gate.
+
+**Result.** A cashier opening any ticket now sees exactly what was charged and why, and what each washer made on it; the owner can sell and redeem packages with built-in anti-abuse on vehicle size. See [`operations/web/TicketDtos.java`](api/src/main/java/com/lavadero/api/operations/web/TicketDtos.java) and [`customers/service/CustomerPackageService.java`](api/src/main/java/com/lavadero/api/customers/service/CustomerPackageService.java).
+
 ---
 
 ## Try the live app
@@ -218,10 +228,10 @@ lavadero-api/
 │   │   ├── cash/                         Cash counts + shift close summaries
 │   │   ├── catalog/                      Employees, services, vehicle taxonomy, prices
 │   │   ├── corrections/                  Supervised post-shift corrections
-│   │   ├── customers/                    CRM + loyalty passport
+│   │   ├── customers/                    CRM, loyalty passport, car-on-file, prepaid packages
 │   │   ├── inventory/                    Products + append-only movements
 │   │   ├── money/                        Expenses, withdrawals, advances, debt repayments
-│   │   ├── operations/                   Business days, shifts, tickets, prepaid packages
+│   │   ├── operations/                   Business days, shifts, tickets, itemized add-ons, prepaid packages
 │   │   ├── oversight/                    Vigilancia — anti-theft patterns
 │   │   ├── payroll/                      Periods, entries, debt ledger
 │   │   ├── reports/                      Daily / monthly / historical + Excel export

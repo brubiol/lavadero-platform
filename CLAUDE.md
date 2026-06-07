@@ -226,8 +226,13 @@ Never commit or paste a real API key into source, docs, frontend code, or logs. 
 | V13 | Catalog setup |
 | V14 | Handoff-ready catalog and inventory defaults |
 | V15 | AI insights table, enums, indexes |
+| V16–V60 | Incremental: CRM, shift-close advances, payroll rules/adjustments/salary breakdown, attendance, price override, surcharge + vehicle taxonomy, real price catalog, extras price catalog, discounts catalog, weather/forecast, holidays, admin role, money soft-delete, etc. |
+| V61 | `ticket_extras` — structured, server-priced add-ons per ticket (powers the full price-math breakdown in the ticket view) |
+| V62 | Customer car-on-file (`customers.vehicle_size_id` + `vehicle_description`), `customer_packages` (size-locked prepaid washes w/ remaining balance), `tickets.customer_package_id`, employee `do_not_rehire` flag |
 
-Next migration: `V16__...`
+Numbering has intentional gaps (e.g. V42/V43/V48/V49 skipped) — not missing files.
+
+Next migration: `V63__...`
 
 ---
 
@@ -239,6 +244,9 @@ Everything in v1 is implemented and working.
 - ✅ Auth (JWT issuance, refresh rotation, Spring Security 6)
 - ✅ Catalog: employees, service types, vehicle sizes, service prices (effective-dated)
 - ✅ Operations: business days, shifts, tickets, ticket assignments
+- ✅ Ticket pricing transparency: structured add-ons (`ticket_extras`) + full base→extras→total breakdown and per-lavador estimated per-car pay in the ticket view
+- ✅ Customers: car-on-file (size + description) + prepaid packages (size-locked, decrement per visit, warn+charge on a bigger car)
+- ✅ Employees: do-not-rehire ("bad worker") flag that survives deactivation
 - ✅ Money: expenses, withdrawals, employee advances
 - ✅ Cash: cash counts, shift close summaries
 - ✅ Inventory: products, product movements (append-only stock derivation)
@@ -246,7 +254,7 @@ Everything in v1 is implemented and working.
 - ✅ Reports: daily/monthly summary, cash variance, employee performance, Excel export
 - ✅ AI: DUENO-only command center, daily brief, watchdog alerts, analyst chat, agent investigations, `ai_insights` audit trail
 - ✅ Historical/operational data seeded (V11–V14): 2025 full year + 2026 Jan–May operational handoff data
-- ✅ Frontend: all 10 routes, all screens, all modals, role-gated nav
+- ✅ Frontend: all 16 routes, all screens, all modals, role-gated nav
 - ✅ Docker multi-stage builds (api + web)
 - ✅ Docker Compose: local dev (full stack) + production (RDS-backed)
 - ✅ GitHub Actions CI/CD: test → GHCR build → SSH deploy

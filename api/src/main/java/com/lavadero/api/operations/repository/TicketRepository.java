@@ -48,6 +48,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
             "vehicleSize",
             "assignments",
             "assignments.employee",
+            "extras",
             "customer"
     })
     Optional<Ticket> findWithDetailsById(Long id);
@@ -60,6 +61,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
             "vehicleSize",
             "assignments",
             "assignments.employee",
+            "extras",
             "customer"
     })
     List<Ticket> findAll(Specification<Ticket> spec, Sort sort);

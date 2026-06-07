@@ -33,13 +33,16 @@ public final class EmployeeDtos {
             @Size(max = 20) String primaryShift,
             @DecimalMin("0.00") BigDecimal outOfShiftCommissionRate,
             @DecimalMin("0.00") BigDecimal restDayPremium,
-            @DecimalMin("0.00") BigDecimal absenceDayPenalty) {
+            @DecimalMin("0.00") BigDecimal absenceDayPenalty,
+            Boolean doNotRehire,
+            @Size(max = 500) String doNotRehireNote) {
     }
 
     public record EmployeeResponse(Long id, String fullName, String phone, boolean active,
             BigDecimal baseWeeklySalary, PayrollType payrollType, BigDecimal commissionRate,
             BigDecimal productivityBonusRate, String deactivationReason, String primaryShift,
             BigDecimal outOfShiftCommissionRate, BigDecimal restDayPremium, BigDecimal absenceDayPenalty,
+            boolean doNotRehire, String doNotRehireNote,
             Instant createdAt, Instant updatedAt) {
         public static EmployeeResponse from(Employee employee) {
             return new EmployeeResponse(employee.getId(), employee.getFullName(), employee.getPhone(),
@@ -47,7 +50,8 @@ public final class EmployeeDtos {
                     employee.getCommissionRate(), employee.getProductivityBonusRate(),
                     employee.getDeactivationReason(), employee.getPrimaryShift(),
                     employee.getOutOfShiftCommissionRate(), employee.getRestDayPremium(),
-                    employee.getAbsenceDayPenalty(), employee.getCreatedAt(), employee.getUpdatedAt());
+                    employee.getAbsenceDayPenalty(), employee.isDoNotRehire(), employee.getDoNotRehireNote(),
+                    employee.getCreatedAt(), employee.getUpdatedAt());
         }
     }
 }

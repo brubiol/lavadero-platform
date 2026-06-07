@@ -70,6 +70,8 @@ type Employee = {
   outOfShiftCommissionRate: number
   restDayPremium: number
   absenceDayPenalty: number
+  doNotRehire?: boolean
+  doNotRehireNote?: string | null
 }
 
 type ServiceType = {
@@ -162,6 +164,18 @@ type TicketAssignment = {
   employeeId: number
   employeeName: string
   sharePct: number
+  // Estimated pay for this one car: share% x flat per-car rate (NOT a % of the
+  // sale). perCarRate is the washer's in-shift commission-per-car or salaried
+  // productivity bonus. Estimate only — end-of-week falta penalties can lower it.
+  estimatedEarning?: number | null
+  perCarRate?: number | null
+  payrollType?: string | null
+}
+
+type TicketExtra = {
+  serviceTypeId: number
+  name: string
+  amount: number
 }
 
 type Ticket = {
@@ -197,6 +211,7 @@ type Ticket = {
   notes?: string | null
   customerId?: number | null
   customerName?: string | null
+  extras?: TicketExtra[] | null
 }
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'REST_DAY' | 'SICK' | 'SUSPENDED' | 'WEATHER'
@@ -1548,6 +1563,28 @@ type Customer = {
   active: boolean
   loyaltyProgress: number
   loyaltyRewardsEarned: number
+  vehicleSizeId?: number | null
+  vehicleSizeName?: string | null
+  vehicleDescription?: string | null
+}
+
+type CustomerPackage = {
+  id: number
+  customerId: number
+  serviceTypeId: number
+  serviceTypeName: string
+  vehicleSizeId: number
+  vehicleSizeName: string
+  washesTotal: number
+  washesUsed: number
+  remaining: number
+  unitPrice: number
+  amountPaid: number
+  currency: string
+  paymentMethod: string
+  status: string
+  notes?: string | null
+  purchasedAt: string
 }
 
 function cliInitials(name: string) {
@@ -1574,17 +1611,40 @@ function ClientesScreen() {
   const [newIds, setNewIds] = useState<number[]>([])
   const phoneRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState<Customer | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', phone: '', notes: '' })
+  const [editForm, setEditForm] = useState({ name: '', phone: '', notes: '', vehicleSizeId: '' as number | '', vehicleDescription: '' })
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Buy-package mini form (inside the edit modal)
+  const [buyForm, setBuyForm] = useState({ serviceTypeId: '' as number | '', vehicleSizeId: '' as number | '', washesTotal: 10 })
 
   useEffect(() => { phoneRef.current?.focus() }, [])
 
   useEffect(() => {
     if (editing) {
-      setEditForm({ name: editing.name, phone: editing.phone ?? '', notes: editing.notes ?? '' })
+      setEditForm({
+        name: editing.name, phone: editing.phone ?? '', notes: editing.notes ?? '',
+        vehicleSizeId: editing.vehicleSizeId ?? '', vehicleDescription: editing.vehicleDescription ?? '',
+      })
+      setBuyForm({ serviceTypeId: '', vehicleSizeId: editing.vehicleSizeId ?? '', washesTotal: 10 })
       setConfirmDelete(false)
     }
   }, [editing?.id])
+
+  const vehicleSizesQ = useQuery({
+    queryKey: ['vehicle-sizes'],
+    queryFn: () => api<VehicleSize[]>('/api/v1/vehicle-sizes'),
+  })
+  const serviceTypesQ = useQuery({
+    queryKey: ['service-types'],
+    queryFn: () => api<ServiceType[]>('/api/v1/service-types'),
+  })
+  const activeSizes = (vehicleSizesQ.data ?? []).filter((s) => s.active !== false).sort((a, b) => a.sortOrder - b.sortOrder)
+  const standardServices = (serviceTypesQ.data ?? []).filter((s) => s.active !== false && s.category !== 'EXTRA')
+
+  const packagesQ = useQuery({
+    queryKey: ['customer-packages', editing?.id],
+    enabled: Boolean(editing?.id),
+    queryFn: () => api<CustomerPackage[]>(`/api/v1/customers/${editing!.id}/packages`),
+  })
 
   const customersQ = useQuery({
     queryKey: ['customers', query],
@@ -1622,11 +1682,19 @@ function ClientesScreen() {
   })
 
   const updateCustomer = useMutation({
-    mutationFn: (body: { name?: string; phone?: string; notes?: string }) =>
+    mutationFn: (body: { name?: string; phone?: string; notes?: string; vehicleSizeId?: number | null; vehicleDescription?: string }) =>
       api<Customer>(`/api/v1/customers/${editing!.id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
       setEditing(null)
+    },
+  })
+
+  const buyPackage = useMutation({
+    mutationFn: (body: { serviceTypeId: number; vehicleSizeId: number; washesTotal: number }) =>
+      api<CustomerPackage>(`/api/v1/customers/${editing!.id}/packages`, { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-packages', editing?.id] })
     },
   })
 
@@ -1790,6 +1858,84 @@ function ClientesScreen() {
                 />
               </label>
 
+              {/* Car on file — so we can spot a mismatch (esp. a bigger car than a package covers). */}
+              <div className="rounded-xl border border-border-soft bg-ink-50/40 p-3">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Auto del cliente</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    className="tl-input"
+                    value={editForm.vehicleSizeId}
+                    onChange={(e) => setEditForm((f) => ({ ...f, vehicleSizeId: e.target.value ? Number(e.target.value) : '' }))}
+                  >
+                    <option value="">Tamaño…</option>
+                    {activeSizes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <input
+                    className="tl-input"
+                    placeholder="Ej. Tsuru rojo"
+                    value={editForm.vehicleDescription}
+                    onChange={(e) => setEditForm((f) => ({ ...f, vehicleDescription: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Prepaid packages — remaining washes + buy. */}
+              <div className="rounded-xl border border-border-soft bg-white p-3">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Paquetes prepagados</p>
+                {(packagesQ.data ?? []).filter((p) => p.status === 'ACTIVE').length === 0 ? (
+                  <p className="text-[12px] text-ink-400">Sin paquetes activos.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {(packagesQ.data ?? []).filter((p) => p.status === 'ACTIVE').map((p) => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/60 px-2.5 py-1.5">
+                        <span className="text-[12.5px] text-ink-700">{p.serviceTypeName} · {p.vehicleSizeName}</span>
+                        <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                          {p.remaining}/{p.washesTotal} restantes
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-2.5 grid grid-cols-[1fr_1fr_64px_auto] gap-2">
+                  <select
+                    className="tl-input"
+                    value={buyForm.serviceTypeId}
+                    onChange={(e) => setBuyForm((f) => ({ ...f, serviceTypeId: e.target.value ? Number(e.target.value) : '' }))}
+                  >
+                    <option value="">Servicio…</option>
+                    {standardServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <select
+                    className="tl-input"
+                    value={buyForm.vehicleSizeId}
+                    onChange={(e) => setBuyForm((f) => ({ ...f, vehicleSizeId: e.target.value ? Number(e.target.value) : '' }))}
+                  >
+                    <option value="">Tamaño…</option>
+                    {activeSizes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <input
+                    className="tl-input"
+                    type="number"
+                    min={1}
+                    value={buyForm.washesTotal}
+                    onChange={(e) => setBuyForm((f) => ({ ...f, washesTotal: Math.max(1, Number(e.target.value) || 1) }))}
+                  />
+                  <button
+                    type="button"
+                    className="tl-btn tl-btn-sm tl-btn-primary"
+                    disabled={buyPackage.isPending || !buyForm.serviceTypeId || !buyForm.vehicleSizeId}
+                    onClick={() => buyPackage.mutate({
+                      serviceTypeId: Number(buyForm.serviceTypeId),
+                      vehicleSizeId: Number(buyForm.vehicleSizeId),
+                      washesTotal: buyForm.washesTotal,
+                    })}
+                  >
+                    {buyPackage.isPending ? '…' : 'Vender'}
+                  </button>
+                </div>
+                {buyPackage.error && <p className="mt-1 text-[12px] text-rose-600">{buyPackage.error.message}</p>}
+              </div>
+
               {updateCustomer.error && (
                 <p className="text-[12px] text-rose-600">{updateCustomer.error.message}</p>
               )}
@@ -1844,6 +1990,8 @@ function ClientesScreen() {
                       name: editForm.name.trim(),
                       phone: editForm.phone.replace(/\D/g, '').slice(0, 10) || undefined,
                       notes: editForm.notes.trim() || undefined,
+                      vehicleSizeId: editForm.vehicleSizeId ? Number(editForm.vehicleSizeId) : null,
+                      vehicleDescription: editForm.vehicleDescription.trim() || undefined,
                     })}
                   >
                     <ICheck size={14} /> {updateCustomer.isPending ? 'Guardando…' : 'Guardar cambios'}
@@ -4806,6 +4954,11 @@ function TicketDetail({
   const surcharge = ticket.surchargeAmount != null ? Number(ticket.surchargeAmount) : 0
   const discountPct = Number(ticket.discountPercent ?? 0)
   const finalAmount = Number(ticket.priceAmount)
+  const extras = ticket.extras ?? []
+  const extrasSum = extras.reduce((sum, e) => sum + Number(e.amount), 0)
+  // Anything the base + listed extras don't account for (a discount, a manual
+  // tweak). Shown as its own signed line so base + extras + residual = total.
+  const extrasResidual = Math.round((finalAmount - basePrice - extrasSum) * 100) / 100
   const isVoid = ticket.status === 'VOIDED'
   const hasMotivos = ticket.courtesy
     || (ticket.courtesyReason && ticket.courtesyReason.trim().length > 0)
@@ -4916,7 +5069,28 @@ function TicketDetail({
             <span>{ticket.currency}</span>
           </div>
           <hr />
-          {override != null ? (
+          {extras.length > 0 ? (
+            <>
+              <div className="ln">
+                <span>Precio base</span>
+                <b>{money(basePrice, ticket.currency)}</b>
+              </div>
+              {extras.map((e) => (
+                <div className="ln" key={e.serviceTypeId}>
+                  <span>+ {e.name}</span>
+                  <b style={{ color: 'var(--warn-700)' }}>+{money(Number(e.amount), ticket.currency)}</b>
+                </div>
+              ))}
+              {extrasResidual !== 0 && (
+                <div className="ln">
+                  <span>{extrasResidual < 0 ? 'Descuento / ajuste' : 'Cargo extra'}</span>
+                  <b style={{ color: extrasResidual < 0 ? 'var(--good-700)' : 'var(--warn-700)' }}>
+                    {extrasResidual < 0 ? '−' : '+'}{money(Math.abs(extrasResidual), ticket.currency)}
+                  </b>
+                </div>
+              )}
+            </>
+          ) : override != null ? (
             <>
               <div className="ln">
                 <span>Precio especial</span>
@@ -4962,6 +5136,31 @@ function TicketDetail({
             <b>{money(finalAmount, ticket.currency)}</b>
           </div>
         </div>
+      )}
+
+      {ticket.assignments.length > 0 && ticket.assignments.some((a) => a.estimatedEarning != null) && (
+        <Panel title="Pago a lavadores · estimado">
+          <div className="space-y-1.5">
+            {ticket.assignments.map((a) => (
+              <div key={a.employeeId} className="flex items-center justify-between gap-3">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <Avatars names={[a.employeeName]} max={1} />
+                  <span className="truncate text-[12.5px] font-medium text-ink-700">{a.employeeName}</span>
+                  <span className="shrink-0 text-[11px] text-ink-400">· {Number(a.sharePct)}% del carro</span>
+                </span>
+                <b className="shrink-0 text-[13px] text-ink-800" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {a.estimatedEarning != null
+                    ? `~${money(Number(a.estimatedEarning), ticket.currency)}`
+                    : '—'}
+                </b>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[10.5px] italic leading-snug text-ink-400">
+            Pago fijo por carro, no porcentaje. Estimado — las faltas de la semana pueden bajar la tarifa
+            (a $15 o $10 por carro).
+          </p>
+        </Panel>
       )}
 
       {hasMotivos && (
@@ -5282,6 +5481,18 @@ function TicketWorkspace({
   })
   const selectedCustomer = selectedCustomerQ.data ?? null
 
+  // Prepaid packages for the selected customer + which one (if any) is being redeemed.
+  const [redeemPackageId, setRedeemPackageId] = useState<number | null>(null)
+  const customerPackagesQ = useQuery({
+    queryKey: ['customer-packages', selectedCustomerId],
+    enabled: Boolean(selectedCustomerId),
+    queryFn: () => api<CustomerPackage[]>(`/api/v1/customers/${selectedCustomerId}/packages`),
+  })
+  const activePackages = (customerPackagesQ.data ?? []).filter((p) => p.status === 'ACTIVE' && p.remaining > 0)
+  const redeemPackage = activePackages.find((p) => p.id === redeemPackageId) ?? null
+  // Drop the redemption if the customer changes/clears.
+  useEffect(() => { setRedeemPackageId(null) }, [selectedCustomerId])
+
   // Reset when navigating between tickets in edit mode
   useEffect(() => {
     form.reset(formDefaults)
@@ -5316,6 +5527,17 @@ function TicketWorkspace({
   const watched = form.watch()
   const livePrice = useMemo(() => {
     if (watched.courtesy) return 0
+    // Package redemption: base wash is prepaid; charge only the size difference
+    // when today's car is bigger than the package's locked size (else $0).
+    if (redeemPackage) {
+      const base = (data.prices.data ?? []).find((price) =>
+        price.serviceTypeId === Number(watched.serviceTypeId) &&
+        price.vehicleSizeId === Number(watched.vehicleSizeId) &&
+        price.currency === 'MXN'
+      )?.amount
+      if (base === undefined) return undefined
+      return Math.max(0, Math.round((base - redeemPackage.unitPrice) * 100) / 100)
+    }
     // Prepago: only the typed extra is charged (the base was paid at sale). 0 = fully covered.
     if (watched.prepagoActive) {
       const extra = watched.priceOverride !== '' && watched.priceOverride != null
@@ -5340,7 +5562,7 @@ function TicketWorkspace({
       ? Number(watched.surchargeAmount) : 0
     return Math.round((afterDiscount + (surcharge > 0 ? surcharge : 0)) * 100) / 100
   }, [data.prices.data, watched.courtesy, watched.prepagoActive, watched.serviceTypeId, watched.vehicleSizeId,
-      watched.discountPercent, watched.surchargeAmount, watched.priceOverride])
+      watched.discountPercent, watched.surchargeAmount, watched.priceOverride, redeemPackage])
 
   const save = useMutation({
     mutationFn: (values: TicketFormValues) => {
@@ -5384,6 +5606,14 @@ function TicketWorkspace({
             ? (values.discountReason?.trim() || undefined) : undefined),
         notes: values.notes?.trim() || undefined,
         customerId: values.customerId ? Number(values.customerId) : undefined,
+        // Persist ticked add-ons as structured lines so the ticket view can show
+        // the real price math. Courtesy/prepago never carry extras. Always sent
+        // (empty array clears them on edit); the server re-prices each from the
+        // catalog — client amounts are never trusted.
+        extraServiceTypeIds: (values.courtesy || prepago || redeemPackage) ? [] : Array.from(selectedExtraIds),
+        // Redeem one wash from the customer's prepaid package. Server validates
+        // ownership/size and computes the (possibly bigger-car) charge.
+        redeemCustomerPackageId: redeemPackage ? redeemPackage.id : undefined,
       }
       if (mode === 'edit' && ticket) {
         return api<Ticket>(`/api/v1/tickets/${ticket.id}`, {
@@ -5796,6 +6026,60 @@ function TicketWorkspace({
                           Quitar
                         </button>
                       </div>
+                      {/* Car on file mismatch — helps catch a different/bigger car than usual. */}
+                      {selectedCustomer.vehicleSizeId && Number(watched.vehicleSizeId) > 0
+                        && Number(watched.vehicleSizeId) !== selectedCustomer.vehicleSizeId && (
+                        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+                          ⚠ Auto distinto al registrado ({selectedCustomer.vehicleSizeName}
+                          {selectedCustomer.vehicleDescription ? ` · ${selectedCustomer.vehicleDescription}` : ''}).
+                        </p>
+                      )}
+                      {activePackages.length > 0 && (
+                        <div className="mt-2.5 border-t border-emerald-100 pt-2.5">
+                          <span className="text-[10.5px] font-bold uppercase tracking-wide text-emerald-700">Paquetes prepagados</span>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {activePackages.map((p) => {
+                              const on = redeemPackageId === p.id
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (on) { setRedeemPackageId(null); return }
+                                    setRedeemPackageId(p.id)
+                                    form.setValue('courtesy', false, { shouldValidate: true })
+                                    form.setValue('prepagoActive', false, { shouldValidate: true })
+                                    setOfertaMode('none')
+                                    form.setValue('discountPercent', 0, { shouldValidate: true })
+                                    form.setValue('discountReason', '', { shouldValidate: true })
+                                    form.setValue('priceOverride', '' as number | '', { shouldValidate: true })
+                                    form.setValue('serviceTypeId', p.serviceTypeId, { shouldValidate: true })
+                                    if (!Number(watched.vehicleSizeId)) {
+                                      form.setValue('vehicleSizeId', p.vehicleSizeId, { shouldValidate: true })
+                                    }
+                                  }}
+                                  className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${on ? 'bg-emerald-600 text-white' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`}
+                                >
+                                  {p.serviceTypeName} · {p.vehicleSizeName} · {p.remaining}/{p.washesTotal}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {redeemPackage && (() => {
+                            const sizes = data.sizes.data ?? []
+                            const pkgSize = sizes.find((s) => s.id === redeemPackage.vehicleSizeId)
+                            const curSize = sizes.find((s) => s.id === Number(watched.vehicleSizeId))
+                            const bigger = pkgSize && curSize && curSize.sortOrder > pkgSize.sortOrder
+                            return (
+                              <p className={`mt-1.5 text-[11px] ${bigger ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                {bigger
+                                  ? `Auto más grande que el paquete (${pkgSize?.name}). Se cobra la diferencia.`
+                                  : 'Cubierto por el paquete · se descuenta 1 lavado.'}
+                              </p>
+                            )
+                          })()}
+                        </div>
+                      )}
                       {(canHalf || canFree) && (
                         <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-emerald-100 pt-2.5">
                           <span className="text-[10.5px] font-bold uppercase tracking-wide text-emerald-700">Premio listo</span>
@@ -6140,7 +6424,7 @@ function TicketWorkspace({
               {/* ── ③ IDENTIFICACIÓN — Nota / Descripción / Hora ────────── */}
               <div>
                 <SectionLabel num={3} text="IDENTIFICACIÓN" accent="amber" />
-                <div className="mt-2 grid gap-2 md:grid-cols-[120px_1fr_110px]">
+                <div className="mt-2 grid gap-2 md:grid-cols-[120px_1fr_168px]">
                   <div>
                     <label className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Nota</label>
                     <input placeholder="Ej. 41703" disabled={watched.courtesy} {...form.register('internalRef')} className="tl-input" style={{ height: 36, fontSize: 13 }} />
@@ -6157,7 +6441,25 @@ function TicketWorkspace({
                   </div>
                   <div>
                     <label className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Hora</label>
-                    <input type="time" lang="es-MX" {...form.register('occurredAt')} className="tl-input" style={{ height: 36, fontSize: 13 }} />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="time"
+                        step={60}
+                        lang="es-MX"
+                        {...form.register('occurredAt')}
+                        className="tl-input min-w-0 flex-1"
+                        style={{ height: 36, fontSize: 13 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => form.setValue('occurredAt', toLocalTimeValue(), { shouldValidate: true })}
+                        className="shrink-0 rounded-md border border-border-soft px-2 text-[11px] font-semibold text-ink-600 transition hover:bg-ink-50"
+                        style={{ height: 36 }}
+                        title="Poner la hora actual"
+                      >
+                        Ahora
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -6628,6 +6930,8 @@ const employeeEditSchema = z.object({
   outOfShiftCommissionRate: z.coerce.number().min(0, 'Mínimo 0'),
   restDayPremium: z.coerce.number().min(0, 'Mínimo 0'),
   absenceDayPenalty: z.coerce.number().min(0, 'Mínimo 0'),
+  doNotRehire: z.boolean().optional(),
+  doNotRehireNote: z.string().max(500, 'Máximo 500 caracteres').optional(),
 })
 type EmployeeEditFormValues = z.infer<typeof employeeEditSchema>
 
@@ -6950,6 +7254,8 @@ function CatalogsScreen() {
           outOfShiftCommissionRate: Number(values.outOfShiftCommissionRate),
           restDayPremium: Number(values.restDayPremium),
           absenceDayPenalty: Number(values.absenceDayPenalty),
+          doNotRehire: values.doNotRehire ?? false,
+          doNotRehireNote: values.doNotRehire ? (values.doNotRehireNote?.trim() || undefined) : undefined,
         }),
       }),
     onSuccess: async () => {
@@ -7144,11 +7450,19 @@ function CatalogsScreen() {
                   <div>
                     <span className="font-medium">{employee.fullName}</span>
                     {!employee.active && <span className="ml-2 text-xs text-red-500">Baja</span>}
+                    {employee.doNotRehire && (
+                      <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700" title={employee.doNotRehireNote ?? 'No recontratar'}>
+                        No recontratar
+                      </span>
+                    )}
                     <p className="text-xs text-ink-400">
                       {employee.payrollType === 'COMMISSION'
                         ? `Comision ${money(employee.commissionRate, 'MXN')}/carro`
                         : `Sueldo ${money(employee.baseWeeklySalary, 'MXN')}/sem`}
                     </p>
+                    {employee.doNotRehire && employee.doNotRehireNote && (
+                      <p className="text-[11px] text-red-600">⚠ {employee.doNotRehireNote}</p>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -12123,10 +12437,13 @@ function EmployeeEditModal({
       outOfShiftCommissionRate: employee.outOfShiftCommissionRate ?? 0,
       restDayPremium: employee.restDayPremium ?? 0,
       absenceDayPenalty: employee.absenceDayPenalty ?? 0,
+      doNotRehire: employee.doNotRehire ?? false,
+      doNotRehireNote: employee.doNotRehireNote ?? '',
     },
   })
   const watchedActive = form.watch('active')
   const watchedPayrollType = form.watch('payrollType')
+  const watchedDoNotRehire = form.watch('doNotRehire')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-[var(--shadow-lg)] overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -12203,6 +12520,22 @@ function EmployeeEditModal({
             )}
             {!watchedActive && employee.deactivationReason && (
               <p className="text-xs text-ink-500">Motivo anterior: {employee.deactivationReason}</p>
+            )}
+          </div>
+          <div className={`rounded-lg border p-3 space-y-3 ${watchedDoNotRehire ? 'border-red-300 bg-red-50/60' : 'border-border-soft'}`}>
+            <label className="flex items-center gap-3 text-sm font-medium">
+              <input type="checkbox" {...form.register('doNotRehire')} className="h-4 w-4 rounded border-border-soft text-red-600" />
+              <span className={watchedDoNotRehire ? 'text-red-700' : ''}>No recontratar (mal trabajador)</span>
+            </label>
+            {watchedDoNotRehire && (
+              <>
+                <TextField label="Motivo (por qué no recontratar)" error={form.formState.errors.doNotRehireNote?.message}>
+                  <input placeholder="Ej. Faltas constantes, problemas con clientes" {...form.register('doNotRehireNote')} />
+                </TextField>
+                <p className="text-xs text-red-600">
+                  Queda marcado de forma permanente. Si regresa a pedir trabajo, lo verás aquí aunque esté dado de baja.
+                </p>
+              </>
             )}
           </div>
           {error && <ErrorMessage message={error} />}

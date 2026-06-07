@@ -1,10 +1,13 @@
 package com.lavadero.api.customers.web;
 
+import com.lavadero.api.customers.service.CustomerPackageService;
 import com.lavadero.api.customers.service.CustomerService;
 import com.lavadero.api.customers.web.CustomerDtos.CreateCustomerRequest;
 import com.lavadero.api.customers.web.CustomerDtos.CustomerProfileResponse;
 import com.lavadero.api.customers.web.CustomerDtos.CustomerResponse;
 import com.lavadero.api.customers.web.CustomerDtos.UpdateCustomerRequest;
+import com.lavadero.api.customers.web.CustomerPackageDtos.BuyPackageRequest;
+import com.lavadero.api.customers.web.CustomerPackageDtos.CustomerPackageResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -24,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CustomerController {
 
     private final CustomerService customerService;
+    private final CustomerPackageService packageService;
 
-    public CustomerController(CustomerService customerService) {
+    public CustomerController(CustomerService customerService, CustomerPackageService packageService) {
         this.customerService = customerService;
+        this.packageService = packageService;
     }
 
     @PostMapping
@@ -61,5 +66,21 @@ public class CustomerController {
     @GetMapping("/{id}/profile")
     public CustomerProfileResponse profile(@PathVariable Long id) {
         return customerService.getProfile(id);
+    }
+
+    @GetMapping("/{id}/packages")
+    public List<CustomerPackageResponse> packages(@PathVariable Long id) {
+        return packageService.listForCustomer(id).stream().map(CustomerPackageResponse::from).toList();
+    }
+
+    @PostMapping("/{id}/packages")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CustomerPackageResponse buyPackage(@PathVariable Long id, @Valid @RequestBody BuyPackageRequest request) {
+        return CustomerPackageResponse.from(packageService.buy(id, request));
+    }
+
+    @DeleteMapping("/packages/{packageId}")
+    public CustomerPackageResponse cancelPackage(@PathVariable Long packageId) {
+        return CustomerPackageResponse.from(packageService.cancel(packageId));
     }
 }

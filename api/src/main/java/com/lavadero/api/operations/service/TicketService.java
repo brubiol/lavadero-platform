@@ -10,6 +10,9 @@ import com.lavadero.api.catalog.repository.ServicePriceRepository;
 import com.lavadero.api.catalog.service.ServiceTypeService;
 import com.lavadero.api.catalog.service.VehicleSizeService;
 import com.lavadero.api.customers.domain.Customer;
+import com.lavadero.api.customers.domain.CustomerPackage;
+import com.lavadero.api.customers.domain.PackageStatus;
+import com.lavadero.api.customers.repository.CustomerPackageRepository;
 import com.lavadero.api.customers.repository.CustomerRepository;
 import com.lavadero.api.operations.domain.BusinessDay;
 import com.lavadero.api.operations.domain.BusinessDayStatus;
@@ -19,6 +22,7 @@ import com.lavadero.api.operations.domain.ShiftStatus;
 import com.lavadero.api.operations.domain.Ticket;
 import com.lavadero.api.operations.domain.TicketAssignment;
 import com.lavadero.api.operations.domain.TicketCurrency;
+import com.lavadero.api.operations.domain.TicketExtra;
 import com.lavadero.api.operations.domain.TicketStatus;
 import com.lavadero.api.operations.repository.ShiftRepository;
 import com.lavadero.api.operations.repository.TicketRepository;
@@ -70,11 +74,13 @@ public class TicketService {
     private final BusinessDayService businessDays;
     private final ServicePriceRepository servicePrices;
     private final CustomerRepository customers;
+    private final CustomerPackageRepository customerPackages;
     private final AuditService audit;
 
     public TicketService(TicketRepository tickets, ShiftRepository shifts, EmployeeRepository employees,
             ServiceTypeService serviceTypes, VehicleSizeService vehicleSizes, BusinessDayService businessDays,
-            ServicePriceRepository servicePrices, CustomerRepository customers, AuditService audit) {
+            ServicePriceRepository servicePrices, CustomerRepository customers,
+            CustomerPackageRepository customerPackages, AuditService audit) {
         this.tickets = tickets;
         this.shifts = shifts;
         this.employees = employees;
@@ -83,6 +89,7 @@ public class TicketService {
         this.businessDays = businessDays;
         this.servicePrices = servicePrices;
         this.customers = customers;
+        this.customerPackages = customerPackages;
         this.audit = audit;
     }
 
@@ -101,10 +108,17 @@ public class TicketService {
                 courtesy, request.courtesyReason(), discount);
         BigDecimal originalPriceAmount = resolved[1];
         BigDecimal surcharge = surchargeOf(courtesy, request.surchargeAmount());
-        BigDecimal priceAmount = (!courtesy && request.priceOverride() != null
-                && request.priceOverride().compareTo(ZERO) >= 0)
-                ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
-                : resolved[0].add(surcharge).setScale(2, RoundingMode.HALF_UP);
+        // Prepaid package redemption: the base wash is already paid, so the ticket
+        // only charges the size difference when today's car is bigger than the size
+        // the package was bought for (max(0, catalog base − locked unit price)).
+        CustomerPackage redeemPackage = resolveRedemption(request, courtesy, serviceType);
+        BigDecimal packageSurcharge = redeemPackage == null ? ZERO
+                : originalPriceAmount.subtract(redeemPackage.getUnitPrice()).max(ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal priceAmount = redeemPackage != null
+                ? packageSurcharge
+                : (!courtesy && request.priceOverride() != null && request.priceOverride().compareTo(ZERO) >= 0)
+                        ? request.priceOverride().setScale(2, RoundingMode.HALF_UP)
+                        : resolved[0].add(surcharge).setScale(2, RoundingMode.HALF_UP);
 
         PaymentMethod paymentMethod = courtesy ? PaymentMethod.CASH
                 : (request.paymentMethod() != null ? request.paymentMethod() : PaymentMethod.CASH);
@@ -124,12 +138,19 @@ public class TicketService {
         ticket.setSurchargeReason(normalizeSurchargeReason(courtesy, request.surchargeReason()));
         ticket.setDiscountReason(normalizeDiscountReason(courtesy, discount, request.discountReason()));
         ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
+        ticket.replaceExtras(courtesy ? List.of()
+                : extrasFor(request.extraServiceTypeIds(), vehicleSize, request.currency(), businessDay));
         if (request.customerId() != null) {
             // Optional at-creation customer link (loyalty punch advances automatically
             // via CustomerService.getProfile() which counts active tickets per customer).
             Customer customer = customers.findByIdAndActiveTrue(request.customerId())
                     .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Customer not found"));
             ticket.attachCustomer(customer);
+        }
+        if (redeemPackage != null) {
+            redeemPackage.redeemOne();
+            ticket.setCustomerPackage(redeemPackage);
+            ticket.setDiscountReason("Paquete: quedan " + redeemPackage.remaining() + " lavados");
         }
         Ticket saved = tickets.save(ticket);
         String actor = currentActor();
@@ -278,6 +299,11 @@ public class TicketService {
         validateDiscountReason(courtesy, discount, ticket.getDiscountReason());
         if (request.employeeIds() != null) {
             ticket.replaceAssignments(assignmentsFor(request.employeeIds()));
+        }
+        if (courtesy) {
+            ticket.replaceExtras(List.of());
+        } else if (request.extraServiceTypeIds() != null) {
+            ticket.replaceExtras(extrasFor(request.extraServiceTypeIds(), vehicleSize, currency, ticket.getBusinessDay()));
         }
         String afterSnap = snapshotOf(ticket);
         String diff = beforeSnap.equals(afterSnap) ? null : "ANTES: " + beforeSnap + " | DESPUÉS: " + afterSnap;
@@ -446,6 +472,56 @@ public class TicketService {
             assignments.add(new TicketAssignment(lavadores.get(i), shares.get(i)));
         }
         return assignments;
+    }
+
+    // Server-resolves each ticked add-on's catalog price for this vehicle/date and
+    // snapshots name + amount onto the ticket. Prices are never trusted from the
+    // client. An add-on without a current price row for this vehicle is skipped
+    // (the capture UI only lets the operator pick priceable extras), so a catalog
+    // gap can never block saving the ticket.
+    private List<TicketExtra> extrasFor(List<Long> extraServiceTypeIds, VehicleSize vehicleSize,
+            TicketCurrency currency, BusinessDay businessDay) {
+        if (extraServiceTypeIds == null || extraServiceTypeIds.isEmpty()) {
+            return List.of();
+        }
+        List<TicketExtra> result = new ArrayList<>();
+        int sortOrder = 0;
+        for (Long extraId : extraServiceTypeIds) {
+            ServiceType extra = serviceTypes.get(extraId);
+            BigDecimal amount = servicePrices.findCurrentPrices(extra.getId(), vehicleSize.getId(), currency.name(),
+                            businessDay.getBusinessDate(), PageRequest.of(0, 1))
+                    .stream()
+                    .findFirst()
+                    .map(ServicePrice::getAmount)
+                    .orElse(null);
+            if (amount == null) {
+                continue;
+            }
+            result.add(new TicketExtra(extra, extra.getName(), amount.setScale(2, RoundingMode.HALF_UP),
+                    currency, sortOrder++));
+        }
+        return result;
+    }
+
+    // Validates a requested prepaid-package redemption: the package must exist,
+    // still have washes, belong to the ticket's customer, and cover this service.
+    // Returns null when nothing is being redeemed.
+    private CustomerPackage resolveRedemption(CreateTicketRequest request, boolean courtesy, ServiceType serviceType) {
+        if (courtesy || request.redeemCustomerPackageId() == null) {
+            return null;
+        }
+        CustomerPackage pkg = customerPackages.findWithDetailsById(request.redeemCustomerPackageId())
+                .orElseThrow(() -> new EntityNotFoundException("Package not found"));
+        if (pkg.getStatus() != PackageStatus.ACTIVE || pkg.remaining() <= 0) {
+            throw new IllegalArgumentException("El paquete ya no tiene lavados disponibles");
+        }
+        if (request.customerId() == null || !pkg.getCustomer().getId().equals(request.customerId())) {
+            throw new IllegalArgumentException("El paquete pertenece a otro cliente");
+        }
+        if (!pkg.getServiceType().getId().equals(serviceType.getId())) {
+            throw new IllegalArgumentException("El paquete es para otro servicio");
+        }
+        return pkg;
     }
 
     private Employee getActiveEmployee(Long id) {

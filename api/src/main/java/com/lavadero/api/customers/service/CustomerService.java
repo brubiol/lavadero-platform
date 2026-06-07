@@ -1,5 +1,7 @@
 package com.lavadero.api.customers.service;
 
+import com.lavadero.api.catalog.domain.VehicleSize;
+import com.lavadero.api.catalog.service.VehicleSizeService;
 import com.lavadero.api.customers.domain.Customer;
 import com.lavadero.api.customers.domain.LoyaltyStatus;
 import com.lavadero.api.customers.repository.CustomerRepository;
@@ -23,10 +25,12 @@ public class CustomerService {
 
     private final CustomerRepository customers;
     private final TicketRepository tickets;
+    private final VehicleSizeService vehicleSizes;
 
-    public CustomerService(CustomerRepository customers, TicketRepository tickets) {
+    public CustomerService(CustomerRepository customers, TicketRepository tickets, VehicleSizeService vehicleSizes) {
         this.customers = customers;
         this.tickets = tickets;
+        this.vehicleSizes = vehicleSizes;
     }
 
     @Transactional
@@ -69,6 +73,13 @@ public class CustomerService {
     public Customer update(Long id, UpdateCustomerRequest request) {
         Customer customer = get(id);
         customer.update(request.name(), request.phone(), request.notes(), request.loyaltyStatus());
+        // Car on file is only touched when the caller sends car data, so a
+        // loyalty-only edit from another screen never wipes it.
+        if (request.vehicleSizeId() != null
+                || (request.vehicleDescription() != null && !request.vehicleDescription().isBlank())) {
+            VehicleSize size = request.vehicleSizeId() != null ? vehicleSizes.get(request.vehicleSizeId()) : null;
+            customer.setCar(size, request.vehicleDescription());
+        }
         return customer;
     }
 

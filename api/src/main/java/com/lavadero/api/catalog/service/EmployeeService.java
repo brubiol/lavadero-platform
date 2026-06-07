@@ -56,10 +56,17 @@ public class EmployeeService {
     public Employee update(Long id, UpdateEmployeeRequest request) {
         Employee employee = get(id);
         List<String> irregular = detectIrregularChanges(employee, request);
+        boolean newlyFlaggedBad = Boolean.TRUE.equals(request.doNotRehire()) && !employee.isDoNotRehire();
         employee.update(request.fullName(), request.phone(), request.active(), request.baseWeeklySalary(),
                 request.payrollType(), request.commissionRate(), request.productivityBonusRate(),
                 request.deactivationReason(), request.primaryShift(), request.outOfShiftCommissionRate(),
-                request.restDayPremium(), request.absenceDayPenalty());
+                request.restDayPremium(), request.absenceDayPenalty(),
+                request.doNotRehire(), request.doNotRehireNote());
+        if (newlyFlaggedBad) {
+            audit.recordFlagged("EMPLOYEE_DO_NOT_REHIRE", "EMPLOYEE", id,
+                    "Marcado como no recontratar: " + employee.getFullName(),
+                    employee.getDoNotRehireNote() == null ? "" : employee.getDoNotRehireNote());
+        }
         if (!irregular.isEmpty()) {
             audit.recordFlagged("EMPLOYEE_COMP_CHANGED", "EMPLOYEE", id,
                     "Cambio inusual de pago: " + employee.getFullName(), String.join("; ", irregular));

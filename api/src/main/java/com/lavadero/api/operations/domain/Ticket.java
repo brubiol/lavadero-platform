@@ -20,7 +20,9 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "tickets")
@@ -112,8 +114,20 @@ public class Ticket extends AuditedEntity {
     @JoinColumn(name = "customer_id")
     private Customer customer;
 
+    // Set when this ticket redeems one wash from a customer's prepaid package.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_package_id")
+    private com.lavadero.api.customers.domain.CustomerPackage customerPackage;
+
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TicketAssignment> assignments = new ArrayList<>();
+
+    // A Set (not a List) so it can be fetched in the same query as the
+    // assignments bag — Hibernate forbids join-fetching two List bags at once.
+    // @OrderBy keeps the snapshot order on load.
+    @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
+    @jakarta.persistence.OrderBy("sortOrder ASC, id ASC")
+    private Set<TicketExtra> extras = new LinkedHashSet<>();
 
     protected Ticket() {
     }
@@ -274,6 +288,14 @@ public class Ticket extends AuditedEntity {
         this.customer = customer;
     }
 
+    public com.lavadero.api.customers.domain.CustomerPackage getCustomerPackage() {
+        return customerPackage;
+    }
+
+    public void setCustomerPackage(com.lavadero.api.customers.domain.CustomerPackage customerPackage) {
+        this.customerPackage = customerPackage;
+    }
+
     public void update(ServiceType serviceType, VehicleSize vehicleSize, String vehicleDescription,
             BigDecimal priceAmount, BigDecimal discountPercent, BigDecimal originalPriceAmount,
             TicketCurrency currency, PaymentMethod paymentMethod, boolean courtesy, String courtesyReason,
@@ -304,6 +326,18 @@ public class Ticket extends AuditedEntity {
         nextAssignments.forEach(assignment -> {
             assignment.attachTo(this);
             assignments.add(assignment);
+        });
+    }
+
+    public Set<TicketExtra> getExtras() {
+        return extras;
+    }
+
+    public void replaceExtras(List<TicketExtra> nextExtras) {
+        extras.clear();
+        nextExtras.forEach(extra -> {
+            extra.attachTo(this);
+            extras.add(extra);
         });
     }
 

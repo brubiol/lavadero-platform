@@ -55,6 +55,14 @@ public class Employee extends AuditedEntity {
     @Column(name = "absence_day_penalty", nullable = false, precision = 10, scale = 2)
     private BigDecimal absenceDayPenalty = BigDecimal.ZERO;
 
+    // "Bad" / do-not-rehire marker. Survives deactivation so a washer who left on
+    // bad terms is remembered if they come back. The note records why.
+    @Column(name = "do_not_rehire", nullable = false)
+    private boolean doNotRehire = false;
+
+    @Column(name = "do_not_rehire_note", length = 500)
+    private String doNotRehireNote;
+
     protected Employee() {
     }
 
@@ -133,10 +141,19 @@ public class Employee extends AuditedEntity {
         return absenceDayPenalty;
     }
 
+    public boolean isDoNotRehire() {
+        return doNotRehire;
+    }
+
+    public String getDoNotRehireNote() {
+        return doNotRehireNote;
+    }
+
     public void update(String fullName, String phone, Boolean active, BigDecimal baseWeeklySalary,
             PayrollType payrollType, BigDecimal commissionRate, BigDecimal productivityBonusRate,
             String deactivationReason, String primaryShift, BigDecimal outOfShiftCommissionRate,
-            BigDecimal restDayPremium, BigDecimal absenceDayPenalty) {
+            BigDecimal restDayPremium, BigDecimal absenceDayPenalty,
+            Boolean doNotRehire, String doNotRehireNote) {
         if (fullName != null) {
             this.fullName = fullName;
         }
@@ -173,6 +190,15 @@ public class Employee extends AuditedEntity {
         }
         if (absenceDayPenalty != null) {
             this.absenceDayPenalty = absenceDayPenalty;
+        }
+        if (doNotRehire != null) {
+            this.doNotRehire = doNotRehire;
+            if (!doNotRehire) {
+                this.doNotRehireNote = null;
+            }
+        }
+        if (doNotRehireNote != null) {
+            this.doNotRehireNote = doNotRehireNote.isBlank() ? null : doNotRehireNote.trim();
         }
     }
 

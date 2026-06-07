@@ -23,7 +23,9 @@ public final class CustomerDtos {
             @Size(max = 120) String name,
             @Size(max = 20) String phone,
             @Size(max = 500) String notes,
-            LoyaltyStatus loyaltyStatus) {
+            LoyaltyStatus loyaltyStatus,
+            Long vehicleSizeId,
+            @Size(max = 160) String vehicleDescription) {
     }
 
     public record AttachCustomerRequest(@NotNull Long customerId) {
@@ -39,11 +41,13 @@ public final class CustomerDtos {
             Instant createdAt,
             Instant updatedAt,
             int loyaltyProgress,
-            int loyaltyRewardsEarned) {
+            int loyaltyRewardsEarned,
+            Long vehicleSizeId,
+            String vehicleSizeName,
+            String vehicleDescription) {
         /** Lightweight factory — loyalty fields default to 0. Use {@link #from(Customer, long)} on the list/profile path. */
         public static CustomerResponse from(Customer c) {
-            return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), c.getNotes(),
-                    c.getLoyaltyStatus(), c.isActive(), c.getCreatedAt(), c.getUpdatedAt(), 0, 0);
+            return from(c, 0L);
         }
 
         /** Computes punch-card progress ({@code visits % 10}) and rewards ({@code visits / 10}). */
@@ -51,7 +55,10 @@ public final class CustomerDtos {
             int progress = (int) (totalVisits % 10);
             int rewards = (int) (totalVisits / 10);
             return new CustomerResponse(c.getId(), c.getName(), c.getPhone(), c.getNotes(),
-                    c.getLoyaltyStatus(), c.isActive(), c.getCreatedAt(), c.getUpdatedAt(), progress, rewards);
+                    c.getLoyaltyStatus(), c.isActive(), c.getCreatedAt(), c.getUpdatedAt(), progress, rewards,
+                    c.getVehicleSize() != null ? c.getVehicleSize().getId() : null,
+                    c.getVehicleSize() != null ? c.getVehicleSize().getName() : null,
+                    c.getVehicleDescription());
         }
     }
 
