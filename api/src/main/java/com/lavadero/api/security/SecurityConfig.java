@@ -73,7 +73,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/customers/**").hasRole("OPERADOR")
                         .requestMatchers("/api/v1/attendance/**").hasRole("OPERADOR")
                         .requestMatchers("/api/v1/employees/**", "/api/v1/service-types/**",
-                                "/api/v1/vehicle-sizes/**", "/api/v1/service-prices/**").hasRole("GERENTE")
+                                "/api/v1/vehicle-sizes/**", "/api/v1/service-prices/**",
+                                "/api/v1/discounts/**").hasRole("GERENTE")
                         .requestMatchers("/api/v1/prepaid-packages/**").hasRole("OPERADOR")
                         .requestMatchers("/api/v1/business-days/**", "/api/v1/shifts/**",
                                 "/api/v1/expenses/**").hasRole("OPERADOR")

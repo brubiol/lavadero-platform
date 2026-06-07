@@ -19,23 +19,39 @@ async function fillBaseTicket(page: Page, catalog: Catalog, description: string)
   await page.locator('button').filter({ hasText: catalog.employeeName }).first().click()
 }
 
-test('discount field reduces price preview and saved ticket price', async ({ page, request }) => {
+test('a manager discount reduces the saved ticket price', async ({ request }) => {
+  // Discounts moved out of the cashier flow: a manager applies one to a specific
+  // ticket (GERENTE-gated POST/PATCH). 25% off a $200 base resolves to $150.
   const fixture = await seedDiscountFixture(request)
-  const vehicle = `Discount E2E ${Date.now()}`
+  const res = await request.post(`${BASE_URL}/api/v1/tickets`, {
+    headers: fixture.headers,
+    data: {
+      businessDayId: fixture.dayId,
+      shiftId: fixture.shiftId,
+      serviceTypeId: fixture.catalog.serviceTypeId,
+      vehicleSizeId: fixture.catalog.vehicleSizeId,
+      currency: 'MXN',
+      paymentMethod: 'CASH',
+      employeeIds: [fixture.catalog.employeeId],
+      vehicleDescription: 'Manager discount',
+      discountPercent: 25,
+      discountReason: 'Cliente frecuente',
+    },
+  })
+  expect(res.status(), 'ticket create with discount').toBe(201)
+  const ticket = await res.json()
+  expect(Number(ticket.priceAmount)).toBe(150)
+})
 
+test('the cashier new-ticket form has no manual discount field', async ({ page, request }) => {
+  const fixture = await seedDiscountFixture(request)
   await loginAsDueno(page)
   await page.goto('/tickets/nuevo')
-  await fillBaseTicket(page, fixture.catalog, vehicle)
-  await page.getByLabel('Descuento (%)').fill('25')
-  await page.getByLabel('Motivo del descuento').fill('Cliente frecuente')
-
-  await expect(page.getByTestId('summary-precio-preview-value')).toContainText('-25%')
-
-  await page.getByTestId('ticket-submit').click()
-  await page.waitForURL('**/tickets', { timeout: 10_000 })
-  const row = page.locator('tr').filter({ hasText: vehicle }).first()
-  await expect(row).toBeVisible({ timeout: 8_000 })
-  await expect(row.getByText(/\$150/)).toBeVisible()
+  await fillBaseTicket(page, fixture.catalog, `No discount ${Date.now()}`)
+  // The manual discount lives only on the manager edit flow now — it must not
+  // appear in the cashier capture form. (Ticket creation itself is covered by
+  // tickets.spec.)
+  await expect(page.getByLabel('Descuento (%)')).toHaveCount(0)
 })
 
 test('invalid discount values are rejected by the API contract', async ({ request }) => {
