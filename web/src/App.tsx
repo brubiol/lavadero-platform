@@ -6277,8 +6277,8 @@ function TicketWorkspace({
 
               <div className="h-px bg-border-soft" />
 
-              {/* ── AJUSTES — Cargo / Descuento / Notas — 3-col compact ── */}
-              <div className="grid gap-2.5 md:grid-cols-3">
+              {/* ── AJUSTES — Cargo / Notas (Descuento is manager-only, edit flow) ── */}
+              <div className={`grid gap-2.5 ${mode === 'edit' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
                 <div className="rounded-xl border border-dashed border-border-strong bg-white px-3 py-2">
                   <p className="flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.08em] text-amber-700">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> CARGO
@@ -6312,9 +6312,10 @@ function TicketWorkspace({
                   )}
                 </div>
 
+                {mode === 'edit' && (
                 <div className="rounded-xl border border-dashed border-border-strong bg-white px-3 py-2">
                   <p className="flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.08em] text-emerald-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> DESCUENTO MANUAL
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> DESCUENTO · GERENTE
                   </p>
                   <div className="mt-1.5 grid grid-cols-[54px_1fr] gap-1.5">
                     <input
@@ -6344,6 +6345,7 @@ function TicketWorkspace({
                     <p className="mt-1 text-xs text-red-600">{form.formState.errors.discountReason.message}</p>
                   )}
                 </div>
+                )}
 
                 <div>
                   <label className="block text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-600">Notas internas</label>
@@ -6631,6 +6633,213 @@ type EmployeeEditFormValues = z.infer<typeof employeeEditSchema>
 
 type CatalogTab = 'precios' | 'servicios' | 'tamanos' | 'lavadores' | 'descuentos'
 
+interface Discount {
+  id: number
+  code: string
+  name: string
+  percent: number
+  daysLabel: string
+  applyAtShiftStart: boolean
+  active: boolean
+  usesThisMonth: number
+  color: 'warn' | 'purple' | 'good' | 'info' | 'amber'
+  createdAt: string
+  updatedAt: string
+}
+
+const DISCOUNT_TONE: Record<string, { bg: string; tx: string }> = {
+  warn:   { bg: 'var(--warn-50)',    tx: 'var(--warn-700)' },
+  purple: { bg: 'var(--primary-50)', tx: 'var(--primary-700)' },
+  good:   { bg: 'var(--good-50)',    tx: 'var(--good-700)' },
+  info:   { bg: '#eff6ff',           tx: '#1d4ed8' },
+  amber:  { bg: '#fffbeb',           tx: '#b45309' },
+}
+const DISCOUNT_COLORS = ['warn', 'purple', 'good', 'info', 'amber'] as const
+
+// Manager-only discount catalog (Catálogos › Descuentos). Discounts live here,
+// not in the cashier's ticket flow — they auto-apply at shift start on the days
+// they cover, or a manager applies one to a single ticket from Tickets.
+function DescuentosTab() {
+  const qc = useQueryClient()
+  const discounts = useQuery({ queryKey: ['discounts'], queryFn: () => api<Discount[]>('/api/v1/discounts') }).data ?? []
+  const [editing, setEditing] = useState<Discount | null>(null)
+  const [creating, setCreating] = useState(false)
+
+  const save = useMutation({
+    mutationFn: (v: { id?: number; body: Record<string, unknown> }) =>
+      v.id
+        ? api<Discount>(`/api/v1/discounts/${v.id}`, { method: 'PATCH', body: JSON.stringify(v.body) })
+        : api<Discount>('/api/v1/discounts', { method: 'POST', body: JSON.stringify(v.body) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['discounts'] }); setEditing(null); setCreating(false) },
+  })
+  const patch = useMutation({
+    mutationFn: (v: { id: number; body: Record<string, unknown> }) =>
+      api<Discount>(`/api/v1/discounts/${v.id}`, { method: 'PATCH', body: JSON.stringify(v.body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['discounts'] }),
+  })
+
+  return (
+    <div className="space-y-5">
+      <Banner
+        tone="info"
+        title="Los descuentos se aplican al inicio del turno"
+        text={'Si marcas "Auto al iniciar turno", el cajero los ve activos por defecto al abrir su turno. Un descuento también puede aplicarse manualmente a un ticket desde Tickets — solo el gerente.'}
+      />
+
+      <CardV2
+        tone="amber"
+        title="Descuentos del catálogo"
+        subtitle="Configura los descuentos disponibles. Marca AUTO para que se enciendan solos al iniciar turno los días que apliquen."
+        actions={<Button kind="primary" size="sm" onClick={() => setCreating(true)}>+ Nuevo descuento</Button>}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+          {discounts.map((d) => {
+            const tone = DISCOUNT_TONE[d.color] ?? DISCOUNT_TONE.warn
+            const days = d.daysLabel ? d.daysLabel.split(',').map((s) => s.trim()).filter(Boolean) : []
+            return (
+              <div key={d.id} style={{ overflow: 'hidden', background: d.active ? '#fff' : 'var(--ink-50)', border: '1px solid var(--border-soft)', borderRadius: 14, opacity: d.active ? 1 : 0.72 }}>
+                <div style={{ background: tone.bg, padding: '12px 14px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="tl2-mono-display" style={{ fontSize: 10.5, fontWeight: 700, color: tone.tx, letterSpacing: '0.06em', opacity: 0.8 }}>{d.code}</div>
+                      <div style={{ marginTop: 2, fontSize: 15, fontWeight: 800, color: tone.tx, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>{d.name}</div>
+                    </div>
+                    <div className="tl2-mono-display" style={{ fontSize: 32, fontWeight: 800, color: tone.tx, letterSpacing: '-0.03em', lineHeight: 1 }}>−{Math.round(d.percent)}%</div>
+                  </div>
+                </div>
+                <div style={{ padding: 14 }}>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10, minHeight: 18 }}>
+                    {days.map((day) => (
+                      <span key={day} style={{ background: 'var(--ink-100)', color: 'var(--ink-700)', fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 4, letterSpacing: '0.04em' }}>{day}</span>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => patch.mutate({ id: d.id, body: { applyAtShiftStart: !d.applyAtShiftStart } })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px dashed var(--border-soft)', cursor: 'pointer', width: '100%', background: 'none', textAlign: 'left' }}
+                  >
+                    <span aria-hidden style={{ width: 34, height: 20, borderRadius: 999, background: d.applyAtShiftStart ? 'var(--brand-green)' : 'var(--ink-300)', position: 'relative', flex: '0 0 auto', transition: 'background .15s' }}>
+                      <span style={{ position: 'absolute', top: 2, left: d.applyAtShiftStart ? 16 : 2, width: 16, height: 16, borderRadius: 999, background: '#fff', transition: 'left .15s' }} />
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink-900)' }}>Auto al iniciar turno</span>
+                      <span style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-500)' }}>Se enciende solo los días que aplica</span>
+                    </span>
+                  </button>
+                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--ink-500)' }}>{d.usesThisMonth} usos este mes · {d.active ? 'Activa' : 'Pausada'}</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Button kind="ghost" size="sm" onClick={() => setEditing(d)}>Editar</Button>
+                      <Button kind="ghost" size="sm" onClick={() => patch.mutate({ id: d.id, body: { active: !d.active } })}>{d.active ? 'Pausar' : 'Activar'}</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            style={{ background: 'transparent', border: '2px dashed var(--border-strong)', borderRadius: 14, padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--ink-500)', cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 178 }}
+          >
+            + Crear descuento
+          </button>
+        </div>
+      </CardV2>
+
+      <CardV2 tone="purple" title="Calendario de descuentos · próximos 14 días" subtitle="Los descuentos marcados como AUTO se aplican al iniciar el turno del día correspondiente.">
+        <div className="grid grid-cols-7 gap-1.5">
+          {Array.from({ length: 14 }).map((_, i) => {
+            const dt = new Date(); dt.setDate(dt.getDate() + i)
+            const dow = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'][dt.getDay()]
+            const hits = discounts.filter((x) => x.active && x.applyAtShiftStart && x.daysLabel.split(',').map((s) => s.trim()).includes(dow))
+            return (
+              <div key={i} className="flex min-h-[90px] flex-col gap-1 rounded-lg border px-2.5 py-2" style={{ background: hits.length ? 'linear-gradient(180deg, rgba(254,243,199,0.4), #fff 70%)' : '#fff', borderColor: hits.length ? 'var(--warn-100)' : 'var(--border-soft)' }}>
+                <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-ink-500">{dow}</div>
+                <div className="tl2-mono-display font-display text-[18px] font-extrabold leading-none text-ink-900">{dt.getDate()}</div>
+                <div className="mt-auto flex flex-col gap-1">
+                  {hits.length === 0 && <span className="text-[10px] italic text-ink-300">sin descuentos</span>}
+                  {hits.map((h) => (
+                    <span key={h.id} style={{ alignSelf: 'flex-start', background: 'var(--warn-100)', color: 'var(--warn-700)', fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 4, letterSpacing: '0.04em' }}>{h.code} · −{Math.round(h.percent)}%</span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </CardV2>
+
+      {(creating || editing) && (
+        <DiscountModal
+          discount={editing}
+          saving={save.isPending}
+          onClose={() => { setCreating(false); setEditing(null) }}
+          onSave={(body, id) => save.mutate({ id, body })}
+        />
+      )}
+    </div>
+  )
+}
+
+function DiscountModal({ discount, onClose, onSave, saving }: {
+  discount: Discount | null
+  onClose: () => void
+  onSave: (body: Record<string, unknown>, id?: number) => void
+  saving: boolean
+}) {
+  const isEdit = !!discount
+  const [code, setCode] = useState(discount?.code ?? '')
+  const [name, setName] = useState(discount?.name ?? '')
+  const [percent, setPercent] = useState(String(discount?.percent ?? 10))
+  const [daysLabel, setDaysLabel] = useState(discount?.daysLabel ?? '')
+  const [applyAtShiftStart, setApplyAtShiftStart] = useState(discount?.applyAtShiftStart ?? false)
+  const [color, setColor] = useState<Discount['color']>(discount?.color ?? 'warn')
+
+  const submit = () => {
+    const body: Record<string, unknown> = { name: name.trim(), percent: Number(percent), daysLabel: daysLabel.trim(), applyAtShiftStart, color }
+    if (!isEdit) body.code = code.trim().toUpperCase()
+    onSave(body, discount?.id)
+  }
+
+  return (
+    <Modal title={isEdit ? `Editar descuento · ${discount!.code}` : 'Nuevo descuento'} narrow onClose={onClose}>
+      <div className="space-y-3">
+        {!isEdit && (
+          <Field label="Código (mayúsculas, sin espacios)">
+            <input className="tl-input" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="LUN15" />
+          </Field>
+        )}
+        <Field label="Nombre">
+          <input className="tl-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Lunes de descuento" autoFocus={isEdit} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Porcentaje (%)">
+            <input className="tl-input" type="number" min={0} max={100} value={percent} onChange={(e) => setPercent(e.target.value)} />
+          </Field>
+          <Field label="Color">
+            <select className="tl-input" value={color} onChange={(e) => setColor(e.target.value as Discount['color'])}>
+              {DISCOUNT_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+        </div>
+        <Field label="Días / vigencia (separa con comas)">
+          <input className="tl-input" value={daysLabel} onChange={(e) => setDaysLabel(e.target.value)} placeholder="LUN, MAR  ·  o  ·  12 MAY  ·  o  ·  Jun - Ago" />
+        </Field>
+        <label className="flex items-center gap-2.5 cursor-pointer pt-1">
+          <input type="checkbox" checked={applyAtShiftStart} onChange={(e) => setApplyAtShiftStart(e.target.checked)} />
+          <span className="text-[13px] font-semibold text-ink-800">Auto al iniciar turno — se enciende solo los días que aplica</span>
+        </label>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button kind="ghost" onClick={onClose}>Cancelar</Button>
+          <Button kind="primary" disabled={saving || !name.trim() || (!isEdit && !code.trim())} onClick={submit}>
+            {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear descuento'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function CatalogsScreen() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<CatalogTab>('precios')
@@ -6680,6 +6889,7 @@ function CatalogsScreen() {
   const services = data.services.data ?? []
   const sizes = data.sizes.data ?? []
   const prices = data.prices.data ?? []
+  const discountsData = useQuery({ queryKey: ['discounts'], queryFn: () => api<Discount[]>('/api/v1/discounts') }).data ?? []
   const sizeById = Object.fromEntries(sizes.map(s => [s.id, s])) as Record<number, VehicleSize | undefined>
   const mxnPrices = prices.filter(p => p.currency === 'MXN')
   const CAT_LABEL: Record<string, string> = { AUTO: 'Autos y camionetas', MOTO: 'Motos', RAZR: 'RAZR', PERSONAL: 'Cam. de personal' }
@@ -6887,13 +7097,14 @@ function CatalogsScreen() {
             { id: 'servicios',  label: 'Servicios',  count: services.length },
             { id: 'tamanos',    label: 'Tamaños',    count: sizes.length },
             { id: 'lavadores',  label: 'Lavadores',  count: employees.filter((e) => e.active).length },
-            { id: 'descuentos', label: 'Descuentos' },
+            { id: 'descuentos', label: 'Descuentos', count: discountsData.filter((d) => d.active).length },
           ] as Array<{ id: CatalogTab; label: string; count?: number }>
-        ).filter((it) => it.id !== 'descuentos' || hasRole('ADMIN'))}
+        ).filter((it) => it.id !== 'descuentos' || hasRole('GERENTE'))}
       />
 
       <div className="grid gap-5">
         <div className="space-y-5">
+          {tab === 'descuentos' && <DescuentosTab />}
           {tab === 'lavadores' && (
           <CardV2 tone="purple" title="Lavadores activos" subtitle="Comisión y sueldo que usa la Nómina. Editar para ajustar · Agregar para dar de alta.">
             <form className="space-y-3" onSubmit={employeeForm.handleSubmit((values) => createEmployee.mutate(values))}>
@@ -7079,55 +7290,6 @@ function CatalogsScreen() {
           </CardV2>
           )}
 
-          {tab === 'descuentos' && (
-            <div className="space-y-5">
-              <Banner
-                tone="info"
-                title="Los descuentos se aplican al inicio del turno"
-                text="Si marcas «Auto al iniciar turno», el cajero los ve activos por defecto al abrir su shift. También se podrán activar manualmente desde Nuevo ticket."
-              />
-              <CardV2
-                tone="amber"
-                title="Descuentos del catálogo"
-                subtitle="Configura los descuentos disponibles. Marca AUTO para que se enciendan solos al iniciar turno los días que apliquen."
-                actions={<Button kind="primary" size="sm" disabled>+ Nuevo descuento</Button>}
-              >
-                <EmptyState
-                  icon={
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                      <path d="M4 8h16M4 8a2 2 0 012-2h12a2 2 0 012 2M4 8l8 8 8-8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  }
-                  title="Descuentos automáticos — próximamente"
-                  description="Por ahora los descuentos manuales se ingresan al capturar el ticket. Esta pestaña hospedará los descuentos por día (LUN15, FREC10, CUMP15…) con activación automática al inicio del turno."
-                  tone="info"
-                />
-              </CardV2>
-              <CardV2
-                tone="purple"
-                title="Calendario de descuentos · próximos 14 días"
-                subtitle="Los descuentos marcados como AUTO se aplican al iniciar el turno del día correspondiente."
-              >
-                <div className="grid grid-cols-7 gap-1.5">
-                  {Array.from({ length: 14 }).map((_, i) => {
-                    const d = new Date()
-                    d.setDate(d.getDate() + i)
-                    const dowKey = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'][d.getDay()]
-                    return (
-                      <div
-                        key={i}
-                        className="flex min-h-[90px] flex-col gap-1 rounded-lg border border-border-soft bg-white px-2.5 py-2"
-                      >
-                        <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-ink-500">{dowKey}</div>
-                        <div className="tl2-mono-display font-display text-[18px] font-extrabold leading-none tracking-[-0.02em] text-ink-900">{d.getDate()}</div>
-                        <div className="mt-auto text-[10px] italic text-ink-300">sin descuentos</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardV2>
-            </div>
-          )}
         </div>
       </div>
       {showAddService && (
