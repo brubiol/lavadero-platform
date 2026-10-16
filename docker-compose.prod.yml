@@ -1,19 +1,40 @@
-# Production compose — no local Postgres, points at RDS.
-# Secrets come from /opt/lavadero/.env on the EC2 host.
-# Never commit a .env file with real values.
+# Production compose: one self-contained copy of the app (postgres + api + web)
+# per business. Secrets come from .env next to this file. Never commit a real .env.
+#
+# HTTPS is NOT here: a single shared Caddy (docker-compose.edge.yml) owns ports
+# 80/443 and routes each business's domain to its <instance>-web container over
+# the external "lavadero-edge" network. See docs/DEPLOY.md.
+
+name: ${LAVADERO_INSTANCE:-lavadero}
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${LAVADERO_INSTANCE:-lavadero}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lavadero}
+      POSTGRES_USER: ${POSTGRES_USER:-lavadero}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   api:
     image: ghcr.io/brubiol/lavadero-platform/api:latest
-    container_name: lavadero-api
+    container_name: ${LAVADERO_INSTANCE:-lavadero}-api
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${RDS_HOST}:5432/${RDS_DB}
-      SPRING_DATASOURCE_USERNAME: ${RDS_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${RDS_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-lavadero}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-lavadero}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Caps the heap so three business instances fit comfortably on one free VM.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
       LAVADERO_JWT_SECRET: ${LAVADERO_JWT_SECRET}
       LAVADERO_BOOTSTRAP_USERNAME: ${LAVADERO_BOOTSTRAP_USERNAME}
       LAVADERO_BOOTSTRAP_PASSWORD: ${LAVADERO_BOOTSTRAP_PASSWORD}
@@ -32,39 +53,32 @@ services:
       LAVADERO_AI_API_KEY: ${LAVADERO_AI_API_KEY}
     env_file:
       - .env
+    mem_limit: 1g
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 45s
+      start_period: 90s
 
   web:
     image: ghcr.io/brubiol/lavadero-platform/web:latest
-    container_name: lavadero-web
+    container_name: ${LAVADERO_INSTANCE:-lavadero}-web
     restart: unless-stopped
-    ports:
-      - "80:80"
     depends_on:
       api:
         condition: service_healthy
-
-  # HTTPS for turbolavado.org with an automatic Let's Encrypt certificate.
-  # Plain HTTP on port 80 stays available via the web container as a fallback.
-  caddy:
-    image: caddy:2
-    container_name: lavadero-caddy
-    restart: unless-stopped
-    entrypoint: ["caddy"]
-    command: ["reverse-proxy", "--from", "turbolavado.org", "--to", "web:80"]
-    ports:
-      - "443:443"
-    depends_on:
-      - web
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
+    networks:
+      - default
+      - edge
 
 volumes:
-  caddy_data:
-  caddy_config:
+  pgdata:
+
+networks:
+  edge:
+    name: lavadero-edge
+    external: true

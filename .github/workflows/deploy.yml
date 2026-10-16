@@ -92,13 +92,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # arm64 for the Oracle Always Free Ampere VM; amd64 keeps x86 hosts working.
       - name: Build and push API image
         uses: docker/build-push-action@v5
         with:
           context: ./api
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.API_IMAGE }}:latest,${{ env.API_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
@@ -108,12 +113,15 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./web
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.WEB_IMAGE }}:latest,${{ env.WEB_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 3. Deploy to EC2 ──────────────────────────────────────────────────────
+  # ── 3. Deploy to the production VM ────────────────────────────────────────
+  # Oracle Cloud Always Free (Ubuntu ARM). One shared Caddy + one app copy per
+  # business under /opt/lavadero/instances/. See docs/DEPLOY.md.
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -123,50 +131,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy production compose to EC2
+      - name: Copy release files to VM
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: docker-compose.prod.yml
-          target: /opt/lavadero/
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: docker-compose.prod.yml,docker-compose.edge.yml,Caddyfile,scripts/deploy-host.sh,scripts/backup-offsite.sh,scripts/restore-db.sh,scripts/setup-secrets.sh
+          target: /opt/lavadero/release/
 
-      - name: Deploy
+      - name: Deploy and verify health
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/lavadero
-
-            # Pull latest images
-            docker compose -f docker-compose.prod.yml pull
-
-            # Zero-downtime swap: start new, stop old
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
-            # Prune old images to keep disk clean
-            docker image prune -f
-
-      - name: Smoke test — verify API is healthy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "Waiting for API to become healthy..."
-            for i in $(seq 1 12); do
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
-              if [ "$STATUS" = "200" ]; then
-                echo "API healthy after $((i * 5))s"
-                exit 0
-              fi
-              echo "Attempt $i: status=$STATUS, retrying in 5s..."
-              sleep 5
-            done
-            echo "API did not become healthy within 60s — deploy failed"
-            exit 1
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 15m
+          script: bash /opt/lavadero/release/scripts/deploy-host.sh

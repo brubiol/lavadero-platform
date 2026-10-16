@@ -1,0 +1,30 @@
+# Shared HTTPS edge for every business instance on the host.
+# Caddy owns ports 80/443, issues Let's Encrypt certificates automatically, and
+# routes each domain to <instance>-web. One site file per business lives in
+# ./sites/<instance>.caddy (written by scripts/setup-secrets.sh).
+
+name: lavadero-edge
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: lavadero-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+    name: lavadero-edge

@@ -1,5 +1,6 @@
 # ── Build stage ──────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-21-alpine AS builder
+# Builder runs natively on the CI machine; the jar is architecture-independent.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /build
 
 # Cache dependency layer separately from source

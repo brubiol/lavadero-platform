@@ -19,12 +19,16 @@ lavadero-api/
 ├── CLAUDE.md                        ← this file
 ├── README.md
 ├── docker-compose.yml               ← local dev: postgres + api + web
-├── docker-compose.prod.yml          ← production: api + web (no postgres, uses RDS)
+├── docker-compose.prod.yml          ← production: postgres + api + web, one copy per business
+├── docker-compose.edge.yml          ← production: shared Caddy (HTTPS) routing domains → instances
+├── Caddyfile                        ← imports sites/<instance>.caddy
 ├── .env.prod.example                ← prod env template (never commit real values)
+├── docs/DEPLOY.md                   ← Oracle Cloud setup, DNS, secrets, backups, adding a business
 ├── scripts/
-│   ├── provision-aws.sh             ← one-shot EC2 + RDS provisioning
-│   ├── setup-ec2.sh                 ← EC2 user-data (docker install)
-│   └── setup-secrets.sh            ← writes /opt/lavadero/.env on EC2
+│   ├── setup-host.sh                ← one-time VM bootstrap (docker, firewall, swap, dirs)
+│   ├── setup-secrets.sh             ← creates one business instance (.env + Caddy site)
+│   ├── deploy-host.sh               ← run by CI on the VM: edge + all instances + health gate
+│   └── backup-offsite.sh            ← nightly pg_dump per instance → Object Storage
 ├── api/                             ← Spring Boot 3 / Java 21 backend
 │   ├── Dockerfile                   ← multi-stage: maven builder → jre-alpine runtime
 │   ├── pom.xml
@@ -80,8 +84,8 @@ lavadero-api/
 | State | TanStack Query v5 + React Hook Form + Zod |
 | AI | OpenAI-compatible provider + deterministic local fallback; advisory `ai_insights` only |
 | Dev infra | Docker Compose (postgres + api + web) |
-| Prod infra | AWS EC2 t3.micro + RDS db.t3.micro PostgreSQL 16 |
-| CI/CD | GitHub Actions → GHCR images → SSH deploy to EC2 |
+| Prod infra | Oracle Cloud Always Free ARM VM ($0); Postgres 16 in Docker; Caddy for HTTPS |
+| CI/CD | GitHub Actions → GHCR multi-arch images (amd64 + arm64) → SSH deploy to the VM |
 | Observability | Spring Boot Actuator (`/actuator/health`); Prometheus/Grafana deferred to v2 |
 
 No Lombok. No MapStruct. DTOs are Java records. No Kafka in v1.
@@ -256,9 +260,9 @@ Everything in v1 is implemented and working.
 - ✅ Historical/operational data seeded (V11–V14): 2025 full year + 2026 Jan–May operational handoff data
 - ✅ Frontend: all 16 routes, all screens, all modals, role-gated nav
 - ✅ Docker multi-stage builds (api + web)
-- ✅ Docker Compose: local dev (full stack) + production (RDS-backed)
+- ✅ Docker Compose: local dev (full stack) + production (self-hosted Postgres, per-business instances)
 - ✅ GitHub Actions CI/CD: test → GHCR build → SSH deploy
-- ✅ AWS provisioning scripts (EC2 + RDS)
+- ✅ Free hosting scripts (Oracle Cloud VM setup, deploy, nightly off-site backups)
 - ✅ Integration tests: Phase1–Phase11 + ExcelOperationFlows (Testcontainers)
 - ⬜ Custom domain + TLS (Nginx reverse proxy or ACM)
 - ⬜ Prometheus + Grafana (v2)
@@ -298,23 +302,20 @@ Everything in v1 is implemented and working.
 
 ## Production deployment
 
+Hosting must stay free: Oracle Cloud Always Free ARM VM, no managed DB. Full runbook in `docs/DEPLOY.md`.
+
+Multiple businesses = one app copy per business (own Postgres, own domain) on the same VM, not shared-DB multi-tenancy. `tenant_id` is still hardcoded to `1`.
+
 ```bash
-# 1. Provision infra (one-time, from local machine with aws configure done)
-./scripts/provision-aws.sh
+# One time on the VM
+sudo bash setup-host.sh
+bash setup-secrets.sh                      # instance "lavadero" → turbolavado.org
+bash setup-secrets.sh otro otro.example    # each additional business
 
-# 2. Wait ~5 min for RDS, then SSH to EC2
-ssh -i lavadero-key.pem ec2-user@<EC2_IP>
-
-# 3. On EC2: write secrets
-bash setup-secrets.sh   # creates /opt/lavadero/.env (mode 600)
-
-# 4. Deploy
-docker compose -f /opt/lavadero/docker-compose.prod.yml up -d
-
-# Subsequent deploys: GitHub Actions handles it on push to main
-# Requires repo secrets: EC2_HOST, EC2_SSH_KEY
-# Images: ghcr.io/brubiol/lavadero-platform/api:latest
-#         ghcr.io/brubiol/lavadero-platform/web:latest
+# Deploys: GitHub Actions on push to main runs scripts/deploy-host.sh on the VM
+# Requires environment secrets: DEPLOY_HOST, DEPLOY_USER (ubuntu), DEPLOY_SSH_KEY
+# Images (multi-arch): ghcr.io/brubiol/lavadero-platform/api:latest
+#                      ghcr.io/brubiol/lavadero-platform/web:latest
 ```
 
 ---

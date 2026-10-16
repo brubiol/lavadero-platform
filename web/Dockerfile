@@ -1,5 +1,6 @@
 # ── Build stage ──────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+# Builder runs natively on the CI machine; the static bundle is architecture-independent.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package*.json .
