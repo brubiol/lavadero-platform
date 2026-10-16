@@ -27,6 +27,8 @@ El menú muestra solo lo que tu rol puede usar. Cada rol ve todo lo del rol ante
 | Nómina, Inventario, Catálogos, Lealtad, Reportes | | ✓ | ✓ |
 | AI, Vigilancia, Auditoría | | | ✓ |
 
+**Nómina:** un gerente solo la ve si el dueño le dio permiso de nómina.
+
 ---
 
 ## 3. Un día normal
@@ -52,28 +54,28 @@ Al abrir un ticket desde **Tickets** se ve cómo se armó el precio (base + extr
 
 ![Detalle de ticket](screenshots/ticket-detalle.png)
 
-**¿Te equivocaste?** Se puede corregir o cancelar el ticket. Queda registrado quién lo hizo y por qué.
+**¿Te equivocaste?** Avísale al gerente: solo **gerente o dueño** pueden corregir o cancelar un ticket. Queda registrado quién lo hizo y por qué.
 
 ### Durante el turno: Gastos
 En **Gastos** se registra todo el dinero que sale de la caja:
-- **Gasto:** CFE, TELMEX, basura, material, etc.
-- **Retiro:** dinero que se saca de la caja a media jornada.
-- **Préstamo:** adelanto de efectivo a un lavador. Queda como deuda del lavador y se descuenta en su nómina.
+- **Gasto:** CFE, TELMEX, basura, material, etc. Cualquier rol lo puede capturar.
+- **Retiro** (gerente o dueño): dinero que se saca de la caja a media jornada.
+- **Préstamo** (gerente o dueño): adelanto de efectivo a un lavador. Queda como deuda del lavador y se descuenta en su nómina.
 
 ### Al terminar el turno: Corte
-1. Cuenta el dinero por **denominación** (billetes y monedas). La **morralla** se captura como un solo total.
+1. El operador cuenta el dinero por **denominación** (billetes y monedas) y guarda el conteo. La **morralla** se captura como un solo total.
 2. El sistema calcula cuánto **debería haber**: ventas en efectivo + paquetes + ventas de inventario + abonos de deuda − gastos − retiros − préstamos.
 3. Compara con lo que contaste:
    - **Sobrante:** hay más de lo esperado.
    - **Faltante:** hay menos. **No se puede cerrar sin escribir una explicación.**
-4. Cierra el turno.
+4. El **gerente o dueño** cierra el turno.
 
 ### Al cerrar el negocio: Cierre del día
 En **Cierre del día** se revisa que todos los turnos estén cerrados y se cierra el día.
 
 ---
 
-## 4. Cada semana: Nómina (gerente y dueño)
+## 4. Cada semana: Nómina (dueño, y gerentes con permiso)
 
 La semana de nómina va de **domingo a sábado**.
 
@@ -121,7 +123,7 @@ La semana de nómina va de **domingo a sábado**.
 |---|---|
 | No puedo entrar | Revisa usuario y contraseña. Si la olvidaste, pide que te la restablezcan. |
 | El corte no cuadra | Revisa que todos los gastos, retiros, préstamos y abonos del turno estén capturados. Si sigue sin cuadrar, explica el faltante al cerrar. |
-| Capturé un ticket mal | Ábrelo en **Tickets** y corrígelo o cancélalo, con el motivo. |
+| Capturé un ticket mal | Avísale al gerente. Él lo abre en **Tickets** y lo corrige o cancela, con el motivo. |
 | No veo una pantalla | Tu rol no tiene acceso. Pídeselo al gerente o al dueño. |
 | El sistema no carga | Revisa el internet. Si sigue fallando, avísale a Brandon. |
 

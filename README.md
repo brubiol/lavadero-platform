@@ -29,11 +29,11 @@
 
 | Role | Day-to-day |
 |---|---|
-| **Operador** (cashier) | Opens shifts, rings up tickets with automatic pricing, logs expenses and withdrawals, counts the drawer at shift close (*corte*), records attendance. |
-| **Gerente** (manager) | Everything above, plus weekly payroll, inventory, price catalogs, the loyalty program and reports with Excel export. |
-| **Dueño** (owner) | Everything above, plus the AI analyst, the *Vigilancia* anti-theft dashboard and the full audit trail. |
+| **Operador** (cashier) | Opens shifts, rings up tickets with automatic pricing, logs expenses, counts the drawer at shift close (*corte*), records attendance. |
+| **Gerente** (manager) | Everything above, plus closing shifts, editing or voiding tickets, cash withdrawals and advances, weekly payroll, inventory, price catalogs and the loyalty program. |
+| **Dueño** (owner) | Everything above, plus full reports and Excel export, the AI analyst, the *Vigilancia* anti-theft dashboard and the audit trail. |
 
-The roles are hierarchical (`OPERADOR < GERENTE < DUENO < ADMIN`) and enforced on the server with `@PreAuthorize`. The UI only hides what the API already refuses.
+The roles are hierarchical (`OPERADOR < GERENTE < DUENO < ADMIN`) and enforced on the server by per-endpoint, per-HTTP-method rules in [`SecurityConfig`](api/src/main/java/com/lavadero/api/security/SecurityConfig.java). For example, a cashier can create a ticket, but editing or voiding one takes a manager. Every request re-checks that the user is still active and still holds the role in their token. The UI only hides what the API already refuses.
 
 ---
 
@@ -53,8 +53,9 @@ Each point links to the code that backs it.
   - Expected cash = cash sales + prepaid + inventory sales + debt repayments − expenses − withdrawals − advances.
   - A shift that closes short cannot be saved without a written reason, and the close is audited.
   - See [`ShiftCloseService`](api/src/main/java/com/lavadero/api/cash/service/ShiftCloseService.java).
-- **The AI is advisory and enforced by its dependencies, not its prompt.**
-  - [`AiInsightService`](api/src/main/java/com/lavadero/api/ai/service/AiInsightService.java) is constructed only with read-only report, cash, payroll and inventory services. No code path lets it write a ticket, expense or payroll row.
+- **The AI is advisory, enforced in code rather than in the prompt.**
+  - The model can only call a whitelist of 10 read-only tools in [`AiToolRegistry`](api/src/main/java/com/lavadero/api/ai/tools/AiToolRegistry.java): summaries, cash variance, debt balances, inventory snapshot and oversight patterns.
+  - The only row it ever writes is its own `ai_insights` record (see [`AiInsightService`](api/src/main/java/com/lavadero/api/ai/service/AiInsightService.java)).
   - A deterministic local provider keeps tests and CI independent of any LLM.
 - **Tests run against real Postgres.**
   - 192 integration tests across 30 classes use Testcontainers. There's no H2 and no mocked repositories.
@@ -100,7 +101,7 @@ Six real problems and how each was solved.
 Every cash event (tickets, expenses, withdrawals, advances, debt repayments) became a ledger row feeding one expected-cash formula. A short *corte* can't close without a typed reason, and Vigilancia rolls shortages up per operator over time. See [`ShiftCloseService`](api/src/main/java/com/lavadero/api/cash/service/ShiftCloseService.java).
 
 **2. "The AI must never touch the money."**
-Instructing the prompt not to write data isn't enforcement, so the dependency graph enforces it. The AI service can only receive read-only services, and breaking that would take a visible new constructor dependency in a one-line diff. See [`AiInsightService`](api/src/main/java/com/lavadero/api/ai/service/AiInsightService.java).
+Instructing the prompt not to write data isn't enforcement. Instead, the model only sees a registry of read-only tools, each a thin wrapper over a report query. Giving it write access would mean adding a new tool class, which is a visible, reviewable diff. See [`AiToolRegistry`](api/src/main/java/com/lavadero/api/ai/tools/AiToolRegistry.java).
 
 **3. "Washers want to repay advances in cash, mid-week."**
 Migration V40 adds `debt_payments`, the cash side, alongside a `PAYMENT` ledger entry, the accounting side. The corte formula was updated in the same commit, so a repayment raises expected cash and lowers the washer's debt atomically. Integration tests cover both sides.
@@ -122,7 +123,7 @@ Customers can keep a car on file and buy a block of prepaid washes (V62). A pack
 |---|---|---|
 | Language | Java 21 | Records for DTOs; no Lombok, no MapStruct |
 | Framework | Spring Boot 3.4, Spring Web MVC | Package-by-feature monolith |
-| Security | Spring Security 6 + OAuth2 Resource Server | HMAC-SHA256 JWT, refresh rotation, `@PreAuthorize` |
+| Security | Spring Security 6 + OAuth2 Resource Server | HMAC-SHA256 JWT, hashed + rotated refresh tokens, per-endpoint role rules |
 | Persistence | Spring Data JPA + PostgreSQL 16 | Append-only ledgers, no denormalized totals |
 | Migrations | Flyway | 62 versions, forward-only |
 | Validation | Jakarta Bean Validation | On every request DTO |
@@ -169,6 +170,15 @@ Tests:
 ## Deploying
 
 Production runs for $0/month on one Oracle Cloud Always Free VM. Pushing to `main` runs the tests, builds multi-arch images and deploys over SSH, with a health check gating the rollout. Adding a second business takes two commands on the VM. The full runbook is in **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
+## Documentation
+
+| Doc | For |
+|---|---|
+| [docs/CODEBASE-TOUR.md](docs/CODEBASE-TOUR.md) | A guided walk through the code: request lifecycle, packages, money flows, security, AI, tests |
+| [docs/INTERVIEW-PREP.md](docs/INTERVIEW-PREP.md) | Design questions and trade-offs, with honest answers and known weak spots |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Production setup, backups, adding a business |
+| [docs/GUIA-DE-USO.md](docs/GUIA-DE-USO.md) | Operator guide in Spanish for the owner, managers and cashiers |
 
 ---
 
