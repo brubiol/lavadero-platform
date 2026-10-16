@@ -4,7 +4,7 @@
 
 → **Live demo:** [turbolavado.org](https://turbolavado.org) · log in as 
 
-![Java 21](https://img.shields.io/badge/Java-21-007396) ![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F) ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6) ![AWS](https://img.shields.io/badge/AWS-EC2%20%2B%20RDS-FF9900)
+![Java 21](https://img.shields.io/badge/Java-21-007396) ![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F) ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6) ![Oracle Cloud](https://img.shields.io/badge/Oracle%20Cloud-Always%20Free%20ARM-F80000)
 
 ---
 
@@ -32,7 +32,7 @@ This started as "replace dad's Excel sheet" and grew into a complete operations 
 
 Every claim below points to a real file in the repo. Click any of them to verify.
 
-- **Real production system, not a tutorial clone.** Live URL, RDS-backed PostgreSQL, GitHub Actions CI/CD on every push to `main`, used by an actual business with real cash flowing through it. See [.github/workflows/](.github/workflows/) for the pipeline.
+- **Real production system, not a tutorial clone.** Live URL, self-hosted PostgreSQL with nightly off-site backups, GitHub Actions CI/CD on every push to `main`, used by an actual business with real cash flowing through it. See [.github/workflows/](.github/workflows/) for the pipeline.
 
 - **Senior-flavored Java/Spring architecture.** Package-by-feature, no Lombok, DTOs are Java records, `@Transactional` on services only, `@PreAuthorize` enforcing a 3-tier role hierarchy. See [api/src/main/java/com/lavadero/api/payroll/service/DebtLedgerService.java](api/src/main/java/com/lavadero/api/payroll/service/DebtLedgerService.java) and [api/src/main/java/com/lavadero/api/cash/service/ShiftCloseService.java](api/src/main/java/com/lavadero/api/cash/service/ShiftCloseService.java).
 
@@ -66,7 +66,7 @@ Every claim below points to a real file in the repo. Click any of them to verify
 | AI | OpenAI-compatible provider + deterministic local fallback | Tests/CI never depend on a real LLM |
 | Frontend | React 19 + TypeScript + Vite + Tailwind | TanStack Query v5, React Hook Form + Zod |
 | Containers | Docker multi-stage | `jre-alpine` runtime; Nginx for web |
-| Infra | AWS EC2 t3.micro + RDS db.t3.micro | One-shot provisioning scripts in `scripts/` |
+| Infra | Oracle Cloud Always Free ARM VM ($0/month) | Multi-arch images; one isolated app copy per business behind a shared Caddy. See [docs/DEPLOY.md](docs/DEPLOY.md) |
 | CI/CD | GitHub Actions → GHCR → SSH deploy | Tests, build, push, zero-downtime swap |
 | Observability | Spring Boot Actuator | `/actuator/health` |
 
@@ -176,7 +176,7 @@ Scripts I can speak to in a behavioral / technical screen. Each ends in a verifi
 3. Open **Vigilancia** — the anti-theft pattern dashboard, with severity-weighted suspicion scores per operator.
 4. Open **Nuevo ticket** — note the grouped vehicle dropdown (auto / moto / RAZR / personal), live price preview, and the "Cargo extra" surcharge field.
 
-The deployed system runs the **deterministic AI fallback** for the public demo so it doesn't burn OpenAI tokens. The real production environment uses an OpenAI-compatible LLM. The system is single-instance (one EC2 t3.micro) and recovery is one `docker compose up -d` away — candid engineering reality, not a polished SaaS staging environment.
+The deployed system runs the **deterministic AI fallback** for the public demo so it doesn't burn OpenAI tokens. The real production environment uses an OpenAI-compatible LLM. The system is single-instance (one free Oracle Cloud ARM VM) and recovery is one `docker compose up -d` away — candid engineering reality, not a polished SaaS staging environment.
 
 ---
 
@@ -190,7 +190,7 @@ The deployed system runs the **deterministic AI fallback** for the public demo s
 └─────────────────┘    JSON / JWT  └──────────┬───────────┘
                                               │ JPA
                                    ┌──────────▼───────────┐
-                                   │  PostgreSQL 16 (RDS)  │
+                                   │  PostgreSQL 16        │
                                    │  Flyway migrations    │
                                    └───────────────────────┘
 ```
@@ -211,7 +211,7 @@ cd api && mvn spring-boot:run                          # 2. backend on :8080
 cd web && npm install && npm run dev                   # 3. web on :5173
 ```
 
-Then visit `http://localhost:5173` and log in as `dueno` / `cambia-esto-123`. API docs at `http://localhost:8080/swagger-ui.html`. For Docker-only setup, AWS provisioning, environment variables, and operational runbooks see [docs/](docs/) and `.env.prod.example`.
+Then visit `http://localhost:5173` and log in as `dueno` / `cambia-esto-123`. API docs at `http://localhost:8080/swagger-ui.html`. For Docker-only setup, production deploy ([docs/DEPLOY.md](docs/DEPLOY.md)), environment variables, and operational runbooks see [docs/](docs/) and `.env.prod.example`.
 
 ---
 
@@ -242,9 +242,10 @@ lavadero-api/
 │   ├── src/components/                   ui.tsx (primitives) + layout.tsx
 │   ├── src/styles.css                    Design tokens + utility classes
 │   └── tests/e2e/                        9 Playwright specs
-├── scripts/                              AWS provisioning + EC2 setup
+├── scripts/                              VM setup, deploy, off-site backups
 ├── docker-compose.yml                    Local dev (postgres + api + web)
-├── docker-compose.prod.yml               Production (RDS-backed)
+├── docker-compose.prod.yml               Production (one copy per business)
+├── docker-compose.edge.yml               Production HTTPS edge (Caddy)
 └── .github/workflows/deploy.yml          Tests → GHCR build → SSH deploy
 ```
 
